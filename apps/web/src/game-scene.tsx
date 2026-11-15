@@ -5,6 +5,8 @@ import {
   FIELD_HALF_SIZE,
   INPUT_SEND_RATE,
   PLAYER_SPEED,
+  PAINT_GRID_SIZE,
+  type PaintStroke,
   type MoveInput,
 } from "@gaya/shared";
 import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
@@ -19,26 +21,39 @@ import {
 interface GameSceneProps {
   roomRef: MutableRefObject<Room<GameState> | null>;
   playerIds: string[];
+  devMode?: boolean;
 }
 
 interface ControlState {
   keys: Set<string>;
   yaw: number;
+  position: { x: number; z: number };
   sequence: number;
   latestInput: MoveInput;
 }
 
-export function GameScene({ roomRef, playerIds }: GameSceneProps) {
+export function GameScene({ roomRef, playerIds, devMode = false }: GameSceneProps) {
   const controls = useRef<ControlState>({
     keys: new Set(),
     yaw: 0,
+    position: { x: 0, z: 0 },
     sequence: 0,
     latestInput: { sequence: 0, x: 0, z: 0, yaw: 0 },
   });
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) =>
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (["KeyQ", "KeyE", "Space"].includes(event.code) && !event.repeat && !(event.target instanceof HTMLInputElement)) {
+        if (event.code === "Space") event.preventDefault();
+        const kind = event.code === "KeyQ" ? "ring" : event.code === "KeyE" ? "line" : "fan";
+        if (devMode) {
+          window.dispatchEvent(new CustomEvent("dev-paint", { detail: { revision: 0, ...controls.current.position, yaw: controls.current.yaw, team: "A", kind } }));
+        } else {
+          roomRef.current?.send("paint", { kind });
+        }
+      }
       controls.current.keys.add(event.code);
+    };
     const onKeyUp = (event: KeyboardEvent) =>
       controls.current.keys.delete(event.code);
     const onMouseMove = (event: MouseEvent) => {
@@ -49,7 +64,8 @@ export function GameScene({ roomRef, playerIds }: GameSceneProps) {
     const onClick = (event: MouseEvent) => {
       if (
         event.target instanceof HTMLCanvasElement &&
-        roomRef.current?.state.phase === "playing"
+        (devMode || roomRef.current?.state.phase === "playing" ||
+          roomRef.current?.state.phase === "lobby")
       ) {
         void event.target.requestPointerLock();
       }
@@ -65,7 +81,7 @@ export function GameScene({ roomRef, playerIds }: GameSceneProps) {
       window.removeEventListener("mousemove", onMouseMove);
       document.body.removeEventListener("click", onClick);
     };
-  }, []);
+  }, [devMode, roomRef]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -103,7 +119,8 @@ export function GameScene({ roomRef, playerIds }: GameSceneProps) {
         shadow-mapSize={[1024, 1024]}
       />
       <Sky sunPosition={[4, 2, 8]} turbidity={6} rayleigh={0.7} />
-      <Field />
+      <Field room={roomRef.current} devMode={devMode} />
+      {devMode && <DevPlayer controls={controls} />}
       {playerIds.map((playerId, index) => (
         <Player
           key={playerId}
@@ -118,12 +135,111 @@ export function GameScene({ roomRef, playerIds }: GameSceneProps) {
   );
 }
 
-function Field() {
+function DevPlayer({ controls }: { controls: MutableRefObject<ControlState> }) {
+  const group = useRef<THREE.Group>(null);
+  const { camera } = useThree();
+  useFrame((_, delta) => {
+    const object = group.current;
+    if (!object) return;
+    const keys = controls.current.keys;
+    const direction = toWorldDirection(Number(keys.has("KeyW")) - Number(keys.has("KeyS")), Number(keys.has("KeyD")) - Number(keys.has("KeyA")), controls.current.yaw);
+    object.position.x = THREE.MathUtils.clamp(object.position.x + direction.x * PLAYER_SPEED * delta, -FIELD_HALF_SIZE + 0.5, FIELD_HALF_SIZE - 0.5);
+    object.position.z = THREE.MathUtils.clamp(object.position.z + direction.z * PLAYER_SPEED * delta, -FIELD_HALF_SIZE + 0.5, FIELD_HALF_SIZE - 0.5);
+    object.rotation.y = toModelRotation(controls.current.yaw);
+    controls.current.position = { x: object.position.x, z: object.position.z };
+    const yaw = controls.current.yaw;
+    camera.position.lerp(new THREE.Vector3(object.position.x + Math.sin(yaw) * 7, 5.2, object.position.z - Math.cos(yaw) * 7), 1 - Math.exp(-delta * 8));
+    camera.lookAt(object.position.x, 1.1, object.position.z);
+    const readout = document.getElementById("dev-readout");
+    if (readout) readout.textContent = `X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round(yaw * 180 / Math.PI)}°`;
+  });
+  return <group ref={group}><mesh castShadow position-y={0.75}><capsuleGeometry args={[0.42, 0.7, 8, 16]} /><meshStandardMaterial color="#ff4f8b" /></mesh><mesh position={[0, 1.1, 0.39]}><boxGeometry args={[0.4, 0.18, 0.16]} /><meshStandardMaterial color="white" /></mesh><mesh rotation-x={-Math.PI / 2} position-y={0.025}><ringGeometry args={[0.58, 0.68, 32]} /><meshBasicMaterial color="white" /></mesh></group>;
+}
+
+function Field({ room, devMode }: { room: Room<GameState> | null; devMode: boolean }) {
+  const canvas = useMemo(() => {
+    const element = document.createElement("canvas");
+    element.width = element.height = PAINT_GRID_SIZE;
+    return element;
+  }, []);
+  const texture = useMemo(() => {
+    const value = new THREE.CanvasTexture(canvas);
+    value.colorSpace = THREE.SRGBColorSpace;
+    return value;
+  }, [canvas]);
+  const revision = useRef(0);
+  useEffect(() => {
+    if (!room && !devMode) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const paint = (stroke: PaintStroke) => {
+      if (!devMode && stroke.revision !== revision.current + 1) {
+        room?.send("paint-snapshot");
+        return;
+      }
+      revision.current = stroke.revision;
+      const scale = PAINT_GRID_SIZE / (FIELD_HALF_SIZE * 2);
+      const x = (stroke.x + FIELD_HALF_SIZE) * scale;
+      const y = (stroke.z + FIELD_HALF_SIZE) * scale;
+      ctx.strokeStyle = ctx.fillStyle = stroke.team === "A" ? "#ff4f8b" : "#37d9ff";
+      const dx = Math.sin(stroke.yaw), dy = Math.cos(stroke.yaw);
+      ctx.beginPath();
+      if (stroke.kind === "ring") {
+        ctx.arc(x, y, 1.5 * scale, 0, Math.PI * 2);
+        ctx.lineWidth = 0.675 * scale;
+        ctx.stroke();
+      } else if (stroke.kind === "line") {
+        ctx.moveTo(x + dx * 0.4 * scale, y + dy * 0.4 * scale);
+        ctx.lineTo(x + dx * 5 * scale, y + dy * 5 * scale);
+        ctx.lineWidth = 0.5 * scale;
+        ctx.lineCap = "round";
+        ctx.stroke();
+      } else {
+        for (const a of [-0.8, 0, 0.8]) {
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + Math.sin(stroke.yaw+a)*3.5*scale, y + Math.cos(stroke.yaw+a)*3.5*scale);
+        }
+        ctx.lineWidth = 0.56 * scale;
+        ctx.lineCap = "round";
+        ctx.stroke();
+      }
+      texture.needsUpdate = true;
+    };
+    const devPaint = (event: Event) => paint((event as CustomEvent<PaintStroke>).detail);
+    if (devMode) window.addEventListener("dev-paint", devPaint);
+    const removePaint = room?.onMessage("paint", paint);
+    const removeSnapshot = room?.onMessage("paint-snapshot", async (snapshot: { revision: number; data: string }) => {
+      if (snapshot.revision < revision.current) return;
+      const bytes = Uint8Array.from(atob(snapshot.data), (char) => char.charCodeAt(0));
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
+      const cells = new Uint8Array(await new Response(stream).arrayBuffer());
+      if (snapshot.revision < revision.current || cells.length !== PAINT_GRID_SIZE ** 2) return;
+      const image = ctx.createImageData(PAINT_GRID_SIZE, PAINT_GRID_SIZE);
+      for (let i = 0; i < cells.length; i++) {
+        const team = cells[i];
+        if (!team) continue;
+        const offset = i * 4;
+        image.data[offset] = team === 1 ? 255 : 55;
+        image.data[offset+1] = team === 1 ? 79 : 217;
+        image.data[offset+2] = team === 1 ? 139 : 255;
+        image.data[offset+3] = 255;
+      }
+      ctx.putImageData(image, 0, 0);
+      revision.current = snapshot.revision;
+      texture.needsUpdate = true;
+    });
+    room?.send("paint-snapshot");
+    return () => { removePaint?.(); removeSnapshot?.(); window.removeEventListener("dev-paint", devPaint); };
+  }, [room, devMode, canvas, texture]);
   return (
     <group>
       <mesh receiveShadow rotation-x={-Math.PI / 2}>
         <planeGeometry args={[FIELD_HALF_SIZE * 2, FIELD_HALF_SIZE * 2]} />
         <meshStandardMaterial color="#272d3d" roughness={0.88} />
+      </mesh>
+      <mesh rotation-x={-Math.PI / 2} position-y={0.018}>
+        <planeGeometry args={[FIELD_HALF_SIZE * 2, FIELD_HALF_SIZE * 2]} />
+        <meshBasicMaterial map={texture} transparent depthWrite={false} />
       </mesh>
       <Grid
         position={[0, 0.012, 0]}

@@ -31,3 +31,8 @@ export interface PlayerSnapshot {
   yaw: number;
   lastProcessedInput: number;
 }
+
+export const PAINT_GRID_SIZE = 2048;
+export const paintKindSchema = z.enum(["ring", "line", "fan"]);
+export const paintRequestSchema = z.object({ kind: paintKindSchema });
+export type PaintStroke = { revision: number; x: number; z: number; yaw: number; team: "A" | "B"; kind: z.infer<typeof paintKindSchema> };

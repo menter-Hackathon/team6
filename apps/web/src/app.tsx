@@ -14,6 +14,9 @@ const SERVER_URL =
     : "http://localhost:2567");
 
 export function App() {
+  const [devMode, setDevMode] = useState(() =>
+    import.meta.env.DEV && new URLSearchParams(location.search).has("dev"),
+  );
   const roomRef = useRef<Room<GameState> | null>(null);
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
@@ -83,6 +86,7 @@ export function App() {
           <p className="eyebrow">STRUCTURE TEST / 3D FOUNDATION</p>
           <h1>ガヤでスプラトゥーン</h1>
         </div>
+        {import.meta.env.DEV && <button onClick={() => setDevMode(!devMode)}>{devMode ? "検証モードを終了" : "操作を検証"}</button>}
         <div className={`status status--${connectionState}`}>
           <span />
           {connectionState === "connected"
@@ -93,7 +97,7 @@ export function App() {
         </div>
       </header>
 
-      {connectionState !== "connected" ? (
+      {!devMode && connectionState !== "connected" ? (
         <section className="lobby-panel">
           <h2>ルームに参加</h2>
           <input
@@ -135,9 +139,12 @@ export function App() {
           </button>
           {errorMessage && <p role="alert">{errorMessage}</p>}
         </section>
-      ) : (
+      ) : !devMode ? (
         <section className="lobby-panel">
           <strong>招待コード: {roomCode}</strong>
+          {gameState?.phase === "lobby" && <p>待機中は移動できます。塗りは試合開始後に使えます。</p>}
+          <p>陣地 A: {gameState?.scoreA ?? 0} · B: {gameState?.scoreB ?? 0}</p>
+          {gameState?.phase === "result" && <strong>{gameState.scoreA === gameState.scoreB ? "引き分け" : `${gameState.scoreA > gameState.scoreB ? "A" : "B"} チームの勝ち`}</strong>}
           <p>
             進行: {gameState?.phase}{" "}
             {gameState?.phase === "playing" &&
@@ -170,7 +177,7 @@ export function App() {
             </>
           )}
         </section>
-      )}
+      ) : <section className="lobby-panel"><h2>開発者用 検証モード</h2><p>サーバーに接続せず、移動・カメラ・塗りを確認できます。</p><p>WASD で移動、Q・E・Space で塗り、フィールドをクリックして視点回転、Esc で解除。</p><p>座標と向きは左下に表示します。</p></section>}
 
       <section
         className="viewport"
@@ -182,10 +189,11 @@ export function App() {
           fallback={<p className="webgl-error">WebGLを利用できません。</p>}
         >
           <Suspense fallback={null}>
-            <GameScene roomRef={roomRef} playerIds={playerIds} />
+            <GameScene roomRef={roomRef} playerIds={devMode ? [] : playerIds} devMode={devMode} />
           </Suspense>
         </Canvas>
         <div className="crosshair" aria-hidden="true" />
+        {devMode && <output id="dev-readout" className="dev-readout" aria-label="検証用座標" />}
         <aside className="controls">
           <strong>操作</strong>
           <span>
@@ -195,6 +203,7 @@ export function App() {
             <kbd>D</kbd> 移動
           </span>
           <span>クリック → マウスで視点回転</span>
+          <span>Q: リング / E: 直線 / Space: 扇形で塗る</span>
           <span>
             <kbd>Esc</kbd> マウス解除
           </span>

@@ -6,10 +6,14 @@ import {
   STARTABLE_PLAYER_COUNTS,
   joinOptionsSchema,
   moveInputSchema,
+  paintRequestSchema,
+  type PaintStroke,
   roomOptionsSchema,
   type MoveInput,
 } from "@gaya/shared";
 import { GameState, PlayerState } from "./game-state.js";
+import { PaintField } from "./paint.js";
+import { deflateSync } from "node:zlib";
 import { movePlayer } from "./movement.js";
 
 const IDLE_INPUT: MoveInput = { sequence: 0, x: 0, z: 0, yaw: 0 };
@@ -17,6 +21,8 @@ const IDLE_INPUT: MoveInput = { sequence: 0, x: 0, z: 0, yaw: 0 };
 export class GameRoom extends Room<{ state: GameState }> {
   override maxClients = 8;
   private readonly movementInputs = new Map<string, MoveInput>();
+  private readonly paint = new PaintField();
+  private readonly lastPaint = new Map<string, number>();
   private turnTimer: ReturnType<typeof setInterval> | undefined;
 
   override onCreate(options: unknown): void {
@@ -31,7 +37,7 @@ export class GameRoom extends Room<{ state: GameState }> {
     );
 
     this.onMessage("move", (client, payload: unknown) => {
-      if (this.state.phase !== "playing") return;
+      if (this.state.phase !== "playing" && this.state.phase !== "lobby") return;
       const result = moveInputSchema.safeParse(payload);
       if (!result.success) return;
 
@@ -39,6 +45,21 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (previous && result.data.sequence <= previous.sequence) return;
       this.movementInputs.set(client.sessionId, result.data);
     });
+    this.onMessage("paint", (client, payload: unknown) => {
+      if (this.state.phase !== "playing") return;
+      const parsed = paintRequestSchema.safeParse(payload);
+      const player = this.state.players.get(client.sessionId);
+      if (!parsed.success || !player || (player.team !== "A" && player.team !== "B")) return;
+      const now = Date.now();
+      if (now - (this.lastPaint.get(client.sessionId) ?? 0) < 500) return;
+      this.lastPaint.set(client.sessionId, now);
+      const stroke: PaintStroke = { revision: this.paint.revision + 1, x: player.x, z: player.z, yaw: player.yaw, team: player.team, kind: parsed.data.kind };
+      this.paint.apply(stroke);
+      this.state.scoreA = this.paint.counts[1]!;
+      this.state.scoreB = this.paint.counts[2]!;
+      this.broadcast("paint", stroke);
+    });
+    this.onMessage("paint-snapshot", (client) => this.sendPaintSnapshot(client));
     this.onMessage("ready", (client, payload: unknown) => {
       if (this.state.phase !== "lobby" || typeof payload !== "boolean") return;
       const player = this.state.players.get(client.sessionId);
@@ -89,10 +110,12 @@ export class GameRoom extends Room<{ state: GameState }> {
     player.z = Math.floor(playerNumber / 4) * 2 - 1;
     this.state.players.set(client.sessionId, player);
     this.movementInputs.set(client.sessionId, { ...IDLE_INPUT });
+    this.sendPaintSnapshot(client);
   }
 
   override onLeave(client: Client): void {
     this.movementInputs.delete(client.sessionId);
+    this.lastPaint.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     if (this.state.phase === "lobby") {
       this.state.players.forEach((player) => {
@@ -107,6 +130,10 @@ export class GameRoom extends Room<{ state: GameState }> {
   override onDispose(): void {
     if (this.turnTimer) clearInterval(this.turnTimer);
     this.state.phase = "closed";
+  }
+
+  private sendPaintSnapshot(client: Client): void {
+    client.send("paint-snapshot", { revision: this.paint.revision, data: deflateSync(this.paint.cells).toString("base64") });
   }
 
   private alternatingOrder(players: PlayerState[]): PlayerState[] {

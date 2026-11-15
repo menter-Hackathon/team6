@@ -13,6 +13,8 @@ export interface PlayerState {
 
 export interface GameState {
   players: MapSchema<PlayerState>;
+  scoreA: number;
+  scoreB: number;
   phase: string;
   hostId: string;
   turnOrder: string;

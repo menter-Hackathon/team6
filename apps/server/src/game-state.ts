@@ -13,6 +13,8 @@ export class PlayerState extends Schema {
 
 export class GameState extends Schema {
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();
+  @type("uint32") scoreA = 0;
+  @type("uint32") scoreB = 0;
   @type("string") phase = "lobby";
   @type("string") hostId = "";
   @type("string") turnOrder = "alternating";
