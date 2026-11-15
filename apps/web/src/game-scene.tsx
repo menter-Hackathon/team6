@@ -46,7 +46,14 @@ export function GameScene({ roomRef, playerIds }: GameSceneProps) {
         controls.current.yaw = rotateYaw(controls.current.yaw, event.movementX);
       }
     };
-    const onClick = () => void document.body.requestPointerLock();
+    const onClick = (event: MouseEvent) => {
+      if (
+        event.target instanceof HTMLCanvasElement &&
+        roomRef.current?.state.phase === "playing"
+      ) {
+        void event.target.requestPointerLock();
+      }
+    };
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);

@@ -6,6 +6,14 @@ export const INPUT_SEND_RATE = 30;
 export const FIELD_HALF_SIZE = 12;
 export const PLAYER_SPEED = 5;
 export const PLAYER_RADIUS = 0.45;
+export const PRESENTATION_SECONDS = 30;
+export const STARTABLE_PLAYER_COUNTS = [4, 6, 8] as const;
+export const roomOptionsSchema = z.object({
+  displayName: z.string().trim().min(1).max(20),
+  turnOrder: z.enum(["alternating", "random"]).default("alternating"),
+});
+export const joinOptionsSchema = roomOptionsSchema.pick({ displayName: true });
+export type TurnOrder = z.infer<typeof roomOptionsSchema>["turnOrder"];
 
 export const moveInputSchema = z.object({
   sequence: z.number().int().nonnegative().safe(),
