@@ -9,6 +9,7 @@ build/
 .vite/
 .vitest/
 coverage/
+*.tsbuildinfo
 playwright-report/
 test-results/
 blob-report/
