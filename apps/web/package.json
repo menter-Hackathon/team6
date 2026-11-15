@@ -1,0 +1,31 @@
+{
+  "name": "@gaya/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run --exclude 'dist/**'"
+  },
+  "dependencies": {
+    "@colyseus/schema": "5.0.48",
+    "@colyseus/sdk": "0.18.10",
+    "@gaya/shared": "*",
+    "@react-three/drei": "10.7.9",
+    "@react-three/fiber": "9.8.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/three": "0.187.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.8",
+    "vitest": "5.1.0"
+  }
+}

@@ -1,0 +1,4 @@
+AGENTS.md
+**/dist/
+coverage/
+node_modules/
