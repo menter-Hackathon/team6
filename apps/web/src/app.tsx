@@ -11,11 +11,11 @@ const SERVER_URL =
   import.meta.env.VITE_SERVER_URL ??
   (import.meta.env.VITE_SERVER_HOST
     ? `https://${import.meta.env.VITE_SERVER_HOST}`
-    : "http://localhost:2567");
+    : import.meta.env.DEV ? "http://localhost:2567" : "");
 
 export function App() {
   const [devMode, setDevMode] = useState(() =>
-    import.meta.env.DEV && new URLSearchParams(location.search).has("dev"),
+    new URLSearchParams(location.search).has("dev"),
   );
   const roomRef = useRef<Room<GameState> | null>(null);
   const [connectionState, setConnectionState] =
@@ -29,6 +29,11 @@ export function App() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const connect = async (create: boolean) => {
+    if (!SERVER_URL) {
+      setErrorMessage("公開サイトのサーバー接続先が未設定です。Render の VITE_SERVER_HOST を確認してください。");
+      setConnectionState("error");
+      return;
+    }
     setConnectionState("connecting");
     setErrorMessage("");
     try {
@@ -61,7 +66,7 @@ export function App() {
     } catch (error) {
       console.error(error);
       setErrorMessage(
-        "接続できませんでした。コードとサーバーの状態を確認してください。",
+        "接続できませんでした。サーバーの起動状態と招待コードを確認してください。無料サーバーは起動に時間がかかる場合があります。",
       );
       setConnectionState("error");
     }
@@ -71,6 +76,23 @@ export function App() {
       if (roomRef.current) void roomRef.current.leave();
     };
   }, []);
+
+  const toggleDevMode = () => {
+    const next = !devMode;
+    if (next && roomRef.current) {
+      void roomRef.current.leave();
+      roomRef.current = null;
+      setConnectionState("disconnected");
+      setGameState(null);
+      setPlayerIds([]);
+      setRoomCode("");
+    }
+    const url = new URL(location.href);
+    if (next) url.searchParams.set("dev", "");
+    else url.searchParams.delete("dev");
+    history.replaceState(null, "", url);
+    setDevMode(next);
+  };
 
   const players = gameState ? Array.from(gameState.players.values()) : [];
   const localPlayer = gameState?.players.get(roomRef.current?.sessionId ?? "");
@@ -86,14 +108,16 @@ export function App() {
           <p className="eyebrow">STRUCTURE TEST / 3D FOUNDATION</p>
           <h1>ガヤでスプラトゥーン</h1>
         </div>
-        {import.meta.env.DEV && <button onClick={() => setDevMode(!devMode)}>{devMode ? "検証モードを終了" : "操作を検証"}</button>}
+        <button onClick={toggleDevMode}>{devMode ? "検証モードを終了" : "操作を検証"}</button>
         <div className={`status status--${connectionState}`}>
           <span />
           {connectionState === "connected"
             ? `接続中 · ${playerIds.length}/8人`
             : connectionState === "connecting"
               ? "サーバーへ接続中"
-              : "サーバー未接続"}
+              : connectionState === "error"
+                ? "接続失敗"
+                : "ルーム未参加"}
         </div>
       </header>
 
