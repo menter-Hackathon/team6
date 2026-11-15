@@ -2,7 +2,7 @@ services:
   - type: web
     name: gaya-splatoon-server
     runtime: node
-    plan: 0.5c-512mb
+    plan: free
     buildCommand: npm ci && npm run build -w @gaya/server
     startCommand: npm run start -w @gaya/server
     healthCheckPath: /health
