@@ -14,9 +14,9 @@ import {
 import { GameState, PlayerState } from "./game-state.js";
 import { PaintField } from "./paint.js";
 import { deflateSync } from "node:zlib";
-import { movePlayer } from "./movement.js";
+import { movePlayer, movementSpeed } from "./movement.js";
 
-const IDLE_INPUT: MoveInput = { sequence: 0, x: 0, z: 0, yaw: 0 };
+const IDLE_INPUT: MoveInput = { sequence: 0, x: 0, z: 0, yaw: 0, dive: false };
 
 export class GameRoom extends Room<{ state: GameState }> {
   override maxClients = 8;
@@ -162,9 +162,19 @@ export class GameRoom extends Room<{ state: GameState }> {
   private update(deltaSeconds: number): void {
     this.state.players.forEach((player: PlayerState, sessionId: string) => {
       const input = this.movementInputs.get(sessionId) ?? IDLE_INPUT;
-      const next = movePlayer(player, input, Math.min(deltaSeconds, 0.1));
+      const team = player.team === "A" ? 1 : player.team === "B" ? 2 : -1;
+      const ownPaint = this.paint.fullyOwnedAt(player.x, player.z, team);
+      player.dive = input.dive;
+      player.submerged = input.dive && ownPaint;
+      const dt = Math.min(deltaSeconds, 0.1);
+      let next = movePlayer(player, input, dt, movementSpeed(input.dive, ownPaint));
+      if (player.submerged && !this.paint.fullyOwnedAt(next.x, next.z, team)) {
+        player.submerged = false;
+        next = movePlayer(player, input, dt, movementSpeed(true, false));
+      }
       player.x = next.x;
       player.z = next.z;
+      player.submerged = input.dive && this.paint.fullyOwnedAt(next.x, next.z, team);
       player.yaw = input.yaw;
       player.lastProcessedInput = input.sequence;
     });

@@ -5,13 +5,23 @@ import {
   FIELD_HALF_SIZE,
   INPUT_SEND_RATE,
   PLAYER_SPEED,
+  DIVE_SPEED,
+  DISC_SPEED,
   PAINT_GRID_SIZE,
+  isFootprintOwned,
+  rasterizePaintStroke,
   type PaintStroke,
   type MoveInput,
 } from "@gaya/shared";
 import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { GameState } from "./game-types";
+
+const STONE_PROFILE = [
+  [0, 0], [0.4, 0], [0.46, 0.012], [0.5, 0.04],
+  [0.52, 0.08], [0.52, 0.12], [0.5, 0.16],
+  [0.46, 0.188], [0.4, 0.2], [0, 0.2],
+].map(([radius, height]) => new THREE.Vector2(radius!, height!));
 import {
   rotateYaw,
   toModelRotation,
@@ -33,12 +43,13 @@ interface ControlState {
 }
 
 export function GameScene({ roomRef, playerIds, devMode = false }: GameSceneProps) {
+  const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
   const controls = useRef<ControlState>({
     keys: new Set(),
     yaw: 0,
     position: { x: 0, z: 0 },
     sequence: 0,
-    latestInput: { sequence: 0, x: 0, z: 0, yaw: 0 },
+    latestInput: { sequence: 0, x: 0, z: 0, yaw: 0, dive: false },
   });
 
   useEffect(() => {
@@ -56,6 +67,7 @@ export function GameScene({ roomRef, playerIds, devMode = false }: GameSceneProp
     };
     const onKeyUp = (event: KeyboardEvent) =>
       controls.current.keys.delete(event.code);
+    const onBlur = () => controls.current.keys.clear();
     const onMouseMove = (event: MouseEvent) => {
       if (document.pointerLockElement) {
         controls.current.yaw = rotateYaw(controls.current.yaw, event.movementX);
@@ -73,11 +85,13 @@ export function GameScene({ roomRef, playerIds, devMode = false }: GameSceneProp
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
     window.addEventListener("mousemove", onMouseMove);
     document.body.addEventListener("click", onClick);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
       window.removeEventListener("mousemove", onMouseMove);
       document.body.removeEventListener("click", onClick);
     };
@@ -98,6 +112,7 @@ export function GameScene({ roomRef, playerIds, devMode = false }: GameSceneProp
         x: direction.x,
         z: direction.z,
         yaw,
+        dive: keys.has("ShiftLeft") || keys.has("ShiftRight"),
       };
       controls.current.latestInput = input;
       room.send("move", input);
@@ -119,32 +134,73 @@ export function GameScene({ roomRef, playerIds, devMode = false }: GameSceneProp
         shadow-mapSize={[1024, 1024]}
       />
       <Sky sunPosition={[4, 2, 8]} turbidity={6} rayleigh={0.7} />
-      <Field room={roomRef.current} devMode={devMode} />
-      {devMode && <DevPlayer controls={controls} />}
-      {playerIds.map((playerId, index) => (
+      <Field room={roomRef.current} devMode={devMode} devOwnPaint={devOwnPaint} />
+      {devMode && <DevPlayer controls={controls} ownPaint={devOwnPaint} />}
+      {playerIds.map((playerId) => (
         <Player
           key={playerId}
           playerId={playerId}
           local={playerId === localId}
           roomRef={roomRef}
           controls={controls}
-          color={index % 2 === 0 ? "#ff4f8b" : "#37d9ff"}
+          color={roomRef.current?.state.players.get(playerId)?.team === "B" ? "#37d9ff" : "#ff4f8b"}
         />
       ))}
     </>
   );
 }
 
-function DevPlayer({ controls }: { controls: MutableRefObject<ControlState> }) {
+function useDiveAppearance() {
+  const body = useRef<THREE.Mesh>(null);
+  const face = useRef<THREE.Mesh>(null);
+  const disc = useRef<THREE.Mesh>(null);
+  const ripple = useRef<THREE.Mesh>(null);
+  const sink = useRef(0);
+  const rippleAge = useRef(1);
+  const wasSubmerged = useRef(false);
+
+  const update = (dive: boolean, submerged: boolean, delta: number) => {
+    if (submerged !== wasSubmerged.current) {
+      rippleAge.current = 0;
+      wasSubmerged.current = submerged;
+    }
+    sink.current = THREE.MathUtils.damp(sink.current, submerged ? -1.7 : 0, 13, delta);
+    if (body.current) {
+      body.current.position.y = 0.75 + sink.current;
+      body.current.visible = !dive || (submerged && sink.current > -1.5);
+    }
+    if (face.current) {
+      face.current.position.y = 1.1 + sink.current;
+      face.current.visible = !dive || (submerged && sink.current > -1.5);
+    }
+    if (disc.current) disc.current.visible = dive && !submerged;
+    rippleAge.current += delta;
+    if (ripple.current) {
+      const progress = Math.min(rippleAge.current / 0.55, 1);
+      ripple.current.visible = progress < 1;
+      ripple.current.scale.setScalar(0.7 + progress * 1.6);
+      (ripple.current.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - progress);
+    }
+  };
+  return { body, face, disc, ripple, update };
+}
+
+function DevPlayer({ controls, ownPaint }: { controls: MutableRefObject<ControlState>; ownPaint: MutableRefObject<(x: number, z: number) => boolean> }) {
   const group = useRef<THREE.Group>(null);
+  const appearance = useDiveAppearance();
   const { camera } = useThree();
   useFrame((_, delta) => {
     const object = group.current;
     if (!object) return;
     const keys = controls.current.keys;
     const direction = toWorldDirection(Number(keys.has("KeyW")) - Number(keys.has("KeyS")), Number(keys.has("KeyD")) - Number(keys.has("KeyA")), controls.current.yaw);
-    object.position.x = THREE.MathUtils.clamp(object.position.x + direction.x * PLAYER_SPEED * delta, -FIELD_HALF_SIZE + 0.5, FIELD_HALF_SIZE - 0.5);
-    object.position.z = THREE.MathUtils.clamp(object.position.z + direction.z * PLAYER_SPEED * delta, -FIELD_HALF_SIZE + 0.5, FIELD_HALF_SIZE - 0.5);
+    const dive = keys.has("ShiftLeft") || keys.has("ShiftRight");
+    const submerged = dive && ownPaint.current(object.position.x, object.position.z);
+    const speed = dive ? (submerged ? DIVE_SPEED : DISC_SPEED) : PLAYER_SPEED;
+    object.position.x = THREE.MathUtils.clamp(object.position.x + direction.x * speed * delta, -FIELD_HALF_SIZE + 0.5, FIELD_HALF_SIZE - 0.5);
+    object.position.z = THREE.MathUtils.clamp(object.position.z + direction.z * speed * delta, -FIELD_HALF_SIZE + 0.5, FIELD_HALF_SIZE - 0.5);
+    const nowSubmerged = dive && ownPaint.current(object.position.x, object.position.z);
+    appearance.update(dive, nowSubmerged, delta);
     object.rotation.y = toModelRotation(controls.current.yaw);
     controls.current.position = { x: object.position.x, z: object.position.z };
     const yaw = controls.current.yaw;
@@ -153,10 +209,16 @@ function DevPlayer({ controls }: { controls: MutableRefObject<ControlState> }) {
     const readout = document.getElementById("dev-readout");
     if (readout) readout.textContent = `X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round(yaw * 180 / Math.PI)}°`;
   });
-  return <group ref={group}><mesh castShadow position-y={0.75}><capsuleGeometry args={[0.42, 0.7, 8, 16]} /><meshStandardMaterial color="#ff4f8b" /></mesh><mesh position={[0, 1.1, 0.39]}><boxGeometry args={[0.4, 0.18, 0.16]} /><meshStandardMaterial color="white" /></mesh><mesh rotation-x={-Math.PI / 2} position-y={0.025}><ringGeometry args={[0.58, 0.68, 32]} /><meshBasicMaterial color="white" /></mesh></group>;
+  return <group ref={group}>
+    <mesh ref={appearance.body} castShadow position-y={0.75}><capsuleGeometry args={[0.42, 0.7, 8, 16]} /><meshStandardMaterial color="#ff4f8b" /></mesh>
+    <mesh ref={appearance.face} position={[0, 1.1, 0.39]}><boxGeometry args={[0.4, 0.18, 0.16]} /><meshStandardMaterial color="white" /></mesh>
+    <mesh ref={appearance.disc} visible={false} castShadow position-y={0.03}><latheGeometry args={[STONE_PROFILE, 48]} /><meshStandardMaterial color="#ff4f8b" roughness={0.4} metalness={0.25} /></mesh>
+    <mesh ref={appearance.ripple} visible={false} rotation-x={-Math.PI / 2} position-y={0.05}><ringGeometry args={[0.45, 0.57, 40]} /><meshBasicMaterial color="#ff4f8b" transparent opacity={0} depthWrite={false} /></mesh>
+    <mesh rotation-x={-Math.PI / 2} position-y={0.025}><ringGeometry args={[0.58, 0.68, 32]} /><meshBasicMaterial color="white" /></mesh>
+  </group>;
 }
 
-function Field({ room, devMode }: { room: Room<GameState> | null; devMode: boolean }) {
+function Field({ room, devMode, devOwnPaint }: { room: Room<GameState> | null; devMode: boolean; devOwnPaint: MutableRefObject<(x: number, z: number) => boolean> }) {
   const canvas = useMemo(() => {
     const element = document.createElement("canvas");
     element.width = element.height = PAINT_GRID_SIZE;
@@ -168,42 +230,37 @@ function Field({ room, devMode }: { room: Room<GameState> | null; devMode: boole
     return value;
   }, [canvas]);
   const revision = useRef(0);
+  const cells = useMemo(() => new Uint8Array(PAINT_GRID_SIZE ** 2), []);
   useEffect(() => {
     if (!room && !devMode) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const image = ctx.createImageData(PAINT_GRID_SIZE, PAINT_GRID_SIZE);
+    if (devMode) devOwnPaint.current = (x, z) => isFootprintOwned(cells, x, z, 1);
     const paint = (stroke: PaintStroke) => {
       if (!devMode && stroke.revision !== revision.current + 1) {
         room?.send("paint-snapshot");
         return;
       }
-      revision.current = stroke.revision;
-      const scale = PAINT_GRID_SIZE / (FIELD_HALF_SIZE * 2);
-      const x = (stroke.x + FIELD_HALF_SIZE) * scale;
-      const y = (stroke.z + FIELD_HALF_SIZE) * scale;
-      ctx.strokeStyle = ctx.fillStyle = stroke.team === "A" ? "#ff4f8b" : "#37d9ff";
-      const dx = Math.sin(stroke.yaw), dy = Math.cos(stroke.yaw);
-      ctx.beginPath();
-      if (stroke.kind === "ring") {
-        ctx.arc(x, y, 1.5 * scale, 0, Math.PI * 2);
-        ctx.lineWidth = 0.675 * scale;
-        ctx.stroke();
-      } else if (stroke.kind === "line") {
-        ctx.moveTo(x + dx * 0.4 * scale, y + dy * 0.4 * scale);
-        ctx.lineTo(x + dx * 5 * scale, y + dy * 5 * scale);
-        ctx.lineWidth = 0.5 * scale;
-        ctx.lineCap = "round";
-        ctx.stroke();
-      } else {
-        for (const a of [-0.8, 0, 0.8]) {
-          ctx.moveTo(x, y);
-          ctx.lineTo(x + Math.sin(stroke.yaw+a)*3.5*scale, y + Math.cos(stroke.yaw+a)*3.5*scale);
-        }
-        ctx.lineWidth = 0.56 * scale;
-        ctx.lineCap = "round";
-        ctx.stroke();
+      if (!devMode) revision.current = stroke.revision;
+      const team = stroke.team === "A" ? 1 : 2;
+      let minX = PAINT_GRID_SIZE, minY = PAINT_GRID_SIZE, maxX = -1, maxY = -1;
+      rasterizePaintStroke(stroke, (x, y) => {
+        const index = y * PAINT_GRID_SIZE + x;
+        if (cells[index] === team) return;
+        cells[index] = team;
+        const offset = index * 4;
+        image.data[offset] = team === 1 ? 255 : 55;
+        image.data[offset + 1] = team === 1 ? 79 : 217;
+        image.data[offset + 2] = team === 1 ? 139 : 255;
+        image.data[offset + 3] = 255;
+        minX = Math.min(minX, x); minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+      });
+      if (maxX >= 0) {
+        ctx.putImageData(image, 0, 0, minX, minY, maxX - minX + 1, maxY - minY + 1);
+        texture.needsUpdate = true;
       }
-      texture.needsUpdate = true;
     };
     const devPaint = (event: Event) => paint((event as CustomEvent<PaintStroke>).detail);
     if (devMode) window.addEventListener("dev-paint", devPaint);
@@ -212,25 +269,26 @@ function Field({ room, devMode }: { room: Room<GameState> | null; devMode: boole
       if (snapshot.revision < revision.current) return;
       const bytes = Uint8Array.from(atob(snapshot.data), (char) => char.charCodeAt(0));
       const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
-      const cells = new Uint8Array(await new Response(stream).arrayBuffer());
-      if (snapshot.revision < revision.current || cells.length !== PAINT_GRID_SIZE ** 2) return;
-      const image = ctx.createImageData(PAINT_GRID_SIZE, PAINT_GRID_SIZE);
+      const received = new Uint8Array(await new Response(stream).arrayBuffer());
+      if (snapshot.revision < revision.current || received.length !== cells.length) return;
+      cells.set(received);
+      image.data.fill(0);
       for (let i = 0; i < cells.length; i++) {
         const team = cells[i];
         if (!team) continue;
         const offset = i * 4;
         image.data[offset] = team === 1 ? 255 : 55;
-        image.data[offset+1] = team === 1 ? 79 : 217;
-        image.data[offset+2] = team === 1 ? 139 : 255;
-        image.data[offset+3] = 255;
+        image.data[offset + 1] = team === 1 ? 79 : 217;
+        image.data[offset + 2] = team === 1 ? 139 : 255;
+        image.data[offset + 3] = 255;
       }
       ctx.putImageData(image, 0, 0);
       revision.current = snapshot.revision;
       texture.needsUpdate = true;
     });
     room?.send("paint-snapshot");
-    return () => { removePaint?.(); removeSnapshot?.(); window.removeEventListener("dev-paint", devPaint); };
-  }, [room, devMode, canvas, texture]);
+    return () => { devOwnPaint.current = () => false; removePaint?.(); removeSnapshot?.(); window.removeEventListener("dev-paint", devPaint); };
+  }, [room, devMode, canvas, texture, devOwnPaint, cells]);
   return (
     <group>
       <mesh receiveShadow rotation-x={-Math.PI / 2}>
@@ -285,6 +343,7 @@ interface PlayerProps {
 function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
   const group = useRef<THREE.Group>(null);
   const predicted = useRef(new THREE.Vector3());
+  const appearance = useDiveAppearance();
   const initialized = useRef(false);
   const { camera } = useThree();
   const cameraOffset = useMemo(() => new THREE.Vector3(), []);
@@ -294,6 +353,8 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
     const player = roomRef.current?.state.players.get(playerId);
     const object = group.current;
     if (!player || !object) return;
+    const diving = local ? (controls.current.keys.has("ShiftLeft") || controls.current.keys.has("ShiftRight")) : player.dive;
+    appearance.update(diving, diving && player.submerged, delta);
 
     if (!initialized.current) {
       predicted.current.set(player.x, 0, player.z);
@@ -304,8 +365,9 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
       const input = controls.current.latestInput;
       const length = Math.hypot(input.x, input.z);
       const scale = length > 1 ? 1 / length : 1;
-      predicted.current.x += input.x * scale * PLAYER_SPEED * delta;
-      predicted.current.z += input.z * scale * PLAYER_SPEED * delta;
+      const speed = input.dive ? (player.submerged ? DIVE_SPEED : DISC_SPEED) : PLAYER_SPEED;
+      predicted.current.x += input.x * scale * speed * delta;
+      predicted.current.z += input.z * scale * speed * delta;
       const error = predicted.current.distanceTo(
         cameraTarget.set(player.x, 0, player.z),
       );
@@ -334,17 +396,25 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
 
   return (
     <group ref={group}>
-      <mesh castShadow position-y={0.75}>
+      <mesh ref={appearance.body} castShadow position-y={0.75}>
         <capsuleGeometry args={[0.42, 0.7, 8, 16]} />
         <meshStandardMaterial color={color} roughness={0.45} metalness={0.1} />
       </mesh>
-      <mesh castShadow position={[0, 1.1, 0.39]}>
+      <mesh ref={appearance.face} castShadow position={[0, 1.1, 0.39]}>
         <boxGeometry args={[0.4, 0.18, 0.16]} />
         <meshStandardMaterial
           color="#f5f7ff"
           emissive={color}
           emissiveIntensity={0.3}
         />
+      </mesh>
+      <mesh ref={appearance.disc} visible={false} castShadow position-y={0.03}>
+        <latheGeometry args={[STONE_PROFILE, 48]} />
+        <meshStandardMaterial color={color} roughness={0.35} metalness={0.35} transparent opacity={local ? 0.8 : 1} />
+      </mesh>
+      <mesh ref={appearance.ripple} visible={false} rotation-x={-Math.PI / 2} position-y={0.05}>
+        <ringGeometry args={[0.45, 0.57, 40]} />
+        <meshBasicMaterial color={color} transparent opacity={0} depthWrite={false} />
       </mesh>
       {local && (
         <mesh rotation-x={-Math.PI / 2} position-y={0.025}>
