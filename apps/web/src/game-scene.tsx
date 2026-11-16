@@ -76,8 +76,15 @@ export function GameScene({
           controls.current.specialTime = 0;
           controls.current.firing = false;
         }
-      } else if (roomRef.current?.state.phase === "playing")
-        roomRef.current.send("special", { shape: specialShape });
+      } else {
+        const room = roomRef.current;
+        if (
+          room?.state.phase === "playing" ||
+          (room?.state.phase === "lobby" &&
+            room.state.players.get(room.sessionId)?.ready)
+        )
+          room.send("special", { shape: specialShape });
+      }
     };
     window.addEventListener("activate-special", activateSpecial);
     const onKeyDown = (event: KeyboardEvent) => {
@@ -235,7 +242,9 @@ export function GameScene({
     if (button) {
       button.disabled =
         specialActive ||
-        (!devMode && roomRef.current?.state.phase !== "playing");
+        (!devMode &&
+          roomRef.current?.state.phase !== "playing" &&
+          !(roomRef.current?.state.phase === "lobby" && networkPlayer?.ready));
       button.textContent = specialActive
         ? "回転ジャンプ中…"
         : `F  必殺技 · ${specialShape === "ink" ? "● インク" : specialShape === "heart" ? "♥ ハート" : "★ スター"}スラム`;
@@ -261,7 +270,10 @@ export function GameScene({
           } satisfies PaintStroke,
         }),
       );
-    else if (roomRef.current?.state.phase === "playing")
+    else if (
+      roomRef.current?.state.phase === "playing" ||
+      (roomRef.current?.state.phase === "lobby" && networkPlayer?.ready)
+    )
       roomRef.current.send("paint", { kind: "ink" });
   });
 

@@ -12,6 +12,8 @@ export const INK_SHOT_INTERVAL = 0.17;
 export const PLAYER_SIZE = 1;
 export const PLAYER_RADIUS = PLAYER_SIZE * 0.45;
 export const PRESENTATION_SECONDS = 30;
+export const GAME_START_COUNTDOWN_SECONDS = 7;
+export const TURN_INTRO_MS = 2650;
 export const STARTABLE_PLAYER_COUNTS = [4, 6, 8] as const;
 export const roomOptionsSchema = z.object({
   displayName: z.string().trim().min(1).max(20),
