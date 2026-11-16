@@ -9,12 +9,16 @@ interface PaintOverviewProps {
   room?: Room<GameState> | undefined;
   preview?: boolean;
   revealed: boolean;
+  colorA: string;
+  colorB: string;
 }
 
 export function PaintOverview({
   room,
   preview = false,
   revealed,
+  colorA,
+  colorB,
 }: PaintOverviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -23,6 +27,12 @@ export function PaintOverview({
     const context = canvas?.getContext("2d");
     if (!context) return;
     let disposed = false;
+    const rgbA = [1, 3, 5].map((index) =>
+      parseInt(colorA.slice(index, index + 2), 16),
+    );
+    const rgbB = [1, 3, 5].map((index) =>
+      parseInt(colorB.slice(index, index + 2), 16),
+    );
     const draw = (cells?: Uint8Array) => {
       if (disposed) return;
       const image = context.createImageData(MAP_SIZE, MAP_SIZE);
@@ -44,9 +54,10 @@ export function PaintOverview({
                   : 0
               : 0;
           const offset = (y * MAP_SIZE + x) * 4;
-          image.data[offset] = owner === 1 ? 255 : owner === 2 ? 55 : 206;
-          image.data[offset + 1] = owner === 1 ? 79 : owner === 2 ? 217 : 215;
-          image.data[offset + 2] = owner === 1 ? 139 : owner === 2 ? 255 : 205;
+          const rgb = owner === 1 ? rgbA : owner === 2 ? rgbB : [206, 215, 205];
+          image.data[offset] = rgb[0]!;
+          image.data[offset + 1] = rgb[1]!;
+          image.data[offset + 2] = rgb[2]!;
           image.data[offset + 3] = 255;
         }
       }
@@ -81,7 +92,7 @@ export function PaintOverview({
       disposed = true;
       remove?.();
     };
-  }, [room, preview]);
+  }, [room, preview, colorA, colorB]);
 
   return (
     <div

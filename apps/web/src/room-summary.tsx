@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PracticeColorPicker } from "./practice-color-picker";
 
 interface RoomSummaryProps {
   roomCode: string;
@@ -6,6 +7,11 @@ interface RoomSummaryProps {
   canStart?: boolean;
   onStart?: () => void;
   onClose?: () => void;
+  practiceColor?: string;
+  onPracticeColorSelect?: (color: string) => void;
+  ready?: boolean;
+  readyCount?: number;
+  onReady?: () => void;
 }
 
 export function RoomSummary({
@@ -14,6 +20,11 @@ export function RoomSummary({
   canStart = false,
   onStart,
   onClose,
+  practiceColor = "#ff4f8b",
+  onPracticeColorSelect,
+  ready = false,
+  readyCount = 0,
+  onReady,
 }: RoomSummaryProps) {
   const [linkCopyMessage, setLinkCopyMessage] = useState("");
   const copyInviteLink = async () => {
@@ -60,13 +71,30 @@ export function RoomSummary({
           <li key={index}>{name}</li>
         ))}
       </ul>
+      <PracticeColorPicker
+        color={practiceColor}
+        onSelect={onPracticeColorSelect}
+      />
+      {onReady && (
+        <button
+          className="room-summary-ready"
+          onClick={onReady}
+          aria-label={ready ? "準備を取り消す" : "準備OKにする"}
+          aria-pressed={ready}
+        >
+          <span>{ready ? "準備完了 ✓" : "準備OKにする"}</span>
+          <span className="room-summary-ready-count">
+            {readyCount}/{names.length}人
+          </span>
+        </button>
+      )}
       {onStart && (
         <button
           className="room-summary-start"
           disabled={!canStart}
           onClick={onStart}
         >
-          試合開始
+          チーム決めへ
         </button>
       )}
     </div>

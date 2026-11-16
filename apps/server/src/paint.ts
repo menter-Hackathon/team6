@@ -3,6 +3,7 @@ import {
   PAINT_GRID_SIZE,
   isFootprintOwned,
   rasterizePaintStroke,
+  practiceColorOwner,
   type PaintStroke,
 } from "@gaya/shared";
 
@@ -35,9 +36,14 @@ export class PaintField {
       if (x < 0 || y < 0 || x >= PAINT_GRID_SIZE || y >= PAINT_GRID_SIZE)
         return;
       const index = y * PAINT_GRID_SIZE + x;
-      const team = stroke.team === "A" ? 1 : 2;
+      const team = stroke.practiceColor
+        ? practiceColorOwner(stroke.practiceColor)
+        : stroke.team === "A"
+          ? 1
+          : 2;
       const previous = this.cells[index]!;
       if (previous === team) return;
+      this.counts[team] ??= 0;
       this.counts[previous]!--;
       this.counts[team]!++;
       this.cells[index] = team;

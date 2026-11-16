@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { GAME_START_COUNTDOWN_SECONDS } from "@gaya/shared";
+import { PracticeColorPicker } from "./practice-color-picker";
 
 export type PopupScene = "lobby" | "countdown" | "turn" | "result";
 
@@ -11,6 +12,8 @@ interface ProgressionPopupProps {
   isHost?: boolean;
   isReady?: boolean;
   canStart?: boolean;
+  practiceColor?: string;
+  onPracticeColorSelect?: (color: string) => void;
   speakerName?: string;
   turnNumber?: number;
   turnCount?: number;
@@ -27,6 +30,8 @@ export function ProgressionPopup({
   isHost = false,
   isReady = false,
   canStart = false,
+  practiceColor = "#ff4f8b",
+  onPracticeColorSelect,
   speakerName = "プレイヤー",
   turnNumber = 1,
   turnCount = 4,
@@ -107,6 +112,10 @@ export function ProgressionPopup({
         {scene === "lobby" && (
           <>
             <h2 id="progression-title">入室待ち</h2>
+            <PracticeColorPicker
+              color={practiceColor}
+              onSelect={onPracticeColorSelect}
+            />
             <div className="progression-code">
               <div>
                 <span>招待コード</span>
@@ -156,7 +165,7 @@ export function ProgressionPopup({
                   }
                   onClick={onStart}
                 >
-                  試合開始
+                  チーム決めへ
                 </button>
               )}
             </div>

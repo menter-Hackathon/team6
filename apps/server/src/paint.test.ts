@@ -25,6 +25,31 @@ describe("PaintField", () => {
     expect(field.counts[2]).toBeGreaterThan(0);
     expect(field.revision).toBe(2);
   });
+  it("keeps eight lobby ink colors distinct", () => {
+    const field = new PaintField();
+    field.apply({
+      revision: 1,
+      x: 0,
+      z: 0,
+      yaw: 0,
+      team: "A",
+      kind: "ring",
+      practiceColor: "#b66bff",
+    });
+    expect(field.ownerAt(0, 0)).toBe(6);
+    expect(field.fullyOwnedAt(0, 0, 6)).toBe(true);
+    field.apply({
+      revision: 2,
+      x: 0,
+      z: 0,
+      yaw: 0,
+      team: "A",
+      kind: "ring",
+      practiceColor: "#36f5a2",
+    });
+    expect(field.ownerAt(0, 0)).toBe(7);
+    expect(field.fullyOwnedAt(0, 0, 6)).toBe(false);
+  });
   it("clears practice paint before a match without rewinding revisions", () => {
     const field = new PaintField();
     field.apply({ revision: 1, x: 0, z: 0, yaw: 0, team: "A", kind: "ring" });

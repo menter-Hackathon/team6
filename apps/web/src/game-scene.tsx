@@ -4,6 +4,8 @@ import type { Room } from "@colyseus/sdk";
 import {
   FIELD_HALF_SIZE,
   advanceSpecial,
+  advanceJump,
+  jumpHeight,
   INPUT_SEND_RATE,
   PLAYER_SPEED,
   PLAYER_SIZE,
@@ -18,6 +20,8 @@ import {
   type PaintStroke,
   type MoveInput,
   type SpecialShape,
+  NEON_COLORS,
+  practiceColorOwner,
 } from "@gaya/shared";
 import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -37,12 +41,15 @@ interface GameSceneProps {
   playerIds: string[];
   devMode?: boolean;
   specialShape: SpecialShape;
+  colorA?: string | undefined;
+  colorB?: string | undefined;
 }
 
 interface ControlState {
   keys: Set<string>;
   firing: boolean;
   specialTime: number;
+  jumpTime: number;
   specialShape: SpecialShape;
   yaw: number;
   position: { x: number; z: number };
@@ -55,12 +62,15 @@ export function GameScene({
   playerIds,
   devMode = false,
   specialShape,
+  colorA = "#ff4f8b",
+  colorB = "#37d9ff",
 }: GameSceneProps) {
   const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
   const controls = useRef<ControlState>({
     keys: new Set(),
     firing: false,
     specialTime: -1,
+    jumpTime: -1,
     specialShape: "star",
     yaw: 0,
     position: { x: 0, z: 0 },
@@ -78,12 +88,9 @@ export function GameScene({
         }
       } else {
         const room = roomRef.current;
-        if (
-          room?.state.phase === "playing" ||
-          (room?.state.phase === "lobby" &&
-            room.state.players.get(room.sessionId)?.ready)
-        )
+        if (room?.state.phase === "playing" || room?.state.phase === "lobby")
           room.send("special", { shape: specialShape });
+        controls.current.jumpTime = -1;
       }
     };
     window.addEventListener("activate-special", activateSpecial);
@@ -91,12 +98,32 @@ export function GameScene({
       if (
         event.target instanceof HTMLElement &&
         (event.target.isContentEditable ||
-          /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName))
+          /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(event.target.tagName))
       )
         return;
       if (event.code === "KeyF" && !event.repeat) {
         event.preventDefault();
         activateSpecial();
+        return;
+      }
+      if (event.code === "Space") {
+        event.preventDefault();
+        if (
+          event.repeat ||
+          controls.current.jumpTime >= 0 ||
+          controls.current.specialTime >= 0 ||
+          controls.current.keys.has("ShiftLeft") ||
+          controls.current.keys.has("ShiftRight")
+        )
+          return;
+        if (devMode) controls.current.jumpTime = 0;
+        else if (
+          roomRef.current?.state.phase === "lobby" ||
+          roomRef.current?.state.phase === "playing"
+        ) {
+          controls.current.jumpTime = 0;
+          roomRef.current.send("jump");
+        }
         return;
       }
       if (
@@ -106,17 +133,11 @@ export function GameScene({
       )
         event.preventDefault();
       if (
-        ["KeyQ", "KeyE", "Space"].includes(event.code) &&
+        ["KeyQ", "KeyE"].includes(event.code) &&
         !event.repeat &&
         !(event.target instanceof HTMLInputElement)
       ) {
-        if (event.code === "Space") event.preventDefault();
-        const kind =
-          event.code === "KeyQ"
-            ? "ring"
-            : event.code === "KeyE"
-              ? "line"
-              : "fan";
+        const kind = event.code === "KeyQ" ? "ring" : "line";
         if (
           controls.current.keys.has("ShiftLeft") ||
           controls.current.keys.has("ShiftRight")
@@ -215,7 +236,9 @@ export function GameScene({
         x: direction.x,
         z: direction.z,
         yaw,
-        dive: keys.has("ShiftLeft") || keys.has("ShiftRight"),
+        dive:
+          (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
+          controls.current.jumpTime < 0,
       };
       controls.current.latestInput = input;
       room.send("move", input);
@@ -244,7 +267,7 @@ export function GameScene({
         specialActive ||
         (!devMode &&
           roomRef.current?.state.phase !== "playing" &&
-          !(roomRef.current?.state.phase === "lobby" && networkPlayer?.ready));
+          roomRef.current?.state.phase !== "lobby");
       button.textContent = specialActive
         ? "回転ジャンプ中…"
         : `F  必殺技 · ${specialShape === "ink" ? "● インク" : specialShape === "heart" ? "♥ ハート" : "★ スター"}スラム`;
@@ -272,7 +295,7 @@ export function GameScene({
       );
     else if (
       roomRef.current?.state.phase === "playing" ||
-      (roomRef.current?.state.phase === "lobby" && networkPlayer?.ready)
+      roomRef.current?.state.phase === "lobby"
     )
       roomRef.current.send("paint", { kind: "ink" });
   });
@@ -300,6 +323,8 @@ export function GameScene({
         room={roomRef.current}
         devMode={devMode}
         devOwnPaint={devOwnPaint}
+        colorA={colorA}
+        colorB={colorB}
       />
       {devMode && <DevPlayer controls={controls} ownPaint={devOwnPaint} />}
       {playerIds.map((playerId) => (
@@ -310,9 +335,12 @@ export function GameScene({
           roomRef={roomRef}
           controls={controls}
           color={
-            roomRef.current?.state.players.get(playerId)?.team === "B"
-              ? "#37d9ff"
-              : "#ff4f8b"
+            roomRef.current?.state.phase === "lobby"
+              ? (roomRef.current?.state.players.get(playerId)?.practiceColor ??
+                colorA)
+              : roomRef.current?.state.players.get(playerId)?.team === "B"
+                ? colorB
+                : colorA
           }
         />
       ))}
@@ -373,6 +401,11 @@ function DevPlayer({
   useFrame((_, delta) => {
     const object = group.current;
     if (!object) return;
+    controls.current.jumpTime = advanceJump(
+      controls.current.jumpTime,
+      Math.min(delta, 0.1),
+    );
+    object.position.y = jumpHeight(controls.current.jumpTime);
     const special = advanceSpecial(
       controls.current.specialTime,
       Math.min(delta, 0.1),
@@ -404,6 +437,8 @@ function DevPlayer({
     if (specialActive) {
       direction.x = 0;
       direction.z = 0;
+      controls.current.jumpTime = -1;
+      object.position.y = 0;
     }
     const length = Math.hypot(direction.x, direction.z);
     if (length > 1) {
@@ -411,7 +446,9 @@ function DevPlayer({
       direction.z /= length;
     }
     const dive =
-      !specialActive && (keys.has("ShiftLeft") || keys.has("ShiftRight"));
+      !specialActive &&
+      controls.current.jumpTime < 0 &&
+      (keys.has("ShiftLeft") || keys.has("ShiftRight"));
     const before = updateDiveState(
       diveState.current,
       dive,
@@ -443,6 +480,7 @@ function DevPlayer({
     const nowSubmerged = diveState.current.submerged;
     if (
       !dive &&
+      controls.current.jumpTime < 0 &&
       Math.hypot(object.position.x - oldX, object.position.z - oldZ) > 0.001
     ) {
       window.dispatchEvent(
@@ -472,12 +510,16 @@ function DevPlayer({
     camera.position.lerp(
       new THREE.Vector3(
         object.position.x + Math.sin(yaw) * 6,
-        3.7,
+        3.7 + object.position.y,
         object.position.z - Math.cos(yaw) * 6,
       ),
       1 - Math.exp(-delta * 8),
     );
-    camera.lookAt(object.position.x, 1.1, object.position.z);
+    camera.lookAt(
+      object.position.x,
+      1.1 + object.position.y,
+      object.position.z,
+    );
     const readout = document.getElementById("dev-readout");
     if (readout)
       readout.textContent = `状態 ${nowSubmerged ? "潜航 ×1.5" : "通常"} / X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
@@ -514,10 +556,14 @@ function Field({
   room,
   devMode,
   devOwnPaint,
+  colorA,
+  colorB,
 }: {
   room: Room<GameState> | null;
   devMode: boolean;
   devOwnPaint: MutableRefObject<(x: number, z: number) => boolean>;
+  colorA: string;
+  colorB: string;
 }) {
   const canvas = useMemo(() => {
     const element = document.createElement("canvas");
@@ -549,6 +595,34 @@ function Field({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     effects.clear();
+    effects.setColors(colorA, colorB);
+    const rgbA = [1, 3, 5].map((index) =>
+      parseInt(colorA.slice(index, index + 2), 16),
+    );
+    const rgbB = [1, 3, 5].map((index) =>
+      parseInt(colorB.slice(index, index + 2), 16),
+    );
+    const practiceRgb = NEON_COLORS.map(({ hex }) =>
+      [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16)),
+    );
+    const setPixel = (
+      data: Uint8ClampedArray,
+      offset: number,
+      team: number,
+    ) => {
+      const practice =
+        room?.state.phase === "lobby" || room?.state.phase === "team_selection";
+      const rgb =
+        practice && practiceRgb[team - 1]
+          ? practiceRgb[team - 1]!
+          : team === 1
+            ? rgbA
+            : rgbB;
+      data[offset] = rgb[0]!;
+      data[offset + 1] = rgb[1]!;
+      data[offset + 2] = rgb[2]!;
+      data[offset + 3] = 255;
+    };
     cells.fill(0);
     revision.current = 0;
     ctx.clearRect(0, 0, PAINT_GRID_SIZE, PAINT_GRID_SIZE);
@@ -567,9 +641,13 @@ function Field({
         maxY = -1;
       while (displayQueue.length && displayQueue[0]!.at <= performance.now()) {
         const { stroke } = displayQueue.shift()!;
-        const team = stroke.team === "A" ? 1 : 2;
+        const team = stroke.practiceColor
+          ? practiceColorOwner(stroke.practiceColor)
+          : stroke.team === "A"
+            ? 1
+            : 2;
         if (stroke.kind === "slam") {
-          const bleed = bleedSpecialPaint(stroke, image);
+          const bleed = bleedSpecialPaint(stroke, image, colorA, colorB);
           if (bleed) {
             minX = Math.min(minX, bleed.left);
             minY = Math.min(minY, bleed.top);
@@ -579,10 +657,7 @@ function Field({
         }
         rasterizePaintStroke(stroke, (x, y) => {
           const offset = (y * PAINT_GRID_SIZE + x) * 4;
-          image.data[offset] = team === 1 ? 255 : 55;
-          image.data[offset + 1] = team === 1 ? 79 : 217;
-          image.data[offset + 2] = team === 1 ? 139 : 255;
-          image.data[offset + 3] = 255;
+          setPixel(image.data, offset, team);
           minX = Math.min(minX, x);
           minY = Math.min(minY, y);
           maxX = Math.max(maxX, x);
@@ -617,7 +692,11 @@ function Field({
       }
       if (!devMode) revision.current = stroke.revision;
       const flightSeconds = effects.emit(stroke);
-      const team = stroke.team === "A" ? 1 : 2;
+      const team = stroke.practiceColor
+        ? practiceColorOwner(stroke.practiceColor)
+        : stroke.team === "A"
+          ? 1
+          : 2;
       rasterizePaintStroke(stroke, (x, y) => {
         cells[y * PAINT_GRID_SIZE + x] = team;
       });
@@ -658,10 +737,7 @@ function Field({
           const team = cells[i];
           if (!team) continue;
           const offset = i * 4;
-          image.data[offset] = team === 1 ? 255 : 55;
-          image.data[offset + 1] = team === 1 ? 79 : 217;
-          image.data[offset + 2] = team === 1 ? 139 : 255;
-          image.data[offset + 3] = 255;
+          setPixel(image.data, offset, team);
         }
         ctx.putImageData(image, 0, 0);
         revision.current = snapshot.revision;
@@ -685,7 +761,17 @@ function Field({
       removeSnapshot?.();
       window.removeEventListener("dev-paint", devPaint);
     };
-  }, [room, devMode, canvas, texture, devOwnPaint, cells, effects]);
+  }, [
+    room,
+    devMode,
+    canvas,
+    texture,
+    devOwnPaint,
+    cells,
+    effects,
+    colorA,
+    colorB,
+  ]);
   return (
     <group>
       <primitive object={effects.group} />
@@ -763,8 +849,16 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
     const object = group.current;
     if (!player || !object) return;
     const specialActive = player.specialTime >= 0;
+    if (local && specialActive) controls.current.jumpTime = -1;
+    if (local)
+      controls.current.jumpTime = advanceJump(
+        controls.current.jumpTime,
+        Math.min(delta, 0.1),
+      );
+    const jumpTime = local ? controls.current.jumpTime : player.jumpTime;
     const diving =
       !specialActive &&
+      jumpTime < 0 &&
       (local
         ? controls.current.keys.has("ShiftLeft") ||
           controls.current.keys.has("ShiftRight")
@@ -786,7 +880,8 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
           ? DIVE_SPEED
           : DISC_SPEED
         : PLAYER_SPEED;
-      if (!specialActive) {
+      const phase = roomRef.current?.state.phase;
+      if (!specialActive && (phase === "lobby" || phase === "playing")) {
         predicted.current.x += input.x * scale * speed * delta;
         predicted.current.z += input.z * scale * speed * delta;
       } else {
@@ -798,6 +893,7 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
       if (error > 2.5) predicted.current.copy(cameraTarget);
       else predicted.current.lerp(cameraTarget, 1 - Math.exp(-delta * 4));
       object.position.copy(predicted.current);
+      object.position.y = jumpHeight(jumpTime);
       object.rotation.y = toModelRotation(controls.current.yaw);
 
       controls.current.position = {
@@ -810,10 +906,15 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
         cameraTarget.copy(object.position).add(cameraOffset),
         1 - Math.exp(-delta * 8),
       );
-      camera.lookAt(object.position.x, 1.1, object.position.z);
+      camera.lookAt(
+        object.position.x,
+        1.1 + object.position.y,
+        object.position.z,
+      );
     } else {
       cameraTarget.set(player.x, 0, player.z);
       object.position.lerp(cameraTarget, 1 - Math.exp(-delta * 10));
+      object.position.y = jumpHeight(jumpTime);
       object.rotation.y = THREE.MathUtils.lerp(
         object.rotation.y,
         toModelRotation(player.yaw),
