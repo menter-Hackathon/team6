@@ -1,0 +1,203 @@
+import { useEffect, useState } from "react";
+import { GAME_START_COUNTDOWN_SECONDS } from "@gaya/shared";
+
+export type PopupScene = "lobby" | "countdown" | "turn" | "result";
+
+interface ProgressionPopupProps {
+  scene: PopupScene;
+  preview?: boolean;
+  roomCode?: string;
+  players?: { displayName: string; ready: boolean }[];
+  isHost?: boolean;
+  isReady?: boolean;
+  canStart?: boolean;
+  speakerName?: string;
+  turnNumber?: number;
+  turnCount?: number;
+  onReady?: () => void;
+  onStart?: () => void;
+  onClose?: () => void;
+}
+
+export function ProgressionPopup({
+  scene,
+  preview = false,
+  roomCode = "ABCD12",
+  players = [],
+  isHost = false,
+  isReady = false,
+  canStart = false,
+  speakerName = "プレイヤー",
+  turnNumber = 1,
+  turnCount = 4,
+  onReady,
+  onStart,
+  onClose,
+}: ProgressionPopupProps) {
+  const [secondsLeft, setSecondsLeft] = useState(GAME_START_COUNTDOWN_SECONDS);
+  const [countdownRun, setCountdownRun] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const [linkCopyMessage, setLinkCopyMessage] = useState("");
+  useEffect(() => {
+    if (scene !== "countdown") return;
+    setSecondsLeft(GAME_START_COUNTDOWN_SECONDS);
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setSecondsLeft(
+        Math.max(
+          0,
+          GAME_START_COUNTDOWN_SECONDS -
+            Math.floor((Date.now() - startedAt) / 1000),
+        ),
+      );
+    }, 50);
+    return () => window.clearInterval(timer);
+  }, [scene, countdownRun]);
+
+  useEffect(() => {
+    if (!preview || !onClose) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [preview, onClose]);
+
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(roomCode);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  const copyInviteLink = async () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("dev");
+    url.searchParams.set("room", roomCode);
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setLinkCopyMessage("参加リンクをコピーしました");
+    } catch {
+      setLinkCopyMessage(
+        "コピーできませんでした。招待コードを共有してください。",
+      );
+    }
+  };
+  const readyCount = players.filter((player) => player.ready).length;
+
+  return (
+    <div className="progression-backdrop">
+      <section
+        className={`progression-popup${scene === "lobby" ? " progression-popup--lobby" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="progression-title"
+      >
+        {preview && <span className="progression-preview">検証プレビュー</span>}
+        {preview && (
+          <button
+            className="progression-close"
+            onClick={onClose}
+            aria-label="ポップアップを閉じる"
+          >
+            ×
+          </button>
+        )}
+        {scene === "lobby" && (
+          <>
+            <h2 id="progression-title">入室待ち</h2>
+            <div className="progression-code">
+              <div>
+                <span>招待コード</span>
+                <strong>{roomCode}</strong>
+              </div>
+              <button
+                onClick={() => void copyCode()}
+                aria-label="招待コードをコピー"
+              >
+                {copied ? "コピー済み ✓" : "コピー"}
+              </button>
+            </div>
+            {!preview && (
+              <>
+                <button
+                  className="invite-link-button"
+                  onClick={() => void copyInviteLink()}
+                >
+                  参加リンクをコピー
+                </button>
+                {linkCopyMessage && <p role="status">{linkCopyMessage}</p>}
+              </>
+            )}
+            <p className="lobby-ready-count">
+              準備完了{" "}
+              <strong>
+                {readyCount} / {players.length}
+              </strong>
+            </p>
+            <ul className="lobby-names" aria-label="参加中のプレイヤー">
+              {players.map((player, index) => (
+                <li key={index}>{player.displayName}</li>
+              ))}
+            </ul>
+            <div className="progression-actions">
+              <button onClick={onReady}>
+                {isReady ? "準備を取り消す" : "準備OKにする"}
+              </button>
+              {isHost && (
+                <button
+                  className="progression-primary"
+                  disabled={!canStart}
+                  title={
+                    !canStart
+                      ? "4・6・8人で全員が準備すると開始できます"
+                      : undefined
+                  }
+                  onClick={onStart}
+                >
+                  試合開始
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        {scene === "countdown" && (
+          <>
+            <p className="progression-kicker">GAME START</p>
+            <h2 id="progression-title">まもなく試合開始！</h2>
+            <div className="progression-countdown" aria-live="off">
+              <span
+                key={`${countdownRun}-${secondsLeft}`}
+                className="progression-countdown-number"
+              >
+                {secondsLeft === 0 ? "GO!" : secondsLeft}
+              </span>
+            </div>
+            <p>発表者の話にガヤを入れて、チームの色でフィールドを塗ろう。</p>
+            {preview && (
+              <button
+                className="progression-replay"
+                onClick={() => setCountdownRun((run) => run + 1)}
+              >
+                もう一度見る
+              </button>
+            )}
+          </>
+        )}
+        {scene === "turn" && (
+          <>
+            <p className="progression-kicker">
+              PRESENTATION / {turnNumber} OF {turnCount}
+            </p>
+            <h2 id="progression-title">{speakerName}さんの発表</h2>
+            <div className="progression-symbol">
+              30<span>秒</span>
+            </div>
+            <p>発表者は話そう！ ほかのみんなはガヤで盛り上げよう。</p>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}

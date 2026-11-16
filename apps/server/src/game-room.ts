@@ -2,6 +2,8 @@ import { Client, Room } from "@colyseus/core";
 import { randomBytes } from "node:crypto";
 import {
   PRESENTATION_SECONDS,
+  GAME_START_COUNTDOWN_SECONDS,
+  TURN_INTRO_MS,
   advanceSpecial,
   specialRequestSchema,
   type SpecialShape,
@@ -55,15 +57,17 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.movementInputs.set(client.sessionId, result.data);
     });
     this.onMessage("paint", (client, payload: unknown) => {
-      if (this.state.phase !== "playing") return;
+      const practice = this.state.phase === "lobby";
+      if (!practice && this.state.phase !== "playing") return;
       const parsed = paintRequestSchema.safeParse(payload);
       const player = this.state.players.get(client.sessionId);
       if (
         !parsed.success ||
         !player ||
+        (practice && !player.ready) ||
         player.dive ||
         player.specialTime >= 0 ||
-        (player.team !== "A" && player.team !== "B")
+        (!practice && player.team !== "A" && player.team !== "B")
       )
         return;
       const now = Date.now();
@@ -78,23 +82,26 @@ export class GameRoom extends Room<{ state: GameState }> {
         x: player.x,
         z: player.z,
         yaw: player.yaw,
-        team: player.team,
+        team: practice || player.team === "A" ? "A" : "B",
         kind: parsed.data.kind,
       };
       this.paint.apply(stroke);
-      this.state.scoreA = this.paint.counts[1]!;
-      this.state.scoreB = this.paint.counts[2]!;
+      if (!practice) {
+        this.state.scoreA = this.paint.counts[1]!;
+        this.state.scoreB = this.paint.counts[2]!;
+      }
       this.broadcast("paint", stroke);
     });
     this.onMessage("special", (client, payload: unknown) => {
       const request = specialRequestSchema.safeParse(payload);
       if (!request.success) return;
-      if (this.state.phase !== "playing") return;
       const player = this.state.players.get(client.sessionId);
+      const practice = this.state.phase === "lobby" && player?.ready;
+      if (!practice && this.state.phase !== "playing") return;
       if (
         !player ||
         player.specialTime >= 0 ||
-        (player.team !== "A" && player.team !== "B")
+        (!practice && player.team !== "A" && player.team !== "B")
       )
         return;
       this.specialShapes.set(client.sessionId, request.data.shape);
@@ -132,6 +139,13 @@ export class GameRoom extends Room<{ state: GameState }> {
           ? shuffled
           : this.alternatingOrder(shuffled);
       this.state.speakerOrder.push(...order.map((player) => player.id));
+      this.paint.reset();
+      this.state.scoreA = 0;
+      this.state.scoreB = 0;
+      this.broadcast("paint-snapshot", {
+        revision: this.paint.revision,
+        data: deflateSync(this.paint.cells).toString("base64"),
+      });
       this.state.phase = "countdown";
       setTimeout(() => {
         if (this.state.phase !== "countdown") return;
@@ -140,7 +154,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         this.turnTimer = setInterval(() => {
           if (Date.now() >= this.state.turnEndsAt) this.advanceTurn();
         }, 250);
-      }, 3000);
+      }, GAME_START_COUNTDOWN_SECONDS * 1000);
     });
   }
 
@@ -206,38 +220,44 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (this.turnTimer) clearInterval(this.turnTimer);
       return;
     }
-    this.state.turnEndsAt = Date.now() + PRESENTATION_SECONDS * 1000;
+    this.state.turnEndsAt =
+      Date.now() + TURN_INTRO_MS + PRESENTATION_SECONDS * 1000;
     this.state.turnIndex += 1;
   }
 
   private update(deltaSeconds: number): void {
     this.state.players.forEach((player: PlayerState, sessionId: string) => {
       const input = this.movementInputs.get(sessionId) ?? IDLE_INPUT;
-      const team = player.team === "A" ? 1 : player.team === "B" ? 2 : -1;
+      const practice = this.state.phase === "lobby" && player.ready;
+      const team =
+        practice || player.team === "A" ? 1 : player.team === "B" ? 2 : -1;
       const dt = Math.min(Math.max(deltaSeconds, 0), 0.1);
       if (player.specialTime >= 0) {
         const special = advanceSpecial(player.specialTime, dt);
-        player.specialTime = this.state.phase === "playing" ? special.time : -1;
+        player.specialTime =
+          this.state.phase === "playing" || practice ? special.time : -1;
         player.dive = false;
         player.submerged = false;
         player.lastProcessedInput = input.sequence;
         if (
           special.landed &&
-          this.state.phase === "playing" &&
-          (player.team === "A" || player.team === "B")
+          (this.state.phase === "playing" || practice) &&
+          (practice || player.team === "A" || player.team === "B")
         ) {
           const stroke: PaintStroke = {
             revision: this.paint.revision + 1,
             x: player.x,
             z: player.z,
             yaw: player.yaw,
-            team: player.team,
+            team: practice || player.team === "A" ? "A" : "B",
             kind: "slam",
             specialShape: this.specialShapes.get(sessionId) ?? "star",
           };
           this.paint.apply(stroke);
-          this.state.scoreA = this.paint.counts[1]!;
-          this.state.scoreB = this.paint.counts[2]!;
+          if (!practice) {
+            this.state.scoreA = this.paint.counts[1]!;
+            this.state.scoreB = this.paint.counts[2]!;
+          }
           this.broadcast("paint", stroke);
         }
         return;
@@ -278,8 +298,8 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (
         !input.dive &&
         distance > 0.001 &&
-        this.state.phase === "playing" &&
-        (player.team === "A" || player.team === "B")
+        (this.state.phase === "playing" || practice) &&
+        (practice || player.team === "A" || player.team === "B")
       ) {
         const footprint: PaintStroke = {
           revision: this.paint.revision + 1,
@@ -288,12 +308,14 @@ export class GameRoom extends Room<{ state: GameState }> {
           x: next.x,
           z: next.z,
           yaw: input.yaw,
-          team: player.team,
+          team: practice || player.team === "A" ? "A" : "B",
           kind: "footprint",
         };
         this.paint.apply(footprint);
-        this.state.scoreA = this.paint.counts[1]!;
-        this.state.scoreB = this.paint.counts[2]!;
+        if (!practice) {
+          this.state.scoreA = this.paint.counts[1]!;
+          this.state.scoreB = this.paint.counts[2]!;
+        }
         this.broadcast("paint", footprint);
       }
       player.yaw = input.yaw;

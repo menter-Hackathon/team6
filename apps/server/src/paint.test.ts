@@ -25,6 +25,14 @@ describe("PaintField", () => {
     expect(field.counts[2]).toBeGreaterThan(0);
     expect(field.revision).toBe(2);
   });
+  it("clears practice paint before a match without rewinding revisions", () => {
+    const field = new PaintField();
+    field.apply({ revision: 1, x: 0, z: 0, yaw: 0, team: "A", kind: "ring" });
+    field.reset();
+    expect(field.ownerAt(0, 0)).toBe(0);
+    expect(field.counts).toEqual([PAINT_GRID_SIZE ** 2, 0, 0]);
+    expect(field.revision).toBe(2);
+  });
   it("fills the arrow shaft and head", () => {
     const field = new PaintField();
     field.apply({ revision: 1, x: 0, z: 0, yaw: 0, team: "A", kind: "line" });
