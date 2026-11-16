@@ -4,10 +4,15 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import {
   GAME_ROOM_NAME,
   STARTABLE_PLAYER_COUNTS,
+  TURN_INTRO_MS,
   type SpecialShape,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
 import { GameScene } from "./game-scene";
+import { ProgressionPopup, type PopupScene } from "./progression-popup";
+import { TurnFlow } from "./turn-flow";
+import { ResultFlow } from "./result-flow";
+import { RoomSummary } from "./room-summary";
 
 type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
 
@@ -34,6 +39,8 @@ export function App() {
   const [turnOrder, setTurnOrder] = useState("alternating");
   const [roomCode, setRoomCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [previewPopup, setPreviewPopup] = useState<PopupScene | null>(null);
+  const [previewReady, setPreviewReady] = useState(false);
 
   const connect = async (create: boolean) => {
     if (!SERVER_URL) {
@@ -101,6 +108,17 @@ export function App() {
     else url.searchParams.delete("dev");
     history.replaceState(null, "", url);
     setDevMode(next);
+    setPreviewPopup(null);
+    setPreviewReady(false);
+  };
+
+  const leaveRoom = () => {
+    if (roomRef.current) void roomRef.current.leave();
+    roomRef.current = null;
+    setGameState(null);
+    setPlayerIds([]);
+    setRoomCode("");
+    setConnectionState("disconnected");
   };
 
   const players = gameState ? Array.from(gameState.players.values()) : [];
@@ -174,21 +192,15 @@ export function App() {
           </button>
           {errorMessage && <p role="alert">{errorMessage}</p>}
         </section>
-      ) : !devMode ? (
+      ) : !devMode &&
+        gameState?.phase !== "lobby" &&
+        gameState?.phase !== "countdown" ? (
         <section className="lobby-panel">
           <strong>招待コード: {roomCode}</strong>
-          {gameState?.phase === "lobby" && (
-            <p>待機中は移動できます。塗りは試合開始後に使えます。</p>
-          )}
-          <p>
-            陣地 A: {gameState?.scoreA ?? 0} · B: {gameState?.scoreB ?? 0}
-          </p>
-          {gameState?.phase === "result" && (
-            <strong>
-              {gameState.scoreA === gameState.scoreB
-                ? "引き分け"
-                : `${gameState.scoreA > gameState.scoreB ? "A" : "B"} チームの勝ち`}
-            </strong>
+          {gameState?.phase !== "result" && (
+            <p>
+              陣地 A: {gameState?.scoreA ?? 0} · B: {gameState?.scoreB ?? 0}
+            </p>
           )}
           <p>
             進行: {gameState?.phase}{" "}
@@ -204,25 +216,8 @@ export function App() {
               </li>
             ))}
           </ul>
-          {gameState?.phase === "lobby" && (
-            <>
-              <button
-                onClick={() =>
-                  roomRef.current?.send("ready", !localPlayer?.ready)
-                }
-              >
-                {localPlayer?.ready ? "準備を取り消す" : "準備完了"}
-              </button>
-              <button
-                disabled={!canStart}
-                onClick={() => roomRef.current?.send("start")}
-              >
-                試合開始
-              </button>
-            </>
-          )}
         </section>
-      ) : (
+      ) : devMode ? (
         <section className="lobby-panel">
           <h2>開発者用 検証モード</h2>
           <p>サーバーに接続せず、移動・カメラ・塗りを確認できます。</p>
@@ -232,8 +227,31 @@ export function App() {
             で塗り分け、フィールドをクリックして視点回転、Esc で解除。
           </p>
           <p>座標と向きは左下に表示します。</p>
+          <h3>進行ポップアップを確認</h3>
+          <div className="popup-preview-buttons">
+            {(["lobby", "countdown", "turn", "result"] as const).map(
+              (scene) => (
+                <button
+                  key={scene}
+                  onClick={() => {
+                    setPreviewPopup(scene);
+                    setPreviewReady(false);
+                  }}
+                >
+                  {
+                    {
+                      lobby: "入室待ち",
+                      countdown: "ゲーム開始",
+                      turn: "発表ターン",
+                      result: "試合結果",
+                    }[scene]
+                  }
+                </button>
+              ),
+            )}
+          </div>
         </section>
-      )}
+      ) : null}
 
       <section
         className="viewport"
@@ -297,6 +315,123 @@ export function App() {
             <kbd>Esc</kbd> マウス解除
           </span>
         </aside>
+        {devMode && previewPopup === "turn" && (
+          <TurnFlow
+            key="preview-turn"
+            speakerName="あなた"
+            isYourTurn
+            turnNumber={1}
+            turnCount={4}
+            endsAt={Date.now() + TURN_INTRO_MS + 30_000}
+            preview
+            onClose={() => setPreviewPopup(null)}
+          />
+        )}
+        {devMode && previewPopup === "result" && (
+          <ResultFlow
+            scoreA={1240}
+            scoreB={980}
+            preview
+            onClose={() => setPreviewPopup(null)}
+          />
+        )}
+        {devMode &&
+          previewPopup &&
+          previewPopup !== "turn" &&
+          previewPopup !== "result" &&
+          !(previewPopup === "lobby" && previewReady) && (
+            <ProgressionPopup
+              scene={previewPopup}
+              preview
+              players={[
+                { displayName: "あなた", ready: true },
+                { displayName: "メンターA", ready: true },
+                { displayName: "メンターB", ready: false },
+                { displayName: "メンターC", ready: true },
+              ]}
+              isHost
+              isReady
+              speakerName="メンターA"
+              onClose={() => setPreviewPopup(null)}
+              onReady={() => setPreviewReady(true)}
+              onStart={() => setPreviewPopup("countdown")}
+            />
+          )}
+        {devMode && previewPopup === "lobby" && previewReady && (
+          <RoomSummary
+            roomCode="ABCD12"
+            names={["あなた", "メンターA", "メンターB", "メンターC"]}
+            canStart
+            onStart={() => setPreviewPopup("countdown")}
+            onClose={() => setPreviewPopup(null)}
+          />
+        )}
+        {!devMode &&
+          connectionState === "connected" &&
+          gameState?.phase === "lobby" &&
+          !localPlayer?.ready && (
+            <ProgressionPopup
+              scene="lobby"
+              roomCode={roomCode}
+              players={players}
+              isHost={gameState.hostId === roomRef.current?.sessionId}
+              isReady={localPlayer?.ready ?? false}
+              canStart={canStart}
+              onReady={() =>
+                roomRef.current?.send("ready", !localPlayer?.ready)
+              }
+              onStart={() => roomRef.current?.send("start")}
+            />
+          )}
+        {!devMode &&
+          connectionState === "connected" &&
+          gameState?.phase === "lobby" &&
+          localPlayer?.ready && (
+            <RoomSummary
+              roomCode={roomCode}
+              names={players.map((player) => player.displayName)}
+              canStart={canStart}
+              {...(gameState.hostId === roomRef.current?.sessionId
+                ? { onStart: () => roomRef.current?.send("start") }
+                : {})}
+            />
+          )}
+        {!devMode &&
+          connectionState === "connected" &&
+          gameState?.phase === "countdown" && (
+            <ProgressionPopup scene="countdown" />
+          )}
+        {!devMode &&
+          connectionState === "connected" &&
+          gameState?.phase === "playing" &&
+          gameState.turnIndex > 0 &&
+          gameState.turnEndsAt > 0 && (
+            <TurnFlow
+              key={`turn-${gameState.turnIndex}`}
+              speakerName={
+                gameState.players.get(
+                  gameState.speakerOrder[gameState.turnIndex - 1] ?? "",
+                )?.displayName ?? "プレイヤー"
+              }
+              isYourTurn={
+                gameState.speakerOrder[gameState.turnIndex - 1] ===
+                roomRef.current?.sessionId
+              }
+              turnNumber={gameState.turnIndex}
+              turnCount={gameState.speakerOrder.length}
+              endsAt={gameState.turnEndsAt}
+            />
+          )}
+        {!devMode &&
+          connectionState === "connected" &&
+          gameState?.phase === "result" && (
+            <ResultFlow
+              scoreA={gameState.scoreA}
+              scoreB={gameState.scoreB}
+              {...(roomRef.current ? { room: roomRef.current } : {})}
+              onClose={leaveRoom}
+            />
+          )}
       </section>
     </main>
   );

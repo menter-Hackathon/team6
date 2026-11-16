@@ -11,6 +11,12 @@ export class PaintField {
   revision = 0;
   counts = [PAINT_GRID_SIZE * PAINT_GRID_SIZE, 0, 0];
 
+  reset(): void {
+    this.cells.fill(0);
+    this.counts = [this.cells.length, 0, 0];
+    this.revision++;
+  }
+
   ownerAt(x: number, z: number): number {
     const n = PAINT_GRID_SIZE;
     const gx = Math.floor(((x + FIELD_HALF_SIZE) * n) / (FIELD_HALF_SIZE * 2));

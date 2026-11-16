@@ -26,8 +26,11 @@ export function toWorldDirection(
   right: number,
   yaw: number,
 ): WorldDirection {
+  const x = -right * Math.cos(yaw) - forward * Math.sin(yaw);
+  const z = -right * Math.sin(yaw) + forward * Math.cos(yaw);
+  const scale = Math.max(1, Math.hypot(x, z));
   return {
-    x: -right * Math.cos(yaw) - forward * Math.sin(yaw),
-    z: -right * Math.sin(yaw) + forward * Math.cos(yaw),
+    x: Math.max(-1, Math.min(1, x / scale)),
+    z: Math.max(-1, Math.min(1, z / scale)),
   };
 }
