@@ -457,6 +457,99 @@ kbd {
   width: 100%;
   margin-top: 10px;
 }
+.team-color-picker {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid #526078;
+  border-radius: 10px;
+  background: #202b3b;
+}
+.team-color-picker h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.team-color-picker p {
+  margin: 3px 0 10px;
+  color: #b5c0d2;
+  font-size: 11px;
+}
+.team-color-row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+}
+.team-color-row strong {
+  font-size: 11px;
+}
+.team-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.team-color-swatches button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid #ffffff55;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.team-color-swatches button.selected {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+.team-color-swatches button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+.team-color-swatches button.selected:disabled {
+  opacity: 1;
+}
+.room-summary-ready {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid #8ba2b6;
+  border-radius: 8px;
+  background: #30445b;
+  color: white;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.room-summary-ready-count {
+  flex: none;
+  color: #c8d7e7;
+  font-size: 11px;
+  font-weight: 600;
+}
+.team-selection-roster {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+.team-selection-roster > div {
+  padding: 10px;
+  border: 1px solid #526078;
+  border-radius: 9px;
+}
+.team-selection-roster ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.team-selection-roster li {
+  margin-top: 4px;
+}
 .progression-popup--lobby .lobby-ready-count {
   display: flex;
   justify-content: space-between;
@@ -513,7 +606,7 @@ kbd {
   z-index: 8;
   top: 16px;
   left: 16px;
-  width: min(250px, calc(100vw - 32px));
+  width: min(290px, calc(100vw - 32px));
   padding: 14px 16px;
   border: 1px solid #62718b;
   border-radius: 12px;

@@ -14,9 +14,14 @@ import {
   paintRequestSchema,
   type PaintStroke,
   INK_SHOT_INTERVAL,
+  INK_SHOT_SERVER_TOLERANCE,
   updateDiveState,
   type DiveState,
   roomOptionsSchema,
+  teamColorRequestSchema,
+  practiceColorSchema,
+  practiceColorOwner,
+  advanceJump,
   type MoveInput,
 } from "@gaya/shared";
 import { GameState, PlayerState } from "./game-state.js";
@@ -64,7 +69,6 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (
         !parsed.success ||
         !player ||
-        (practice && !player.ready) ||
         player.dive ||
         player.specialTime >= 0 ||
         (!practice && player.team !== "A" && player.team !== "B")
@@ -73,7 +77,9 @@ export class GameRoom extends Room<{ state: GameState }> {
       const now = Date.now();
       if (
         now - (this.lastPaint.get(client.sessionId) ?? 0) <
-        (parsed.data.kind === "ink" ? INK_SHOT_INTERVAL * 1000 : 500)
+        (parsed.data.kind === "ink"
+          ? (INK_SHOT_INTERVAL - INK_SHOT_SERVER_TOLERANCE) * 1000
+          : 500)
       )
         return;
       this.lastPaint.set(client.sessionId, now);
@@ -82,7 +88,8 @@ export class GameRoom extends Room<{ state: GameState }> {
         x: player.x,
         z: player.z,
         yaw: player.yaw,
-        team: practice || player.team === "A" ? "A" : "B",
+        team: player.team === "B" ? "B" : "A",
+        ...(practice ? { practiceColor: player.practiceColor } : {}),
         kind: parsed.data.kind,
       };
       this.paint.apply(stroke);
@@ -96,7 +103,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       const request = specialRequestSchema.safeParse(payload);
       if (!request.success) return;
       const player = this.state.players.get(client.sessionId);
-      const practice = this.state.phase === "lobby" && player?.ready;
+      const practice = this.state.phase === "lobby";
       if (!practice && this.state.phase !== "playing") return;
       if (
         !player ||
@@ -106,6 +113,17 @@ export class GameRoom extends Room<{ state: GameState }> {
         return;
       this.specialShapes.set(client.sessionId, request.data.shape);
       player.specialTime = 0;
+      player.jumpTime = -1;
+      player.dive = false;
+      player.submerged = false;
+      this.dives.delete(client.sessionId);
+    });
+    this.onMessage("jump", (client) => {
+      if (this.state.phase !== "lobby" && this.state.phase !== "playing")
+        return;
+      const player = this.state.players.get(client.sessionId);
+      if (!player || player.jumpTime >= 0 || player.specialTime >= 0) return;
+      player.jumpTime = 0;
       player.dive = false;
       player.submerged = false;
       this.dives.delete(client.sessionId);
@@ -118,7 +136,28 @@ export class GameRoom extends Room<{ state: GameState }> {
       const player = this.state.players.get(client.sessionId);
       if (player) player.ready = payload;
     });
-    this.onMessage("start", (client) => {
+    this.onMessage("team-color", (client, payload: unknown) => {
+      if (
+        this.state.phase !== "team_selection" ||
+        client.sessionId !== this.state.hostId
+      )
+        return;
+      const parsed = teamColorRequestSchema.safeParse(payload);
+      if (!parsed.success) return;
+      const { team, color } = parsed.data;
+      if (color === (team === "A" ? this.state.colorB : this.state.colorA))
+        return;
+      if (team === "A") this.state.colorA = color;
+      else this.state.colorB = color;
+    });
+    this.onMessage("practice-color", (client, payload: unknown) => {
+      if (this.state.phase !== "lobby") return;
+      const parsed = practiceColorSchema.safeParse(payload);
+      if (!parsed.success) return;
+      const player = this.state.players.get(client.sessionId);
+      if (player) player.practiceColor = parsed.data;
+    });
+    this.onMessage("prepare-teams", (client) => {
       if (
         client.sessionId !== this.state.hostId ||
         this.state.phase !== "lobby"
@@ -133,12 +172,28 @@ export class GameRoom extends Room<{ state: GameState }> {
       const shuffled = [...players].sort(() => Math.random() - 0.5);
       shuffled.forEach((player, index) => {
         player.team = index < shuffled.length / 2 ? "A" : "B";
+        player.specialTime = -1;
+        player.jumpTime = -1;
+        player.dive = false;
+        player.submerged = false;
+      });
+      this.dives.clear();
+      this.movementInputs.forEach((_, sessionId) => {
+        this.movementInputs.set(sessionId, { ...IDLE_INPUT });
       });
       const order =
         this.state.turnOrder === "random"
           ? shuffled
           : this.alternatingOrder(shuffled);
       this.state.speakerOrder.push(...order.map((player) => player.id));
+      this.state.phase = "team_selection";
+    });
+    this.onMessage("start", (client) => {
+      if (
+        client.sessionId !== this.state.hostId ||
+        this.state.phase !== "team_selection"
+      )
+        return;
       this.paint.reset();
       this.state.scoreA = 0;
       this.state.scoreB = 0;
@@ -179,6 +234,14 @@ export class GameRoom extends Room<{ state: GameState }> {
     this.dives.delete(client.sessionId);
     this.specialShapes.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
+    if (this.state.phase === "team_selection") {
+      this.state.phase = "lobby";
+      this.state.speakerOrder.clear();
+      this.state.players.forEach((player) => {
+        player.team = "";
+        player.ready = false;
+      });
+    }
     if (this.state.phase === "lobby") {
       this.state.players.forEach((player) => {
         player.ready = false;
@@ -226,12 +289,20 @@ export class GameRoom extends Room<{ state: GameState }> {
   }
 
   private update(deltaSeconds: number): void {
+    if (this.state.phase !== "lobby" && this.state.phase !== "playing") return;
     this.state.players.forEach((player: PlayerState, sessionId: string) => {
       const input = this.movementInputs.get(sessionId) ?? IDLE_INPUT;
-      const practice = this.state.phase === "lobby" && player.ready;
-      const team =
-        practice || player.team === "A" ? 1 : player.team === "B" ? 2 : -1;
+      const practice = this.state.phase === "lobby";
+      const team = practice
+        ? practiceColorOwner(player.practiceColor)
+        : player.team === "A"
+          ? 1
+          : player.team === "B"
+            ? 2
+            : -1;
       const dt = Math.min(Math.max(deltaSeconds, 0), 0.1);
+      player.jumpTime = advanceJump(player.jumpTime, dt);
+      const diveRequested = input.dive && player.jumpTime < 0;
       if (player.specialTime >= 0) {
         const special = advanceSpecial(player.specialTime, dt);
         player.specialTime =
@@ -249,7 +320,8 @@ export class GameRoom extends Room<{ state: GameState }> {
             x: player.x,
             z: player.z,
             yaw: player.yaw,
-            team: practice || player.team === "A" ? "A" : "B",
+            team: player.team === "B" ? "B" : "A",
+            ...(practice ? { practiceColor: player.practiceColor } : {}),
             kind: "slam",
             specialShape: this.specialShapes.get(sessionId) ?? "star",
           };
@@ -269,7 +341,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       };
       const before = updateDiveState(
         previous,
-        input.dive,
+        diveRequested,
         this.paint.fullyOwnedAt(player.x, player.z, team),
         0,
         team,
@@ -278,17 +350,17 @@ export class GameRoom extends Room<{ state: GameState }> {
         player,
         input,
         dt,
-        movementSpeed(input.dive, before.submerged),
+        movementSpeed(diveRequested, before.submerged),
       );
       const after = updateDiveState(
         before,
-        input.dive,
+        diveRequested,
         this.paint.fullyOwnedAt(next.x, next.z, team),
         dt,
         team,
       );
       this.dives.set(sessionId, after);
-      player.dive = input.dive;
+      player.dive = diveRequested;
       player.submerged = after.submerged;
       const distance = Math.hypot(next.x - player.x, next.z - player.z);
       const fromX = player.x,
@@ -296,7 +368,8 @@ export class GameRoom extends Room<{ state: GameState }> {
       player.x = next.x;
       player.z = next.z;
       if (
-        !input.dive &&
+        !diveRequested &&
+        player.jumpTime < 0 &&
         distance > 0.001 &&
         (this.state.phase === "playing" || practice) &&
         (practice || player.team === "A" || player.team === "B")
@@ -308,7 +381,8 @@ export class GameRoom extends Room<{ state: GameState }> {
           x: next.x,
           z: next.z,
           yaw: input.yaw,
-          team: practice || player.team === "A" ? "A" : "B",
+          team: player.team === "B" ? "B" : "A",
+          ...(practice ? { practiceColor: player.practiceColor } : {}),
           kind: "footprint",
         };
         this.paint.apply(footprint);

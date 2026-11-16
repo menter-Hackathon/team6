@@ -13,6 +13,7 @@ import { ProgressionPopup, type PopupScene } from "./progression-popup";
 import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
+import { TeamSelection } from "./team-selection";
 
 type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
 
@@ -213,7 +214,8 @@ export function App() {
         </section>
       ) : !devMode &&
         gameState?.phase !== "lobby" &&
-        gameState?.phase !== "countdown" ? (
+        gameState?.phase !== "countdown" &&
+        gameState?.phase !== "team_selection" ? (
         <section className="lobby-panel">
           <strong>招待コード: {roomCode}</strong>
           {gameState?.phase !== "result" && (
@@ -242,7 +244,7 @@ export function App() {
           <p>サーバーに接続せず、移動・カメラ・塗りを確認できます。</p>
           <p>
             WASD・矢印キーで移動、クリック長押しでインク発射、Shift
-            で潜航、Q・E・Space
+            で潜航、Space でジャンプ、Q・E
             で塗り分け、フィールドをクリックして視点回転、Esc で解除。
           </p>
           <p>座標と向きは左下に表示します。</p>
@@ -287,6 +289,8 @@ export function App() {
               playerIds={devMode ? [] : playerIds}
               devMode={devMode}
               specialShape={specialShape}
+              colorA={gameState?.colorA}
+              colorB={gameState?.colorB}
             />
           </Suspense>
         </Canvas>
@@ -328,7 +332,7 @@ export function App() {
           </span>
           <span>クリック → マウスで視点回転 / 長押しでインク連射</span>
           <span>Shift: 自チームのインクに潜航（速度1.5倍）</span>
-          <span>Q: リング / E: 直線 / Space: 扇形で塗る</span>
+          <span>Space: ジャンプ / Q: リング / E: 直線で塗る</span>
           <span>F: 回転ジャンプ → 着地で広範囲を塗る</span>
           <span>
             <kbd>Esc</kbd> マウス解除
@@ -387,32 +391,37 @@ export function App() {
         )}
         {!devMode &&
           connectionState === "connected" &&
-          gameState?.phase === "lobby" &&
-          !localPlayer?.ready && (
-            <ProgressionPopup
-              scene="lobby"
-              roomCode={roomCode}
-              players={players}
-              isHost={gameState.hostId === roomRef.current?.sessionId}
-              isReady={localPlayer?.ready ?? false}
-              canStart={canStart}
-              onReady={() =>
-                roomRef.current?.send("ready", !localPlayer?.ready)
-              }
-              onStart={() => roomRef.current?.send("start")}
-            />
-          )}
-        {!devMode &&
-          connectionState === "connected" &&
-          gameState?.phase === "lobby" &&
-          localPlayer?.ready && (
+          gameState?.phase === "lobby" && (
             <RoomSummary
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
               canStart={canStart}
+              practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
+              onPracticeColorSelect={(color) =>
+                roomRef.current?.send("practice-color", color)
+              }
+              ready={localPlayer?.ready ?? false}
+              readyCount={players.filter((player) => player.ready).length}
+              onReady={() =>
+                roomRef.current?.send("ready", !localPlayer?.ready)
+              }
               {...(gameState.hostId === roomRef.current?.sessionId
-                ? { onStart: () => roomRef.current?.send("start") }
+                ? { onStart: () => roomRef.current?.send("prepare-teams") }
                 : {})}
+            />
+          )}
+        {!devMode &&
+          connectionState === "connected" &&
+          gameState?.phase === "team_selection" && (
+            <TeamSelection
+              players={players}
+              colorA={gameState.colorA}
+              colorB={gameState.colorB}
+              isHost={gameState.hostId === roomRef.current?.sessionId}
+              onColorSelect={(team, color) =>
+                roomRef.current?.send("team-color", { team, color })
+              }
+              onStart={() => roomRef.current?.send("start")}
             />
           )}
         {!devMode &&
@@ -447,6 +456,8 @@ export function App() {
             <ResultFlow
               scoreA={gameState.scoreA}
               scoreB={gameState.scoreB}
+              colorA={gameState.colorA}
+              colorB={gameState.colorB}
               {...(roomRef.current ? { room: roomRef.current } : {})}
               onClose={leaveRoom}
             />

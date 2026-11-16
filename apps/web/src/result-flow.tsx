@@ -6,6 +6,8 @@ import { PaintOverview } from "./paint-overview";
 interface ResultFlowProps {
   scoreA: number;
   scoreB: number;
+  colorA?: string;
+  colorB?: string;
   preview?: boolean;
   room?: Room<GameState>;
   onClose?: () => void;
@@ -14,6 +16,8 @@ interface ResultFlowProps {
 export function ResultFlow({
   scoreA,
   scoreB,
+  colorA = "#ff4f8b",
+  colorB = "#37d9ff",
   preview = false,
   room,
   onClose,
@@ -64,14 +68,16 @@ export function ResultFlow({
           </h1>
           <div
             className={`progression-result-meter${revealed ? " progression-result-meter--revealed" : ""}`}
+            style={{ backgroundColor: colorB }}
             aria-hidden="true"
           >
             <div
               key={run}
               className="progression-result-meter-fill"
-              style={
-                revealed ? { width: `${painted ? percentA : 50}%` } : undefined
-              }
+              style={{
+                backgroundColor: colorA,
+                ...(revealed ? { width: `${painted ? percentA : 50}%` } : {}),
+              }}
             />
           </div>
           <div className="progression-result-labels">
@@ -81,12 +87,18 @@ export function ResultFlow({
           <div className="result-screen-scores" aria-hidden={!revealed}>
             {revealed && (
               <>
-                <strong>{percentA}%</strong>
-                <strong>{percentB}%</strong>
+                <strong style={{ color: colorA }}>{percentA}%</strong>
+                <strong style={{ color: colorB }}>{percentB}%</strong>
               </>
             )}
           </div>
-          <PaintOverview room={room} preview={preview} revealed={revealed} />
+          <PaintOverview
+            room={room}
+            preview={preview}
+            revealed={revealed}
+            colorA={colorA}
+            colorB={colorB}
+          />
           {preview ? (
             <div className="result-screen-actions">
               <button onClick={() => setRun((value) => value + 1)}>

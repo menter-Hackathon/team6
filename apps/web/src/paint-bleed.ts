@@ -10,6 +10,8 @@ import {
 export function bleedSpecialPaint(
   stroke: PaintStroke,
   image: ImageData,
+  colorA = "#ff4f8b",
+  colorB = "#37d9ff",
 ): { left: number; top: number; right: number; bottom: number } | undefined {
   const disk = paintDisks(stroke)[0];
   if (!disk?.outlineShape) return;
@@ -45,7 +47,8 @@ export function bleedSpecialPaint(
   canvas.height = bottom - top + 1;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return;
-  ctx.fillStyle = ctx.strokeStyle = stroke.team === "A" ? "#ff4f8b" : "#37d9ff";
+  ctx.fillStyle = ctx.strokeStyle =
+    stroke.practiceColor ?? (stroke.team === "A" ? colorA : colorB);
   ctx.beginPath();
   points.forEach((p, i) =>
     i ? ctx.lineTo(p.x - left, p.y - top) : ctx.moveTo(p.x - left, p.y - top),

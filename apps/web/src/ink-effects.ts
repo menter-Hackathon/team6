@@ -5,6 +5,8 @@ import {
   type SpecialShape,
   INK_SCALE,
   INK_SPLAT_SCALE,
+  NEON_COLORS,
+  practiceColorOwner,
   paintDisks,
   type PaintDisk,
   type PaintStroke,
@@ -63,7 +65,11 @@ export class InkEffects {
     heart: this.outlineGeometry("heart"),
   };
   private readonly circle = new THREE.CircleGeometry(1, 40);
-  private readonly materials = ["#ff4f8b", "#37d9ff"].map(
+  private readonly materials = [
+    "#ff4f8b",
+    "#37d9ff",
+    ...NEON_COLORS.map((entry) => entry.hex),
+  ].map(
     (color) =>
       new THREE.MeshStandardMaterial({
         color,
@@ -71,6 +77,10 @@ export class InkEffects {
         metalness: 0.04,
       }),
   );
+  setColors(colorA: string, colorB: string): void {
+    this.materials[0]!.color.set(colorA);
+    this.materials[1]!.color.set(colorB);
+  }
   private drops: Drop[] = [];
   private spreads: Spread[] = [];
   private readonly direction = new THREE.Vector3();
@@ -102,7 +112,11 @@ export class InkEffects {
   }
 
   emit(stroke: PaintStroke): number {
-    const team = stroke.team === "A" ? 0 : 1;
+    const team = stroke.practiceColor
+      ? practiceColorOwner(stroke.practiceColor) + 1
+      : stroke.team === "A"
+        ? 0
+        : 1;
     if (stroke.kind !== "ink") {
       this.spread(stroke, team);
       if (stroke.kind === "slam") {
