@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FIELD_HALF_SIZE,
   INK_SCALE,
+  INK_SPLAT_SCALE,
   PLAYER_SIZE,
   PAINT_GRID_SIZE,
   paintDisks,
@@ -23,7 +24,7 @@ describe("INK/PLAY paint geometry", () => {
     expect(paintDisks(stroke)[0]).toEqual({
       x: 0,
       z: 4.5,
-      radius: 0.9 * INK_SCALE,
+      radius: 0.9 * INK_SCALE * INK_SPLAT_SCALE,
       organic: true,
     });
     const turned = paintDisks({ ...stroke, yaw: Math.PI / 2 })[0]!;

@@ -2,6 +2,9 @@ import { Client, Room } from "@colyseus/core";
 import { randomBytes } from "node:crypto";
 import {
   PRESENTATION_SECONDS,
+  advanceSpecial,
+  specialRequestSchema,
+  type SpecialShape,
   SERVER_TICK_RATE,
   STARTABLE_PLAYER_COUNTS,
   joinOptionsSchema,
@@ -26,6 +29,7 @@ export class GameRoom extends Room<{ state: GameState }> {
   private readonly movementInputs = new Map<string, MoveInput>();
   private readonly paint = new PaintField();
   private readonly lastPaint = new Map<string, number>();
+  private readonly specialShapes = new Map<string, SpecialShape>();
   private readonly dives = new Map<string, DiveState>();
   private turnTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -58,6 +62,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         !parsed.success ||
         !player ||
         player.dive ||
+        player.specialTime >= 0 ||
         (player.team !== "A" && player.team !== "B")
       )
         return;
@@ -80,6 +85,23 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.state.scoreA = this.paint.counts[1]!;
       this.state.scoreB = this.paint.counts[2]!;
       this.broadcast("paint", stroke);
+    });
+    this.onMessage("special", (client, payload: unknown) => {
+      const request = specialRequestSchema.safeParse(payload);
+      if (!request.success) return;
+      if (this.state.phase !== "playing") return;
+      const player = this.state.players.get(client.sessionId);
+      if (
+        !player ||
+        player.specialTime >= 0 ||
+        (player.team !== "A" && player.team !== "B")
+      )
+        return;
+      this.specialShapes.set(client.sessionId, request.data.shape);
+      player.specialTime = 0;
+      player.dive = false;
+      player.submerged = false;
+      this.dives.delete(client.sessionId);
     });
     this.onMessage("paint-snapshot", (client) =>
       this.sendPaintSnapshot(client),
@@ -141,6 +163,7 @@ export class GameRoom extends Room<{ state: GameState }> {
     this.movementInputs.delete(client.sessionId);
     this.lastPaint.delete(client.sessionId);
     this.dives.delete(client.sessionId);
+    this.specialShapes.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     if (this.state.phase === "lobby") {
       this.state.players.forEach((player) => {
@@ -192,6 +215,33 @@ export class GameRoom extends Room<{ state: GameState }> {
       const input = this.movementInputs.get(sessionId) ?? IDLE_INPUT;
       const team = player.team === "A" ? 1 : player.team === "B" ? 2 : -1;
       const dt = Math.min(Math.max(deltaSeconds, 0), 0.1);
+      if (player.specialTime >= 0) {
+        const special = advanceSpecial(player.specialTime, dt);
+        player.specialTime = this.state.phase === "playing" ? special.time : -1;
+        player.dive = false;
+        player.submerged = false;
+        player.lastProcessedInput = input.sequence;
+        if (
+          special.landed &&
+          this.state.phase === "playing" &&
+          (player.team === "A" || player.team === "B")
+        ) {
+          const stroke: PaintStroke = {
+            revision: this.paint.revision + 1,
+            x: player.x,
+            z: player.z,
+            yaw: player.yaw,
+            team: player.team,
+            kind: "slam",
+            specialShape: this.specialShapes.get(sessionId) ?? "star",
+          };
+          this.paint.apply(stroke);
+          this.state.scoreA = this.paint.counts[1]!;
+          this.state.scoreB = this.paint.counts[2]!;
+          this.broadcast("paint", stroke);
+        }
+        return;
+      }
       const previous = this.dives.get(sessionId) ?? {
         submerged: false,
         gapSeconds: 0,

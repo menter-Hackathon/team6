@@ -1,7 +1,11 @@
 import { Canvas } from "@react-three/fiber";
 import { Client, type Room } from "@colyseus/sdk";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { GAME_ROOM_NAME, STARTABLE_PLAYER_COUNTS } from "@gaya/shared";
+import {
+  GAME_ROOM_NAME,
+  STARTABLE_PLAYER_COUNTS,
+  type SpecialShape,
+} from "@gaya/shared";
 import type { GameState } from "./game-types";
 import { GameScene } from "./game-scene";
 
@@ -16,6 +20,7 @@ const SERVER_URL =
       : "");
 
 export function App() {
+  const [specialShape, setSpecialShape] = useState<SpecialShape>("star");
   const [devMode, setDevMode] = useState(() =>
     new URLSearchParams(location.search).has("dev"),
   );
@@ -244,9 +249,30 @@ export function App() {
               roomRef={roomRef}
               playerIds={devMode ? [] : playerIds}
               devMode={devMode}
+              specialShape={specialShape}
             />
           </Suspense>
         </Canvas>
+        <label className="special-shape-picker">
+          着地のインク
+          <select
+            id="special-shape"
+            aria-label="必殺技の塗り形"
+            value={specialShape}
+            onChange={(e) => setSpecialShape(e.target.value as SpecialShape)}
+          >
+            <option value="ink">● 通常インク</option>
+            <option value="star">★ 星＋インク</option>
+            <option value="heart">♥ ハート＋インク</option>
+          </select>
+        </label>
+        <button
+          id="special-button"
+          className="special-button"
+          onClick={() => window.dispatchEvent(new Event("activate-special"))}
+        >
+          F 必殺技 · インクスラム
+        </button>
         <div className="crosshair" aria-hidden="true" />
         {devMode && (
           <output
@@ -264,8 +290,9 @@ export function App() {
             <kbd>D</kbd> / 矢印キー 移動
           </span>
           <span>クリック → マウスで視点回転 / 長押しでインク連射</span>
-          <span>Shift: 自チームのインクに潜航（速度1.3倍）</span>
+          <span>Shift: 自チームのインクに潜航（速度1.5倍）</span>
           <span>Q: リング / E: 直線 / Space: 扇形で塗る</span>
+          <span>F: 回転ジャンプ → 着地で広範囲を塗る</span>
           <span>
             <kbd>Esc</kbd> マウス解除
           </span>

@@ -5,7 +5,7 @@ export const SERVER_TICK_RATE = 20;
 export const INPUT_SEND_RATE = 30;
 export const FIELD_HALF_SIZE = 12;
 export const PLAYER_SPEED = 5;
-export const DIVE_SPEED = PLAYER_SPEED * 1.3;
+export const DIVE_SPEED = PLAYER_SPEED * 1.5;
 export const DISC_SPEED = PLAYER_SPEED;
 export const DIVE_GAP_SECONDS = 0.28;
 export const INK_SHOT_INTERVAL = 0.17;
@@ -40,17 +40,25 @@ export interface PlayerSnapshot {
 
 export const PAINT_GRID_SIZE = 2048;
 export const INK_SCALE = 1.4;
+export const INK_SPLAT_SCALE = 1.875;
 export const paintKindSchema = z.enum([
   "ring",
   "line",
   "fan",
   "ink",
   "footprint",
+  "slam",
 ]);
 export const paintRequestSchema = z.object({
-  kind: paintKindSchema.exclude(["footprint"]),
+  kind: paintKindSchema.exclude(["footprint", "slam"]),
+});
+export const specialShapeSchema = z.enum(["ink", "star", "heart"]);
+export type SpecialShape = z.infer<typeof specialShapeSchema>;
+export const specialRequestSchema = z.object({
+  shape: specialShapeSchema.default("star"),
 });
 export type PaintStroke = {
+  specialShape?: SpecialShape;
   revision: number;
   /** Server-generated start of a continuous walking segment. */
   fromX?: number;
@@ -71,3 +79,12 @@ export {
   type PaintDisk,
 } from "./paint-raster.js";
 export { updateDiveState, type DiveState } from "./dive.js";
+
+export {
+  SPECIAL_DURATION,
+  SPECIAL_RADIUS,
+  advanceSpecial,
+  specialPose,
+} from "./special.js";
+
+export { specialOutline } from "./special-outline.js";

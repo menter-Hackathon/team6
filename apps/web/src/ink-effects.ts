@@ -1,7 +1,10 @@
 import * as THREE from "three";
 import {
   inkOutlineRadius,
+  specialOutline,
+  type SpecialShape,
   INK_SCALE,
+  INK_SPLAT_SCALE,
   paintDisks,
   type PaintDisk,
   type PaintStroke,
@@ -52,6 +55,13 @@ export class InkEffects {
       }),
     ),
   );
+  private readonly shapes: Record<
+    Exclude<SpecialShape, "ink">,
+    THREE.ShapeGeometry
+  > = {
+    star: this.outlineGeometry("star"),
+    heart: this.outlineGeometry("heart"),
+  };
   private readonly circle = new THREE.CircleGeometry(1, 40);
   private readonly materials = ["#ff4f8b", "#37d9ff"].map(
     (color) =>
@@ -70,6 +80,16 @@ export class InkEffects {
   private readonly normal = new THREE.Vector3();
   private readonly scale = new THREE.Vector3();
 
+  private outlineGeometry(
+    shape: Exclude<SpecialShape, "ink">,
+  ): THREE.ShapeGeometry {
+    return new THREE.ShapeGeometry(
+      new THREE.Shape(
+        specialOutline(shape).map((p) => new THREE.Vector2(p.x, -p.z)),
+      ),
+    );
+  }
+
   constructor() {
     const profile = Array.from({ length: 49 }, (_, i) => {
       const t = i / 48;
@@ -85,6 +105,32 @@ export class InkEffects {
     const team = stroke.team === "A" ? 0 : 1;
     if (stroke.kind !== "ink") {
       this.spread(stroke, team);
+      if (stroke.kind === "slam") {
+        for (
+          let i = 0;
+          i < 20 && this.drops.length < MAX_SECONDARY_DROPS;
+          i++
+        ) {
+          const angle = (i / 20) * Math.PI * 2,
+            speed = 3.5 + Math.random() * 3;
+          const position = new THREE.Vector3(
+            stroke.x + Math.cos(angle) * 0.6,
+            0.09,
+            stroke.z + Math.sin(angle) * 0.6,
+          );
+          const velocity = new THREE.Vector3(
+            Math.cos(angle) * speed,
+            1.4 + Math.random() * 1.6,
+            Math.sin(angle) * speed,
+          );
+          this.addDrop(
+            position,
+            velocity,
+            (0.055 + Math.random() * 0.055) * INK_SCALE,
+            team,
+          );
+        }
+      }
       return 0;
     }
     const impact = paintDisks(stroke)[0]!;
@@ -208,13 +254,17 @@ export class InkEffects {
   private spread(stroke: PaintStroke, team: number): void {
     const disks = paintDisks(stroke);
     const step =
-      stroke.kind === "ink" ? 1 : Math.max(1, Math.ceil(disks.length / 16));
+      stroke.kind === "ink" || stroke.kind === "slam"
+        ? 1
+        : Math.max(1, Math.ceil(disks.length / 16));
     for (let i = 0; i < disks.length; i += step) {
       this.addSpread(
         disks[i]!,
         team,
-        stroke.kind === "ink",
-        stroke.kind === "ink" ? Math.min(i * 0.004, 0.025) : 0,
+        stroke.kind === "ink" || stroke.kind === "slam",
+        stroke.kind === "ink" || stroke.kind === "slam"
+          ? Math.min(i * 0.004, 0.025)
+          : 0,
       );
     }
   }
@@ -227,10 +277,15 @@ export class InkEffects {
   ): void {
     if (this.spreads.length >= 120) return;
     const mesh = new THREE.Mesh(
-      disk.organic ? this.splat : this.circle,
+      disk.outlineShape
+        ? this.shapes[disk.outlineShape]
+        : disk.organic
+          ? this.splat
+          : this.circle,
       this.materials[team]!,
     );
     mesh.rotation.x = -Math.PI / 2;
+    if (disk.outlineShape) mesh.rotation.z = -(disk.rotation ?? 0);
     mesh.position.set(disk.x, 0.027, disk.z);
     mesh.scale.setScalar(0.001);
     this.group.add(mesh);
@@ -254,7 +309,9 @@ export class InkEffects {
         0.06,
         center.z,
       ).addScaledVector(direction, 0.18);
-      const velocity = direction.multiplyScalar(1.8 + Math.random() * 1.5);
+      const velocity = direction.multiplyScalar(
+        (1.8 + Math.random() * 1.5) * INK_SPLAT_SCALE,
+      );
       velocity.y = 0.75 + Math.random() * 0.9;
       this.addDrop(
         position,
@@ -382,6 +439,8 @@ export class InkEffects {
     this.geometry.dispose();
     this.circle.dispose();
     this.splat.dispose();
+    this.shapes.star.dispose();
+    this.shapes.heart.dispose();
     for (const material of this.materials) material.dispose();
   }
 }
