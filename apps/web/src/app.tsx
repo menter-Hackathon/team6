@@ -30,10 +30,28 @@ export function App() {
   const [playerIds, setPlayerIds] = useState<string[]>([]);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [displayName, setDisplayName] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
+  const [inviteCode, setInviteCode] = useState(() =>
+    new URLSearchParams(location.search).get("room")?.trim().toUpperCase() ?? "",
+  );
+  const [fromInviteLink, setFromInviteLink] = useState(() =>
+    new URLSearchParams(location.search).has("room"),
+  );
   const [turnOrder, setTurnOrder] = useState("alternating");
   const [roomCode, setRoomCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
+
+  const copyInviteLink = async () => {
+    const url = new URL(location.href);
+    url.searchParams.delete("dev");
+    url.searchParams.set("room", roomCode);
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setCopyMessage("参加リンクをコピーしました");
+    } catch {
+      setCopyMessage("コピーできませんでした。招待コードを共有してください。");
+    }
+  };
 
   const connect = async (create: boolean) => {
     if (!SERVER_URL) {
@@ -60,6 +78,9 @@ export function App() {
       });
       roomRef.current = joinedRoom;
       setRoomCode(joinedRoom.roomId);
+      const url = new URL(location.href);
+      url.searchParams.delete("room");
+      history.replaceState(null, "", url);
       setConnectionState("connected");
       const syncPlayerIds = (state: GameState) => {
         setPlayerIds(Array.from(state.players.keys()));
@@ -160,8 +181,14 @@ export function App() {
             aria-label="招待コード"
             placeholder="招待コード"
             value={inviteCode}
-            onChange={(event) => setInviteCode(event.target.value)}
+            onChange={(event) => {
+              setInviteCode(event.target.value);
+              setFromInviteLink(false);
+            }}
           />
+          {fromInviteLink && inviteCode && (
+            <p>参加リンクからルーム {inviteCode} を開きました。表示名を入力して参加してください。</p>
+          )}
           <button
             disabled={
               !displayName.trim() ||
@@ -170,13 +197,17 @@ export function App() {
             }
             onClick={() => void connect(false)}
           >
-            コードで参加
+            {fromInviteLink ? "参加リンクから参加" : "コードで参加"}
           </button>
           {errorMessage && <p role="alert">{errorMessage}</p>}
         </section>
       ) : !devMode ? (
         <section className="lobby-panel">
           <strong>招待コード: {roomCode}</strong>
+          <button onClick={() => void copyInviteLink()}>
+            参加リンクをコピー
+          </button>
+          {copyMessage && <p role="status">{copyMessage}</p>}
           {gameState?.phase === "lobby" && (
             <p>待機中は移動できます。塗りは試合開始後に使えます。</p>
           )}
