@@ -37,6 +37,7 @@ export function ProgressionPopup({
   const [secondsLeft, setSecondsLeft] = useState(GAME_START_COUNTDOWN_SECONDS);
   const [countdownRun, setCountdownRun] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [linkCopyMessage, setLinkCopyMessage] = useState("");
   useEffect(() => {
     if (scene !== "countdown") return;
     setSecondsLeft(GAME_START_COUNTDOWN_SECONDS);
@@ -68,6 +69,19 @@ export function ProgressionPopup({
       setCopied(true);
     } catch {
       setCopied(false);
+    }
+  };
+  const copyInviteLink = async () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("dev");
+    url.searchParams.set("room", roomCode);
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setLinkCopyMessage("参加リンクをコピーしました");
+    } catch {
+      setLinkCopyMessage(
+        "コピーできませんでした。招待コードを共有してください。",
+      );
     }
   };
   const readyCount = players.filter((player) => player.ready).length;
@@ -105,6 +119,17 @@ export function ProgressionPopup({
                 {copied ? "コピー済み ✓" : "コピー"}
               </button>
             </div>
+            {!preview && (
+              <>
+                <button
+                  className="invite-link-button"
+                  onClick={() => void copyInviteLink()}
+                >
+                  参加リンクをコピー
+                </button>
+                {linkCopyMessage && <p role="status">{linkCopyMessage}</p>}
+              </>
+            )}
             <p className="lobby-ready-count">
               準備完了{" "}
               <strong>

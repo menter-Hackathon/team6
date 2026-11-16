@@ -442,6 +442,21 @@ kbd {
   color: #fff;
   white-space: nowrap;
 }
+.invite-link-button {
+  padding: 9px 12px;
+  border: 1px solid #8795ad;
+  border-radius: 7px;
+  background: #354157;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.room-summary .invite-link-button {
+  width: 100%;
+  margin-top: 10px;
+}
 .progression-popup--lobby .lobby-ready-count {
   display: flex;
   justify-content: space-between;

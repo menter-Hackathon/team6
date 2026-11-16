@@ -35,7 +35,14 @@ export function App() {
   const [playerIds, setPlayerIds] = useState<string[]>([]);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [displayName, setDisplayName] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
+  const [inviteCode, setInviteCode] = useState(
+    () =>
+      new URLSearchParams(location.search).get("room")?.trim().toUpperCase() ??
+      "",
+  );
+  const [fromInviteLink, setFromInviteLink] = useState(() =>
+    new URLSearchParams(location.search).has("room"),
+  );
   const [turnOrder, setTurnOrder] = useState("alternating");
   const [roomCode, setRoomCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -67,6 +74,9 @@ export function App() {
       });
       roomRef.current = joinedRoom;
       setRoomCode(joinedRoom.roomId);
+      const url = new URL(location.href);
+      url.searchParams.delete("room");
+      history.replaceState(null, "", url);
       setConnectionState("connected");
       const syncPlayerIds = (state: GameState) => {
         setPlayerIds(Array.from(state.players.keys()));
@@ -178,8 +188,17 @@ export function App() {
             aria-label="招待コード"
             placeholder="招待コード"
             value={inviteCode}
-            onChange={(event) => setInviteCode(event.target.value)}
+            onChange={(event) => {
+              setInviteCode(event.target.value);
+              setFromInviteLink(false);
+            }}
           />
+          {fromInviteLink && inviteCode && (
+            <p>
+              参加リンクからルーム {inviteCode}{" "}
+              を開きました。表示名を入力して参加してください。
+            </p>
+          )}
           <button
             disabled={
               !displayName.trim() ||
@@ -188,7 +207,7 @@ export function App() {
             }
             onClick={() => void connect(false)}
           >
-            コードで参加
+            {fromInviteLink ? "参加リンクから参加" : "コードで参加"}
           </button>
           {errorMessage && <p role="alert">{errorMessage}</p>}
         </section>

@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 interface RoomSummaryProps {
   roomCode: string;
   names: string[];
@@ -13,6 +15,20 @@ export function RoomSummary({
   onStart,
   onClose,
 }: RoomSummaryProps) {
+  const [linkCopyMessage, setLinkCopyMessage] = useState("");
+  const copyInviteLink = async () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("dev");
+    url.searchParams.set("room", roomCode);
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setLinkCopyMessage("参加リンクをコピーしました");
+    } catch {
+      setLinkCopyMessage(
+        "コピーできませんでした。招待コードを共有してください。",
+      );
+    }
+  };
   return (
     <div className="room-summary" aria-label="ルーム情報">
       {onClose && (
@@ -28,6 +44,17 @@ export function RoomSummary({
         <span>招待コード</span>
         <strong>{roomCode}</strong>
       </div>
+      {!onClose && (
+        <>
+          <button
+            className="invite-link-button"
+            onClick={() => void copyInviteLink()}
+          >
+            参加リンクをコピー
+          </button>
+          {linkCopyMessage && <p role="status">{linkCopyMessage}</p>}
+        </>
+      )}
       <ul aria-label="入室中のメンター">
         {names.map((name, index) => (
           <li key={index}>{name}</li>
