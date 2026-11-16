@@ -5,9 +5,12 @@ export const SERVER_TICK_RATE = 20;
 export const INPUT_SEND_RATE = 30;
 export const FIELD_HALF_SIZE = 12;
 export const PLAYER_SPEED = 5;
-export const DIVE_SPEED = 8;
-export const DISC_SPEED = 2.5;
-export const PLAYER_RADIUS = 0.45;
+export const DIVE_SPEED = PLAYER_SPEED * 1.3;
+export const DISC_SPEED = PLAYER_SPEED;
+export const DIVE_GAP_SECONDS = 0.28;
+export const INK_SHOT_INTERVAL = 0.17;
+export const PLAYER_SIZE = 1;
+export const PLAYER_RADIUS = PLAYER_SIZE * 0.45;
 export const PRESENTATION_SECONDS = 30;
 export const STARTABLE_PLAYER_COUNTS = [4, 6, 8] as const;
 export const roomOptionsSchema = z.object({
@@ -36,9 +39,35 @@ export interface PlayerSnapshot {
 }
 
 export const PAINT_GRID_SIZE = 2048;
-export const paintKindSchema = z.enum(["ring", "line", "fan"]);
-export const paintRequestSchema = z.object({ kind: paintKindSchema });
-export type PaintStroke = { revision: number; x: number; z: number; yaw: number; team: "A" | "B"; kind: z.infer<typeof paintKindSchema> };
+export const INK_SCALE = 1.4;
+export const paintKindSchema = z.enum([
+  "ring",
+  "line",
+  "fan",
+  "ink",
+  "footprint",
+]);
+export const paintRequestSchema = z.object({
+  kind: paintKindSchema.exclude(["footprint"]),
+});
+export type PaintStroke = {
+  revision: number;
+  /** Server-generated start of a continuous walking segment. */
+  fromX?: number;
+  fromZ?: number;
+  x: number;
+  z: number;
+  yaw: number;
+  team: "A" | "B";
+  kind: z.infer<typeof paintKindSchema>;
+};
 
 export { rasterizePaintStroke } from "./paint-raster.js";
 export { isFootprintOwned } from "./paint-ownership.js";
+
+export {
+  paintDisks,
+  inkOutlineRadius,
+  type PaintDisk,
+} from "./paint-raster.js";
+export { updateDiveState, type DiveState } from "./dive.js";

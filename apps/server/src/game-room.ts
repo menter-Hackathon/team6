@@ -8,6 +8,9 @@ import {
   moveInputSchema,
   paintRequestSchema,
   type PaintStroke,
+  INK_SHOT_INTERVAL,
+  updateDiveState,
+  type DiveState,
   roomOptionsSchema,
   type MoveInput,
 } from "@gaya/shared";
@@ -23,6 +26,7 @@ export class GameRoom extends Room<{ state: GameState }> {
   private readonly movementInputs = new Map<string, MoveInput>();
   private readonly paint = new PaintField();
   private readonly lastPaint = new Map<string, number>();
+  private readonly dives = new Map<string, DiveState>();
   private turnTimer: ReturnType<typeof setInterval> | undefined;
 
   override onCreate(options: unknown): void {
@@ -37,7 +41,8 @@ export class GameRoom extends Room<{ state: GameState }> {
     );
 
     this.onMessage("move", (client, payload: unknown) => {
-      if (this.state.phase !== "playing" && this.state.phase !== "lobby") return;
+      if (this.state.phase !== "playing" && this.state.phase !== "lobby")
+        return;
       const result = moveInputSchema.safeParse(payload);
       if (!result.success) return;
 
@@ -49,17 +54,36 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (this.state.phase !== "playing") return;
       const parsed = paintRequestSchema.safeParse(payload);
       const player = this.state.players.get(client.sessionId);
-      if (!parsed.success || !player || (player.team !== "A" && player.team !== "B")) return;
+      if (
+        !parsed.success ||
+        !player ||
+        player.dive ||
+        (player.team !== "A" && player.team !== "B")
+      )
+        return;
       const now = Date.now();
-      if (now - (this.lastPaint.get(client.sessionId) ?? 0) < 500) return;
+      if (
+        now - (this.lastPaint.get(client.sessionId) ?? 0) <
+        (parsed.data.kind === "ink" ? INK_SHOT_INTERVAL * 1000 : 500)
+      )
+        return;
       this.lastPaint.set(client.sessionId, now);
-      const stroke: PaintStroke = { revision: this.paint.revision + 1, x: player.x, z: player.z, yaw: player.yaw, team: player.team, kind: parsed.data.kind };
+      const stroke: PaintStroke = {
+        revision: this.paint.revision + 1,
+        x: player.x,
+        z: player.z,
+        yaw: player.yaw,
+        team: player.team,
+        kind: parsed.data.kind,
+      };
       this.paint.apply(stroke);
       this.state.scoreA = this.paint.counts[1]!;
       this.state.scoreB = this.paint.counts[2]!;
       this.broadcast("paint", stroke);
     });
-    this.onMessage("paint-snapshot", (client) => this.sendPaintSnapshot(client));
+    this.onMessage("paint-snapshot", (client) =>
+      this.sendPaintSnapshot(client),
+    );
     this.onMessage("ready", (client, payload: unknown) => {
       if (this.state.phase !== "lobby" || typeof payload !== "boolean") return;
       const player = this.state.players.get(client.sessionId);
@@ -116,6 +140,7 @@ export class GameRoom extends Room<{ state: GameState }> {
   override onLeave(client: Client): void {
     this.movementInputs.delete(client.sessionId);
     this.lastPaint.delete(client.sessionId);
+    this.dives.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     if (this.state.phase === "lobby") {
       this.state.players.forEach((player) => {
@@ -133,7 +158,10 @@ export class GameRoom extends Room<{ state: GameState }> {
   }
 
   private sendPaintSnapshot(client: Client): void {
-    client.send("paint-snapshot", { revision: this.paint.revision, data: deflateSync(this.paint.cells).toString("base64") });
+    client.send("paint-snapshot", {
+      revision: this.paint.revision,
+      data: deflateSync(this.paint.cells).toString("base64"),
+    });
   }
 
   private alternatingOrder(players: PlayerState[]): PlayerState[] {
@@ -163,18 +191,61 @@ export class GameRoom extends Room<{ state: GameState }> {
     this.state.players.forEach((player: PlayerState, sessionId: string) => {
       const input = this.movementInputs.get(sessionId) ?? IDLE_INPUT;
       const team = player.team === "A" ? 1 : player.team === "B" ? 2 : -1;
-      const ownPaint = this.paint.fullyOwnedAt(player.x, player.z, team);
+      const dt = Math.min(Math.max(deltaSeconds, 0), 0.1);
+      const previous = this.dives.get(sessionId) ?? {
+        submerged: false,
+        gapSeconds: 0,
+        team,
+      };
+      const before = updateDiveState(
+        previous,
+        input.dive,
+        this.paint.fullyOwnedAt(player.x, player.z, team),
+        0,
+        team,
+      );
+      const next = movePlayer(
+        player,
+        input,
+        dt,
+        movementSpeed(input.dive, before.submerged),
+      );
+      const after = updateDiveState(
+        before,
+        input.dive,
+        this.paint.fullyOwnedAt(next.x, next.z, team),
+        dt,
+        team,
+      );
+      this.dives.set(sessionId, after);
       player.dive = input.dive;
-      player.submerged = input.dive && ownPaint;
-      const dt = Math.min(deltaSeconds, 0.1);
-      let next = movePlayer(player, input, dt, movementSpeed(input.dive, ownPaint));
-      if (player.submerged && !this.paint.fullyOwnedAt(next.x, next.z, team)) {
-        player.submerged = false;
-        next = movePlayer(player, input, dt, movementSpeed(true, false));
-      }
+      player.submerged = after.submerged;
+      const distance = Math.hypot(next.x - player.x, next.z - player.z);
+      const fromX = player.x,
+        fromZ = player.z;
       player.x = next.x;
       player.z = next.z;
-      player.submerged = input.dive && this.paint.fullyOwnedAt(next.x, next.z, team);
+      if (
+        !input.dive &&
+        distance > 0.001 &&
+        this.state.phase === "playing" &&
+        (player.team === "A" || player.team === "B")
+      ) {
+        const footprint: PaintStroke = {
+          revision: this.paint.revision + 1,
+          fromX,
+          fromZ,
+          x: next.x,
+          z: next.z,
+          yaw: input.yaw,
+          team: player.team,
+          kind: "footprint",
+        };
+        this.paint.apply(footprint);
+        this.state.scoreA = this.paint.counts[1]!;
+        this.state.scoreB = this.paint.counts[2]!;
+        this.broadcast("paint", footprint);
+      }
       player.yaw = input.yaw;
       player.lastProcessedInput = input.sequence;
     });
