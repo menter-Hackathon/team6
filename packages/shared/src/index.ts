@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const GAME_ROOM_NAME = "game";
-export const SERVER_TICK_RATE = 20;
+export const SERVER_TICK_RATE = 30;
 export const INPUT_SEND_RATE = 30;
 export const FIELD_HALF_SIZE = 12;
 export const PLAYER_SPEED = 5;
@@ -9,6 +9,8 @@ export const DIVE_SPEED = PLAYER_SPEED * 1.5;
 export const DISC_SPEED = PLAYER_SPEED;
 export const DIVE_GAP_SECONDS = 0.28;
 export const INK_SHOT_INTERVAL = 0.17;
+// Allow one frame of timing jitter when the server checks client-paced shots.
+export const INK_SHOT_SERVER_TOLERANCE = 0.02;
 export const PLAYER_SIZE = 1;
 export const PLAYER_RADIUS = PLAYER_SIZE * 0.45;
 export const PRESENTATION_SECONDS = 30;

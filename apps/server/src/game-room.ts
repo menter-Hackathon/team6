@@ -14,6 +14,7 @@ import {
   paintRequestSchema,
   type PaintStroke,
   INK_SHOT_INTERVAL,
+  INK_SHOT_SERVER_TOLERANCE,
   updateDiveState,
   type DiveState,
   roomOptionsSchema,
@@ -73,7 +74,9 @@ export class GameRoom extends Room<{ state: GameState }> {
       const now = Date.now();
       if (
         now - (this.lastPaint.get(client.sessionId) ?? 0) <
-        (parsed.data.kind === "ink" ? INK_SHOT_INTERVAL * 1000 : 500)
+        (parsed.data.kind === "ink"
+          ? (INK_SHOT_INTERVAL - INK_SHOT_SERVER_TOLERANCE) * 1000
+          : 500)
       )
         return;
       this.lastPaint.set(client.sessionId, now);
