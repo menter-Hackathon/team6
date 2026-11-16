@@ -8,6 +8,7 @@ export class PlayerState extends Schema {
   @type("float32") x = 0;
   @type("float32") z = 0;
   @type("float32") yaw = 0;
+  @type("float32") specialTime = -1;
   @type("boolean") dive = false;
   @type("boolean") submerged = false;
   @type("uint32") lastProcessedInput = 0;

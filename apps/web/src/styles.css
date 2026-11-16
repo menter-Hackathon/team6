@@ -194,3 +194,70 @@ kbd {
     bottom: 12px;
   }
 }
+
+.special-button {
+  position: absolute;
+  right: 22px;
+  bottom: 24px;
+  padding: 15px 20px;
+  background: #ff3985;
+  color: #fff;
+  border: 2px solid #fff;
+  border-radius: 18px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 5px 20px #ff398544;
+  z-index: 3;
+}
+.special-button:hover {
+  background: #e92572;
+  transform: translateY(-2px);
+}
+.special-button:disabled {
+  background: #747b88;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+@media (max-width: 600px) {
+  .special-button {
+    top: 20px;
+    bottom: auto;
+    right: 12px;
+    padding: 12px;
+    font-size: 11px;
+  }
+}
+
+.special-shape-picker {
+  position: absolute;
+  right: 22px;
+  bottom: 94px;
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  color: #42483f;
+  background: #fffffff0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  z-index: 3;
+}
+.special-shape-picker select {
+  font: inherit;
+  font-size: 13px;
+  color: #343a32;
+  border: 1px solid #c9d0c3;
+  border-radius: 9px;
+  padding: 7px 12px;
+  background: white;
+  cursor: pointer;
+}
+@media (max-width: 600px) {
+  .special-shape-picker {
+    top: 76px;
+    bottom: auto;
+    right: 12px;
+  }
+}

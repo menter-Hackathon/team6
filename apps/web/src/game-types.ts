@@ -8,6 +8,7 @@ export interface PlayerState {
   x: number;
   z: number;
   yaw: number;
+  specialTime: number;
   dive: boolean;
   submerged: boolean;
   lastProcessedInput: number;

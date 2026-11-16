@@ -8,10 +8,10 @@ import {
 const idle: DiveState = { submerged: false, gapSeconds: 0, team: 1 };
 
 describe("ink diving", () => {
-  it("requires own ink to start, and uses a 1.3 speed multiplier", () => {
+  it("requires own ink to start, and uses a 1.5 speed multiplier", () => {
     expect(updateDiveState(idle, true, false, 0.05, 1).submerged).toBe(false);
     expect(updateDiveState(idle, true, true, 0.05, 1).submerged).toBe(true);
-    expect(DIVE_SPEED / PLAYER_SPEED).toBeCloseTo(1.3);
+    expect(DIVE_SPEED / PLAYER_SPEED).toBeCloseTo(1.5);
   });
   it("crosses short gaps, but ends a dive after the allowance expires", () => {
     const inInk = updateDiveState(idle, true, true, 0.05, 1);

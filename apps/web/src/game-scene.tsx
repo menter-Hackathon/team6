@@ -3,6 +3,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import type { Room } from "@colyseus/sdk";
 import {
   FIELD_HALF_SIZE,
+  advanceSpecial,
   INPUT_SEND_RATE,
   PLAYER_SPEED,
   PLAYER_SIZE,
@@ -16,9 +17,12 @@ import {
   rasterizePaintStroke,
   type PaintStroke,
   type MoveInput,
+  type SpecialShape,
 } from "@gaya/shared";
 import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { bleedSpecialPaint } from "./paint-bleed";
+import { useSpecialAppearance } from "./special-appearance";
 import { InkEffects, INK_SETTLE_SECONDS } from "./ink-effects";
 import type { GameState } from "./game-types";
 
@@ -32,11 +36,14 @@ interface GameSceneProps {
   roomRef: MutableRefObject<Room<GameState> | null>;
   playerIds: string[];
   devMode?: boolean;
+  specialShape: SpecialShape;
 }
 
 interface ControlState {
   keys: Set<string>;
   firing: boolean;
+  specialTime: number;
+  specialShape: SpecialShape;
   yaw: number;
   position: { x: number; z: number };
   sequence: number;
@@ -47,11 +54,14 @@ export function GameScene({
   roomRef,
   playerIds,
   devMode = false,
+  specialShape,
 }: GameSceneProps) {
   const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
   const controls = useRef<ControlState>({
     keys: new Set(),
     firing: false,
+    specialTime: -1,
+    specialShape: "star",
     yaw: 0,
     position: { x: 0, z: 0 },
     sequence: 0,
@@ -59,6 +69,17 @@ export function GameScene({
   });
 
   useEffect(() => {
+    const activateSpecial = () => {
+      if (devMode) {
+        if (controls.current.specialTime < 0) {
+          controls.current.specialShape = specialShape;
+          controls.current.specialTime = 0;
+          controls.current.firing = false;
+        }
+      } else if (roomRef.current?.state.phase === "playing")
+        roomRef.current.send("special", { shape: specialShape });
+    };
+    window.addEventListener("activate-special", activateSpecial);
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         event.target instanceof HTMLElement &&
@@ -66,6 +87,11 @@ export function GameScene({
           /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName))
       )
         return;
+      if (event.code === "KeyF" && !event.repeat) {
+        event.preventDefault();
+        activateSpecial();
+        return;
+      }
       if (
         ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(
           event.code,
@@ -89,6 +115,7 @@ export function GameScene({
           controls.current.keys.has("ShiftRight")
         )
           return;
+        if (devMode && controls.current.specialTime >= 0) return;
         if (devMode) {
           window.dispatchEvent(
             new CustomEvent("dev-paint", {
@@ -150,6 +177,7 @@ export function GameScene({
     window.addEventListener("mousemove", onMouseMove);
     document.body.addEventListener("click", onClick);
     return () => {
+      window.removeEventListener("activate-special", activateSpecial);
       window.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mouseup", onMouseUp);
       document.removeEventListener("pointerlockchange", onLockChange);
@@ -159,7 +187,7 @@ export function GameScene({
       window.removeEventListener("mousemove", onMouseMove);
       document.body.removeEventListener("click", onClick);
     };
-  }, [devMode, roomRef]);
+  }, [devMode, roomRef, specialShape]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -192,7 +220,28 @@ export function GameScene({
   useFrame((_, delta) => {
     shotClock.current = Math.max(0, shotClock.current - delta);
     const control = controls.current;
+    const networkPlayer = roomRef.current?.state.players.get(
+      roomRef.current.sessionId,
+    );
+    const specialActive =
+      (devMode ? control.specialTime : (networkPlayer?.specialTime ?? -1)) >= 0;
+    const button = document.getElementById(
+      "special-button",
+    ) as HTMLButtonElement | null;
+    const picker = document.getElementById(
+      "special-shape",
+    ) as HTMLSelectElement | null;
+    if (picker) picker.disabled = specialActive;
+    if (button) {
+      button.disabled =
+        specialActive ||
+        (!devMode && roomRef.current?.state.phase !== "playing");
+      button.textContent = specialActive
+        ? "回転ジャンプ中…"
+        : `F  必殺技 · ${specialShape === "ink" ? "● インク" : specialShape === "heart" ? "♥ ハート" : "★ スター"}スラム`;
+    }
     if (
+      specialActive ||
       !control.firing ||
       control.keys.has("ShiftLeft") ||
       control.keys.has("ShiftRight") ||
@@ -302,6 +351,7 @@ function DevPlayer({
 }) {
   const group = useRef<THREE.Group>(null);
   const appearance = useDiveAppearance();
+  const specialAppearance = useSpecialAppearance();
   const { camera } = useThree();
   const diveState = useRef<DiveState>({
     submerged: false,
@@ -311,6 +361,26 @@ function DevPlayer({
   useFrame((_, delta) => {
     const object = group.current;
     if (!object) return;
+    const special = advanceSpecial(
+      controls.current.specialTime,
+      Math.min(delta, 0.1),
+    );
+    controls.current.specialTime = special.time;
+    const specialActive = special.time >= 0 || special.landed;
+    if (special.landed)
+      window.dispatchEvent(
+        new CustomEvent("dev-paint", {
+          detail: {
+            revision: 0,
+            x: object.position.x,
+            z: object.position.z,
+            yaw: controls.current.yaw,
+            team: "A",
+            kind: "slam",
+            specialShape: controls.current.specialShape,
+          } satisfies PaintStroke,
+        }),
+      );
     const keys = controls.current.keys;
     const direction = toWorldDirection(
       Number(keys.has("KeyW") || keys.has("ArrowUp")) -
@@ -319,12 +389,17 @@ function DevPlayer({
         Number(keys.has("KeyA") || keys.has("ArrowLeft")),
       controls.current.yaw,
     );
+    if (specialActive) {
+      direction.x = 0;
+      direction.z = 0;
+    }
     const length = Math.hypot(direction.x, direction.z);
     if (length > 1) {
       direction.x /= length;
       direction.z /= length;
     }
-    const dive = keys.has("ShiftLeft") || keys.has("ShiftRight");
+    const dive =
+      !specialActive && (keys.has("ShiftLeft") || keys.has("ShiftRight"));
     const before = updateDiveState(
       diveState.current,
       dive,
@@ -374,6 +449,11 @@ function DevPlayer({
       );
     }
     appearance.update(dive, nowSubmerged, delta);
+    specialAppearance(
+      appearance.body.current,
+      controls.current.specialTime,
+      delta,
+    );
     object.rotation.y = toModelRotation(controls.current.yaw);
     controls.current.position = { x: object.position.x, z: object.position.z };
     const yaw = controls.current.yaw;
@@ -388,7 +468,7 @@ function DevPlayer({
     camera.lookAt(object.position.x, 1.1, object.position.z);
     const readout = document.getElementById("dev-readout");
     if (readout)
-      readout.textContent = `状態 ${nowSubmerged ? "潜航 ×1.3" : "通常"} / X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
+      readout.textContent = `状態 ${nowSubmerged ? "潜航 ×1.5" : "通常"} / X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
   });
   return (
     <group ref={group}>
@@ -476,6 +556,15 @@ function Field({
       while (displayQueue.length && displayQueue[0]!.at <= performance.now()) {
         const { stroke } = displayQueue.shift()!;
         const team = stroke.team === "A" ? 1 : 2;
+        if (stroke.kind === "slam") {
+          const bleed = bleedSpecialPaint(stroke, image);
+          if (bleed) {
+            minX = Math.min(minX, bleed.left);
+            minY = Math.min(minY, bleed.top);
+            maxX = Math.max(maxX, bleed.right);
+            maxY = Math.max(maxY, bleed.bottom);
+          }
+        }
         rasterizePaintStroke(stroke, (x, y) => {
           const offset = (y * PAINT_GRID_SIZE + x) * 4;
           image.data[offset] = team === 1 ? 255 : 55;
@@ -651,6 +740,7 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
   const group = useRef<THREE.Group>(null);
   const predicted = useRef(new THREE.Vector3());
   const appearance = useDiveAppearance();
+  const specialAppearance = useSpecialAppearance();
   const initialized = useRef(false);
   const { camera } = useThree();
   const cameraOffset = useMemo(() => new THREE.Vector3(), []);
@@ -660,11 +750,15 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
     const player = roomRef.current?.state.players.get(playerId);
     const object = group.current;
     if (!player || !object) return;
-    const diving = local
-      ? controls.current.keys.has("ShiftLeft") ||
-        controls.current.keys.has("ShiftRight")
-      : player.dive;
+    const specialActive = player.specialTime >= 0;
+    const diving =
+      !specialActive &&
+      (local
+        ? controls.current.keys.has("ShiftLeft") ||
+          controls.current.keys.has("ShiftRight")
+        : player.dive);
     appearance.update(diving, diving && player.submerged, delta);
+    specialAppearance(appearance.body.current, player.specialTime, delta);
 
     if (!initialized.current) {
       predicted.current.set(player.x, 0, player.z);
@@ -680,8 +774,12 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
           ? DIVE_SPEED
           : DISC_SPEED
         : PLAYER_SPEED;
-      predicted.current.x += input.x * scale * speed * delta;
-      predicted.current.z += input.z * scale * speed * delta;
+      if (!specialActive) {
+        predicted.current.x += input.x * scale * speed * delta;
+        predicted.current.z += input.z * scale * speed * delta;
+      } else {
+        predicted.current.set(player.x, 0, player.z);
+      }
       const error = predicted.current.distanceTo(
         cameraTarget.set(player.x, 0, player.z),
       );

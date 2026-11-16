@@ -1,6 +1,10 @@
 import {
   FIELD_HALF_SIZE,
   INK_SCALE,
+  SPECIAL_RADIUS,
+  specialOutline,
+  type SpecialShape,
+  INK_SPLAT_SCALE,
   PLAYER_SIZE,
   PAINT_GRID_SIZE,
   type PaintStroke,
@@ -11,6 +15,8 @@ export interface PaintDisk {
   z: number;
   radius: number;
   organic?: boolean;
+  outlineShape?: Exclude<SpecialShape, "ink">;
+  rotation?: number;
 }
 
 export function inkOutlineRadius(angle: number): number {
@@ -28,7 +34,71 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
       z: stroke.z + dz * forward - dx * side,
       radius,
     });
-  if (stroke.kind === "footprint") {
+  if (stroke.kind === "slam" && stroke.specialShape === "ink") {
+    disks.push({
+      x: stroke.x,
+      z: stroke.z,
+      radius: SPECIAL_RADIUS,
+      organic: true,
+    });
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + stroke.yaw,
+        reach = SPECIAL_RADIUS * (0.65 + 0.06 * Math.sin(i * 2.3));
+      disks.push({
+        x: stroke.x + Math.cos(a) * reach,
+        z: stroke.z + Math.sin(a) * reach,
+        radius: SPECIAL_RADIUS * (0.25 + 0.025 * Math.cos(i * 1.8)),
+        organic: true,
+      });
+      disks.push({
+        x: stroke.x + Math.cos(a) * SPECIAL_RADIUS * 1.15,
+        z: stroke.z + Math.sin(a) * SPECIAL_RADIUS * 1.15,
+        radius: 0.09 + (i % 3) * 0.035,
+      });
+    }
+  } else if (stroke.kind === "slam") {
+    const shape = stroke.specialShape === "heart" ? "heart" : "star";
+    disks.push({
+      x: stroke.x,
+      z: stroke.z,
+      radius: SPECIAL_RADIUS,
+      outlineShape: shape,
+      rotation: stroke.yaw,
+    });
+    const outline = specialOutline(shape),
+      c = Math.cos(stroke.yaw),
+      sn = Math.sin(stroke.yaw);
+    // Detached flecks sit beyond the thin fingers that interrupt the silhouette's sides.
+    const jets =
+      shape === "star"
+        ? [7, 22, 29, 46, 65, 73, 91, 106]
+        : [16, 24, 33, 42, 51, 60, 73, 82, 91, 102, 112];
+    for (let j = 0; j < jets.length; j++) {
+      const i = jets[j]!,
+        p = outline[i]!,
+        radial = Math.hypot(p.x, p.z) || 1;
+      const gap =
+        (shape === "heart" ? 0.075 : 0.055) +
+        (j % 3) * (shape === "heart" ? 0.035 : 0.025);
+      const px = p.x + (p.x / radial) * gap,
+        pz = p.z + (p.z / radial) * gap;
+      const x = (px * c - pz * sn) * SPECIAL_RADIUS * INK_SCALE,
+        z = (px * sn + pz * c) * SPECIAL_RADIUS * INK_SCALE;
+      disks.push({
+        x: stroke.x + x,
+        z: stroke.z + z,
+        radius:
+          (shape === "heart" ? 0.045 : 0.035) +
+          (j % 4) * (shape === "heart" ? 0.02 : 0.012),
+      });
+      if (j % (shape === "heart" ? 2 : 3) === 0)
+        disks.push({
+          x: stroke.x + x * 1.07,
+          z: stroke.z + z * 1.07,
+          radius: 0.022,
+        });
+    }
+  } else if (stroke.kind === "footprint") {
     const fromX = stroke.fromX ?? stroke.x,
       fromZ = stroke.fromZ ?? stroke.z;
     const length = Math.hypot(stroke.x - fromX, stroke.z - fromZ);
@@ -100,9 +170,15 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
       });
     }
   }
+  const impact = stroke.kind === "ink" ? disks[0] : undefined;
   return disks.map((disk) => ({
     ...disk,
-    radius: disk.radius * (stroke.kind === "footprint" ? 1 : INK_SCALE),
+    x: impact ? impact.x + (disk.x - impact.x) * INK_SPLAT_SCALE : disk.x,
+    z: impact ? impact.z + (disk.z - impact.z) * INK_SPLAT_SCALE : disk.z,
+    radius:
+      disk.radius *
+      (stroke.kind === "footprint" ? 1 : INK_SCALE) *
+      (impact ? INK_SPLAT_SCALE : 1),
   }));
 }
 
@@ -116,6 +192,36 @@ export function rasterizePaintStroke(
     const x = (disk.x + FIELD_HALF_SIZE) * scale,
       y = (disk.z + FIELD_HALF_SIZE) * scale,
       r = disk.radius * scale;
+    if (disk.outlineShape) {
+      const angle = disk.rotation ?? 0,
+        c = Math.cos(angle),
+        sn = Math.sin(angle);
+      const points = specialOutline(disk.outlineShape).map((p) => ({
+        x: x + (p.x * c - p.z * sn) * r,
+        y: y + (p.x * sn + p.z * c) * r,
+      }));
+      const top = Math.max(0, Math.floor(Math.min(...points.map((p) => p.y)))),
+        bottom = Math.min(
+          n - 1,
+          Math.ceil(Math.max(...points.map((p) => p.y))),
+        );
+      for (let row = top; row <= bottom; row++) {
+        const hits: number[] = [];
+        for (let i = 0; i < points.length; i++) {
+          const a = points[i]!,
+            b = points[(i + 1) % points.length]!;
+          if (a.y > row !== b.y > row)
+            hits.push(a.x + ((row - a.y) / (b.y - a.y)) * (b.x - a.x));
+        }
+        hits.sort((a, b) => a - b);
+        for (let i = 0; i + 1 < hits.length; i += 2) {
+          const left = Math.max(0, Math.ceil(hits[i]!)),
+            right = Math.min(n - 1, Math.floor(hits[i + 1]!));
+          for (let col = left; col <= right; col++) put(col, row);
+        }
+      }
+      continue;
+    }
     const left = Math.max(0, Math.floor(x - r)),
       right = Math.min(n - 1, Math.ceil(x + r));
     for (
