@@ -2,7 +2,8 @@ import { Grid, Html } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { Room } from "@colyseus/sdk";
 import {
-  FIELD_HALF_SIZE,
+  FIELD_HALF_WIDTH,
+  FIELD_HALF_DEPTH,
   advanceSpecial,
   advanceJump,
   jumpHeight,
@@ -66,6 +67,8 @@ export function GameScene({
   colorB = "#37d9ff",
 }: GameSceneProps) {
   const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
+  const devColor = useRef(colorA);
+  devColor.current = colorA;
   const controls = useRef<ControlState>({
     keys: new Set(),
     firing: false,
@@ -159,6 +162,7 @@ export function GameScene({
                 ...controls.current.position,
                 yaw: controls.current.yaw,
                 team: "A",
+                practiceColor: devColor.current,
                 kind,
               },
             }),
@@ -298,6 +302,7 @@ export function GameScene({
             ...control.position,
             yaw: control.yaw,
             team: "A",
+            practiceColor: devColor.current,
             kind: "ink",
           } satisfies PaintStroke,
         }),
@@ -335,12 +340,21 @@ export function GameScene({
         colorA={colorA}
         colorB={colorB}
       />
-      {devMode && <DevPlayer controls={controls} ownPaint={devOwnPaint} />}
+      {devMode && (
+        <DevPlayer
+          controls={controls}
+          ownPaint={devOwnPaint}
+          color={colorA}
+          devColor={devColor}
+        />
+      )}
       {playerIds.map((playerId) => (
         <Player
           key={playerId}
           playerId={playerId}
-          displayName={roomRef.current?.state.players.get(playerId)?.displayName ?? ""}
+          displayName={
+            roomRef.current?.state.players.get(playerId)?.displayName ?? ""
+          }
           local={playerId === localId}
           roomRef={roomRef}
           controls={controls}
@@ -395,9 +409,13 @@ function useDiveAppearance() {
 function DevPlayer({
   controls,
   ownPaint,
+  color,
+  devColor,
 }: {
   controls: MutableRefObject<ControlState>;
   ownPaint: MutableRefObject<(x: number, z: number) => boolean>;
+  color: string;
+  devColor: MutableRefObject<string>;
 }) {
   const group = useRef<THREE.Group>(null);
   const appearance = useDiveAppearance();
@@ -431,6 +449,7 @@ function DevPlayer({
             z: object.position.z,
             yaw: controls.current.yaw,
             team: "A",
+            practiceColor: devColor.current,
             kind: "slam",
             specialShape: controls.current.specialShape,
           } satisfies PaintStroke,
@@ -472,13 +491,13 @@ function DevPlayer({
     const speed = dive ? (submerged ? DIVE_SPEED : DISC_SPEED) : PLAYER_SPEED;
     object.position.x = THREE.MathUtils.clamp(
       object.position.x + direction.x * speed * delta,
-      -FIELD_HALF_SIZE + 0.5,
-      FIELD_HALF_SIZE - 0.5,
+      -FIELD_HALF_WIDTH + 0.5,
+      FIELD_HALF_WIDTH - 0.5,
     );
     object.position.z = THREE.MathUtils.clamp(
       object.position.z + direction.z * speed * delta,
-      -FIELD_HALF_SIZE + 0.5,
-      FIELD_HALF_SIZE - 0.5,
+      -FIELD_HALF_DEPTH + 0.5,
+      FIELD_HALF_DEPTH - 0.5,
     );
     diveState.current = updateDiveState(
       before,
@@ -503,6 +522,7 @@ function DevPlayer({
             z: object.position.z,
             yaw: controls.current.yaw,
             team: "A",
+            practiceColor: devColor.current,
             kind: "footprint",
           } satisfies PaintStroke,
         }),
@@ -538,7 +558,7 @@ function DevPlayer({
     <group ref={group}>
       <mesh ref={appearance.body} castShadow receiveShadow position-y={0.5}>
         <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
-        <meshStandardMaterial color="#ff4f8b" />
+        <meshStandardMaterial color={color} />
       </mesh>
       <mesh
         ref={appearance.ripple}
@@ -548,7 +568,7 @@ function DevPlayer({
       >
         <ringGeometry args={[0.45, 0.57, 40]} />
         <meshBasicMaterial
-          color="#ff4f8b"
+          color={color}
           transparent
           opacity={0}
           depthWrite={false}
@@ -600,18 +620,14 @@ function Field({
     [effects, texture],
   );
   const cells = useMemo(() => new Uint8Array(PAINT_GRID_SIZE ** 2), []);
+  const colors = useRef({ colorA, colorB });
+  colors.current = { colorA, colorB };
   useEffect(() => {
     if (!room && !devMode) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     effects.clear();
-    effects.setColors(colorA, colorB);
-    const rgbA = [1, 3, 5].map((index) =>
-      parseInt(colorA.slice(index, index + 2), 16),
-    );
-    const rgbB = [1, 3, 5].map((index) =>
-      parseInt(colorB.slice(index, index + 2), 16),
-    );
+    effects.setColors(colors.current.colorA, colors.current.colorB);
     const practiceRgb = NEON_COLORS.map(({ hex }) =>
       [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16)),
     );
@@ -621,13 +637,21 @@ function Field({
       team: number,
     ) => {
       const practice =
-        room?.state.phase === "lobby" || room?.state.phase === "team_selection";
+        devMode ||
+        room?.state.phase === "lobby" ||
+        room?.state.phase === "team_selection";
+      const currentA = [1, 3, 5].map((index) =>
+        parseInt(colors.current.colorA.slice(index, index + 2), 16),
+      );
+      const currentB = [1, 3, 5].map((index) =>
+        parseInt(colors.current.colorB.slice(index, index + 2), 16),
+      );
       const rgb =
         practice && practiceRgb[team - 1]
           ? practiceRgb[team - 1]!
           : team === 1
-            ? rgbA
-            : rgbB;
+            ? currentA
+            : currentB;
       data[offset] = rgb[0]!;
       data[offset + 1] = rgb[1]!;
       data[offset + 2] = rgb[2]!;
@@ -639,7 +663,13 @@ function Field({
     texture.needsUpdate = true;
     const image = ctx.createImageData(PAINT_GRID_SIZE, PAINT_GRID_SIZE);
     if (devMode)
-      devOwnPaint.current = (x, z) => isFootprintOwned(cells, x, z, 1);
+      devOwnPaint.current = (x, z) =>
+        isFootprintOwned(
+          cells,
+          x,
+          z,
+          practiceColorOwner(colors.current.colorA),
+        );
     let disposed = false;
     let syncing = !devMode;
     const pending = new Map<number, PaintStroke>();
@@ -657,7 +687,12 @@ function Field({
             ? 1
             : 2;
         if (stroke.kind === "slam") {
-          const bleed = bleedSpecialPaint(stroke, image, colorA, colorB);
+          const bleed = bleedSpecialPaint(
+            stroke,
+            image,
+            colors.current.colorA,
+            colors.current.colorB,
+          );
           if (bleed) {
             minX = Math.min(minX, bleed.left);
             minY = Math.min(minY, bleed.top);
@@ -771,17 +806,7 @@ function Field({
       removeSnapshot?.();
       window.removeEventListener("dev-paint", devPaint);
     };
-  }, [
-    room,
-    devMode,
-    canvas,
-    texture,
-    devOwnPaint,
-    cells,
-    effects,
-    colorA,
-    colorB,
-  ]);
+  }, [room, devMode, canvas, texture, devOwnPaint, cells, effects]);
   return (
     <group>
       <primitive object={effects.group} />
@@ -790,11 +815,11 @@ function Field({
         <meshStandardMaterial color="#e0e3da" roughness={0.85} />
       </mesh>
       <mesh receiveShadow rotation-x={-Math.PI / 2}>
-        <planeGeometry args={[FIELD_HALF_SIZE * 2, FIELD_HALF_SIZE * 2]} />
+        <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
         <meshStandardMaterial color="#f7f8ee" roughness={0.65} />
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position-y={0.018}>
-        <planeGeometry args={[FIELD_HALF_SIZE * 2, FIELD_HALF_SIZE * 2]} />
+        <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
         <meshStandardMaterial
           map={texture}
           transparent
@@ -805,7 +830,7 @@ function Field({
       </mesh>
       <Grid
         position={[0, 0.012, 0]}
-        args={[FIELD_HALF_SIZE * 2, FIELD_HALF_SIZE * 2]}
+        args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]}
         cellSize={1}
         cellThickness={0.6}
         cellColor="#e0e4d9"
@@ -816,17 +841,17 @@ function Field({
         infiniteGrid={false}
       />
       {[
-        [0, 0, -FIELD_HALF_SIZE],
-        [0, 0, FIELD_HALF_SIZE],
-        [-FIELD_HALF_SIZE, 0, 0],
-        [FIELD_HALF_SIZE, 0, 0],
+        [0, 0, -FIELD_HALF_DEPTH],
+        [0, 0, FIELD_HALF_DEPTH],
+        [-FIELD_HALF_WIDTH, 0, 0],
+        [FIELD_HALF_WIDTH, 0, 0],
       ].map((position, index) => (
         <mesh key={index} position={position as [number, number, number]}>
           <boxGeometry
             args={
               index < 2
-                ? [FIELD_HALF_SIZE * 2, 0.3, 0.25]
-                : [0.25, 0.3, FIELD_HALF_SIZE * 2]
+                ? [FIELD_HALF_WIDTH * 2, 0.3, 0.25]
+                : [0.25, 0.3, FIELD_HALF_DEPTH * 2]
             }
           />
           <meshStandardMaterial color="#d5dccc" />
@@ -845,7 +870,14 @@ interface PlayerProps {
   controls: MutableRefObject<ControlState>;
 }
 
-function Player({ playerId, displayName, local, color, roomRef, controls }: PlayerProps) {
+function Player({
+  playerId,
+  displayName,
+  local,
+  color,
+  roomRef,
+  controls,
+}: PlayerProps) {
   const group = useRef<THREE.Group>(null);
   const predicted = useRef(new THREE.Vector3());
   const appearance = useDiveAppearance();

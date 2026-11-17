@@ -24,7 +24,8 @@ export function practiceColorOwner(color: string): number {
 }
 export const SERVER_TICK_RATE = 30;
 export const INPUT_SEND_RATE = 30;
-export const FIELD_HALF_SIZE = 12;
+export const FIELD_HALF_WIDTH = 12;
+export const FIELD_HALF_DEPTH = 24;
 export const PLAYER_SPEED = 5;
 export const DIVE_SPEED = PLAYER_SPEED * 1.5;
 export const DISC_SPEED = PLAYER_SPEED;

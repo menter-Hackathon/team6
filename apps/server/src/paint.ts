@@ -1,5 +1,6 @@
 import {
-  FIELD_HALF_SIZE,
+  FIELD_HALF_WIDTH,
+  FIELD_HALF_DEPTH,
   PAINT_GRID_SIZE,
   isFootprintOwned,
   rasterizePaintStroke,
@@ -20,8 +21,12 @@ export class PaintField {
 
   ownerAt(x: number, z: number): number {
     const n = PAINT_GRID_SIZE;
-    const gx = Math.floor(((x + FIELD_HALF_SIZE) * n) / (FIELD_HALF_SIZE * 2));
-    const gz = Math.floor(((z + FIELD_HALF_SIZE) * n) / (FIELD_HALF_SIZE * 2));
+    const gx = Math.floor(
+      ((x + FIELD_HALF_WIDTH) * n) / (FIELD_HALF_WIDTH * 2),
+    );
+    const gz = Math.floor(
+      ((z + FIELD_HALF_DEPTH) * n) / (FIELD_HALF_DEPTH * 2),
+    );
     return gx < 0 || gz < 0 || gx >= n || gz >= n
       ? 0
       : this.cells[gz * n + gx]!;

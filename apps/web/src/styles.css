@@ -43,6 +43,26 @@ select {
   border-radius: 16px;
   background: rgba(12, 15, 23, 0.94);
 }
+.lobby-panel--dev {
+  width: min(420px, calc(100vw - 40px));
+}
+.lobby-panel--dev .dev-controls-list {
+  display: grid;
+  gap: 4px;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.lobby-panel--dev .team-color-row {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+.lobby-panel--dev .team-color-swatches button {
+  width: 18px;
+  height: 18px;
+}
+.lobby-panel--dev .team-color-swatches {
+  gap: 4px;
+}
 .lobby-panel h2,
 .lobby-panel p {
   margin: 0;

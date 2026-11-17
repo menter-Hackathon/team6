@@ -1,5 +1,6 @@
 import {
-  FIELD_HALF_SIZE,
+  FIELD_HALF_WIDTH,
+  FIELD_HALF_DEPTH,
   PAINT_GRID_SIZE,
   paintDisks,
   specialOutline,
@@ -15,13 +16,14 @@ export function bleedSpecialPaint(
 ): { left: number; top: number; right: number; bottom: number } | undefined {
   const disk = paintDisks(stroke)[0];
   if (!disk?.outlineShape) return;
-  const scale = PAINT_GRID_SIZE / (FIELD_HALF_SIZE * 2),
+  const scaleX = PAINT_GRID_SIZE / (FIELD_HALF_WIDTH * 2),
+    scaleZ = PAINT_GRID_SIZE / (FIELD_HALF_DEPTH * 2),
     rotation = disk.rotation ?? 0,
     c = Math.cos(rotation),
     s = Math.sin(rotation);
   const points = specialOutline(disk.outlineShape).map((p) => ({
-    x: (disk.x + FIELD_HALF_SIZE + (p.x * c - p.z * s) * disk.radius) * scale,
-    y: (disk.z + FIELD_HALF_SIZE + (p.x * s + p.z * c) * disk.radius) * scale,
+    x: (disk.x + FIELD_HALF_WIDTH + (p.x * c - p.z * s) * disk.radius) * scaleX,
+    y: (disk.z + FIELD_HALF_DEPTH + (p.x * s + p.z * c) * disk.radius) * scaleZ,
   }));
   const margin = 32,
     n = PAINT_GRID_SIZE;

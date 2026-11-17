@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  FIELD_HALF_SIZE,
+  FIELD_HALF_WIDTH,
+  FIELD_HALF_DEPTH,
   INK_SCALE,
   INK_SPLAT_SCALE,
   PLAYER_SIZE,
@@ -35,7 +36,7 @@ describe("INK/PLAY paint geometry", () => {
     expect(paintDisks(stroke)).toEqual(paintDisks({ ...stroke }));
     let count = 0;
     rasterizePaintStroke(
-      { ...stroke, x: FIELD_HALF_SIZE, z: FIELD_HALF_SIZE },
+      { ...stroke, x: FIELD_HALF_WIDTH, z: FIELD_HALF_DEPTH },
       (x, y) => {
         expect(
           x >= 0 && x < PAINT_GRID_SIZE && y >= 0 && y < PAINT_GRID_SIZE,
@@ -68,11 +69,11 @@ describe("continuous walking trails", () => {
     const at = (x: number, z: number) =>
       cells[
         Math.floor(
-          ((z + FIELD_HALF_SIZE) * PAINT_GRID_SIZE) / (FIELD_HALF_SIZE * 2),
+          ((z + FIELD_HALF_DEPTH) * PAINT_GRID_SIZE) / (FIELD_HALF_DEPTH * 2),
         ) *
           PAINT_GRID_SIZE +
           Math.floor(
-            ((x + FIELD_HALF_SIZE) * PAINT_GRID_SIZE) / (FIELD_HALF_SIZE * 2),
+            ((x + FIELD_HALF_WIDTH) * PAINT_GRID_SIZE) / (FIELD_HALF_WIDTH * 2),
           )
       ];
     for (let x = 0; x <= 1; x += 0.025) expect(at(x, 0)).toBe(1);

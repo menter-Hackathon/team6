@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  FIELD_HALF_SIZE,
+  FIELD_HALF_WIDTH,
+  FIELD_HALF_DEPTH,
   INK_SCALE,
   PAINT_GRID_SIZE,
   SPECIAL_RADIUS,
@@ -26,13 +27,13 @@ function painted(shape: "star" | "heart") {
   return (x: number, z: number) =>
     cells[
       Math.floor(
-        ((z * scale + FIELD_HALF_SIZE) * PAINT_GRID_SIZE) /
-          (FIELD_HALF_SIZE * 2),
+        ((z * scale + FIELD_HALF_DEPTH) * PAINT_GRID_SIZE) /
+          (FIELD_HALF_DEPTH * 2),
       ) *
         PAINT_GRID_SIZE +
         Math.floor(
-          ((x * scale + FIELD_HALF_SIZE) * PAINT_GRID_SIZE) /
-            (FIELD_HALF_SIZE * 2),
+          ((x * scale + FIELD_HALF_WIDTH) * PAINT_GRID_SIZE) /
+            (FIELD_HALF_WIDTH * 2),
         )
     ] === 1;
 }

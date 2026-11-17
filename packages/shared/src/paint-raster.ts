@@ -1,5 +1,6 @@
 import {
-  FIELD_HALF_SIZE,
+  FIELD_HALF_WIDTH,
+  FIELD_HALF_DEPTH,
   INK_SCALE,
   SPECIAL_RADIUS,
   specialOutline,
@@ -146,12 +147,12 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
     const inkDx = -dx;
     const center = {
       x: Math.max(
-        -FIELD_HALF_SIZE + 0.8,
-        Math.min(FIELD_HALF_SIZE - 0.8, stroke.x + inkDx * 4.5),
+        -FIELD_HALF_WIDTH + 0.8,
+        Math.min(FIELD_HALF_WIDTH - 0.8, stroke.x + inkDx * 4.5),
       ),
       z: Math.max(
-        -FIELD_HALF_SIZE + 0.8,
-        Math.min(FIELD_HALF_SIZE - 0.8, stroke.z + dz * 4.5),
+        -FIELD_HALF_DEPTH + 0.8,
+        Math.min(FIELD_HALF_DEPTH - 0.8, stroke.z + dz * 4.5),
       ),
     };
     disks.push({ ...center, radius: 0.9, organic: true });
@@ -187,18 +188,20 @@ export function rasterizePaintStroke(
   put: (x: number, y: number) => void,
 ): void {
   const n = PAINT_GRID_SIZE,
-    scale = n / (FIELD_HALF_SIZE * 2);
+    scaleX = n / (FIELD_HALF_WIDTH * 2),
+    scaleZ = n / (FIELD_HALF_DEPTH * 2);
   for (const disk of paintDisks(stroke)) {
-    const x = (disk.x + FIELD_HALF_SIZE) * scale,
-      y = (disk.z + FIELD_HALF_SIZE) * scale,
-      r = disk.radius * scale;
+    const x = (disk.x + FIELD_HALF_WIDTH) * scaleX,
+      y = (disk.z + FIELD_HALF_DEPTH) * scaleZ,
+      rx = disk.radius * scaleX,
+      rz = disk.radius * scaleZ;
     if (disk.outlineShape) {
       const angle = disk.rotation ?? 0,
         c = Math.cos(angle),
         sn = Math.sin(angle);
       const points = specialOutline(disk.outlineShape).map((p) => ({
-        x: x + (p.x * c - p.z * sn) * r,
-        y: y + (p.x * sn + p.z * c) * r,
+        x: x + (p.x * c - p.z * sn) * rx,
+        y: y + (p.x * sn + p.z * c) * rz,
       }));
       const top = Math.max(0, Math.floor(Math.min(...points.map((p) => p.y)))),
         bottom = Math.min(
@@ -222,18 +225,20 @@ export function rasterizePaintStroke(
       }
       continue;
     }
-    const left = Math.max(0, Math.floor(x - r)),
-      right = Math.min(n - 1, Math.ceil(x + r));
+    const left = Math.max(0, Math.floor(x - rx)),
+      right = Math.min(n - 1, Math.ceil(x + rx));
     for (
-      let yy = Math.max(0, Math.floor(y - r));
-      yy <= Math.min(n - 1, Math.ceil(y + r));
+      let yy = Math.max(0, Math.floor(y - rz));
+      yy <= Math.min(n - 1, Math.ceil(y + rz));
       yy++
     ) {
       for (let xx = left; xx <= right; xx++) {
+        const dx = (xx - x) / scaleX;
+        const dz = (yy - y) / scaleZ;
         const radius = disk.organic
-          ? r * inkOutlineRadius(Math.atan2(yy - y, xx - x))
-          : r;
-        if ((xx - x) ** 2 + (yy - y) ** 2 <= radius * radius) put(xx, yy);
+          ? disk.radius * inkOutlineRadius(Math.atan2(dz, dx))
+          : disk.radius;
+        if (dx ** 2 + dz ** 2 <= radius * radius) put(xx, yy);
       }
     }
   }
