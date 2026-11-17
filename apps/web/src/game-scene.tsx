@@ -1,4 +1,4 @@
-import { Grid } from "@react-three/drei";
+import { Grid, Html } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { Room } from "@colyseus/sdk";
 import {
@@ -340,6 +340,7 @@ export function GameScene({
         <Player
           key={playerId}
           playerId={playerId}
+          displayName={roomRef.current?.state.players.get(playerId)?.displayName ?? ""}
           local={playerId === localId}
           roomRef={roomRef}
           controls={controls}
@@ -837,13 +838,14 @@ function Field({
 
 interface PlayerProps {
   playerId: string;
+  displayName: string;
   local: boolean;
   color: string;
   roomRef: MutableRefObject<Room<GameState> | null>;
   controls: MutableRefObject<ControlState>;
 }
 
-function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
+function Player({ playerId, displayName, local, color, roomRef, controls }: PlayerProps) {
   const group = useRef<THREE.Group>(null);
   const predicted = useRef(new THREE.Vector3());
   const appearance = useDiveAppearance();
@@ -934,6 +936,13 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
 
   return (
     <group ref={group}>
+      {displayName && (
+        <Html center position={[0, 1.55, 0]} style={{ pointerEvents: "none" }}>
+          <span className="player-gamertag" style={{ borderColor: color }}>
+            {displayName}
+          </span>
+        </Html>
+      )}
       <mesh ref={appearance.body} castShadow receiveShadow position-y={0.5}>
         <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
         <meshStandardMaterial color={color} roughness={0.45} metalness={0.1} />
