@@ -3,6 +3,7 @@ import { Client, type Room } from "@colyseus/sdk";
 import { Suspense, useEffect, useRef, useState } from "react";
 import {
   GAME_ROOM_NAME,
+  NEON_COLORS,
   STARTABLE_PLAYER_COUNTS,
   TURN_INTRO_MS,
   type SpecialShape,
@@ -14,6 +15,7 @@ import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
 import { TeamSelection } from "./team-selection";
+import { TeamColorPicker } from "./team-color-picker";
 
 type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
 
@@ -27,6 +29,8 @@ const SERVER_URL =
 
 export function App() {
   const [specialShape, setSpecialShape] = useState<SpecialShape>("star");
+  const [devColorA, setDevColorA] = useState<string>(NEON_COLORS[0]!.hex);
+  const [devColorB, setDevColorB] = useState<string>(NEON_COLORS[1]!.hex);
   const [devMode, setDevMode] = useState(() =>
     new URLSearchParams(location.search).has("dev"),
   );
@@ -239,15 +243,25 @@ export function App() {
           </ul>
         </section>
       ) : devMode ? (
-        <section className="lobby-panel">
+        <section className="lobby-panel lobby-panel--dev">
           <h2>開発者用 検証モード</h2>
-          <p>サーバーに接続せず、移動・カメラ・塗りを確認できます。</p>
-          <p>
-            WASD・矢印キーで移動、クリック長押しでインク発射、Shift
-            で潜航、Space でジャンプ、Q・E
-            で塗り分け、フィールドをクリックして視点回転、Esc で解除。
-          </p>
-          <p>座標と向きは左下に表示します。</p>
+          <p>サーバーに接続せずに操作を確認できます。</p>
+          <ul className="dev-controls-list">
+            <li>WASD・矢印キー：移動</li>
+            <li>クリック：視点回転／長押しでインク発射</li>
+            <li>Shift：潜航 / Space：ジャンプ</li>
+            <li>Q・E：塗り分け / Esc：視点回転を解除</li>
+          </ul>
+          <p>座標と向きは画面左下に表示します。</p>
+          <TeamColorPicker
+            colorA={devColorA}
+            colorB={devColorB}
+            editable
+            onSelect={(team, color) => {
+              if (team === "A") setDevColorA(color);
+              else setDevColorB(color);
+            }}
+          />
           <h3>進行ポップアップを確認</h3>
           <div className="popup-preview-buttons">
             {(["lobby", "countdown", "turn", "result"] as const).map(
@@ -289,8 +303,8 @@ export function App() {
               playerIds={devMode ? [] : playerIds}
               devMode={devMode}
               specialShape={specialShape}
-              colorA={gameState?.colorA}
-              colorB={gameState?.colorB}
+              colorA={devMode ? devColorA : gameState?.colorA}
+              colorB={devMode ? devColorB : gameState?.colorB}
             />
           </Suspense>
         </Canvas>
@@ -354,6 +368,8 @@ export function App() {
           <ResultFlow
             scoreA={1240}
             scoreB={980}
+            colorA={devColorA}
+            colorB={devColorB}
             preview
             onClose={() => setPreviewPopup(null)}
           />

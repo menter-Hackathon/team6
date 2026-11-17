@@ -1,5 +1,6 @@
 import {
-  FIELD_HALF_SIZE,
+  FIELD_HALF_WIDTH,
+  FIELD_HALF_DEPTH,
   PLAYER_RADIUS,
   PLAYER_SPEED,
   DIVE_SPEED,
@@ -20,22 +21,17 @@ export function movePlayer(
 ): Position {
   const length = Math.hypot(input.x, input.z);
   const scale = length > 1 ? 1 / length : 1;
-  const limit = FIELD_HALF_SIZE - PLAYER_RADIUS;
+  const xLimit = FIELD_HALF_WIDTH - PLAYER_RADIUS;
+  const zLimit = FIELD_HALF_DEPTH - PLAYER_RADIUS;
 
   return {
     x: Math.max(
-      -limit,
-      Math.min(
-        limit,
-        position.x + input.x * scale * speed * deltaSeconds,
-      ),
+      -xLimit,
+      Math.min(xLimit, position.x + input.x * scale * speed * deltaSeconds),
     ),
     z: Math.max(
-      -limit,
-      Math.min(
-        limit,
-        position.z + input.z * scale * speed * deltaSeconds,
-      ),
+      -zLimit,
+      Math.min(zLimit, position.z + input.z * scale * speed * deltaSeconds),
     ),
   };
 }

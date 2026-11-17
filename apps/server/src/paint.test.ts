@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { PaintField } from "./paint.js";
 import {
+  FIELD_HALF_DEPTH,
   PAINT_GRID_SIZE,
   isFootprintOwned,
   rasterizePaintStroke,
 } from "@gaya/shared";
 
 describe("PaintField", () => {
+  it("maps paint near the far end of the rectangular field", () => {
+    const field = new PaintField();
+    field.apply({ revision: 1, x: 0, z: 20, yaw: 0, team: "A", kind: "ring" });
+    expect(field.ownerAt(0, 20)).toBe(1);
+    expect(field.ownerAt(0, -20)).toBe(0);
+    expect(field.ownerAt(0, FIELD_HALF_DEPTH)).toBe(0);
+  });
   it("requires the entire player footprint to be owned", () => {
     const field = new PaintField();
     field.apply({ revision: 1, x: 0, z: 0, yaw: 0, team: "A", kind: "ring" });
