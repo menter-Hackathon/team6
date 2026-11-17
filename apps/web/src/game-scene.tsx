@@ -96,6 +96,7 @@ export function GameScene({
     window.addEventListener("activate-special", activateSpecial);
     const onKeyDown = (event: KeyboardEvent) => {
       if (
+        !document.pointerLockElement &&
         event.target instanceof HTMLElement &&
         (event.target.isContentEditable ||
           /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(event.target.tagName))
@@ -127,9 +128,15 @@ export function GameScene({
         return;
       }
       if (
-        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(
-          event.code,
-        )
+        [
+          "ArrowUp",
+          "ArrowDown",
+          "ArrowLeft",
+          "ArrowRight",
+          "Space",
+          "ShiftLeft",
+          "ShiftRight",
+        ].includes(event.code)
       )
         event.preventDefault();
       if (
@@ -190,6 +197,8 @@ export function GameScene({
           roomRef.current?.state.phase === "playing" ||
           roomRef.current?.state.phase === "lobby")
       ) {
+        if (document.activeElement instanceof HTMLElement)
+          document.activeElement.blur();
         void event.target.requestPointerLock().catch(() => {
           /* Drag-to-aim remains available if pointer lock is unavailable. */
         });
