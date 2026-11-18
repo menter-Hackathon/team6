@@ -11,6 +11,7 @@ import {
 } from "./dev-obstacle-paint";
 import { INK_SCALE } from "@gaya/shared";
 import { InkEffects } from "./ink-effects";
+import { INK_GLOSS, makeInkRelief, useInkEnvironment } from "./ink-material";
 import {
   BOX_WIDTH as W,
   BOX_DEPTH as D,
@@ -38,11 +39,13 @@ const faces = [
   },
   { size: [W, D], position: [0, H + 0.004, 0], rotation: [-Math.PI / 2, 0, 0] },
 ] as const;
+const SURFACE_SIZE = 256;
+const wallInkRelief = makeInkRelief(SURFACE_SIZE);
 function makeSurfaces() {
   return DEV_OBSTACLES.map(() =>
     faces.map(() => {
       const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = 256;
+      canvas.width = canvas.height = SURFACE_SIZE;
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
       return { canvas, texture };
@@ -62,6 +65,8 @@ export function DevObstacles({
   options.current = { colorA, colorB, canPaint };
   const surfaces = useMemo(makeSurfaces, []);
   const effects = useMemo(() => new InkEffects(), []);
+  const inkEnvironment = useInkEnvironment();
+  useEffect(() => effects.setEnvironment(inkEnvironment), [effects, inkEnvironment]);
   const pending = useMemo(
     () =>
       [] as {
@@ -320,12 +325,13 @@ export function DevObstacles({
               receiveShadow
             >
               <planeGeometry args={[...face.size]} />
-              <meshStandardMaterial
+              <meshPhysicalMaterial
                 map={surfaces[index]![f]!.texture}
                 transparent
                 depthWrite={false}
-                roughness={0.13}
-                metalness={0.04}
+                {...INK_GLOSS}
+                envMap={inkEnvironment}
+                onBeforeCompile={wallInkRelief}
               />
             </mesh>
           ))}
