@@ -7,7 +7,6 @@ import {
   PAINT_GRID_SIZE,
   countPaintedCells,
   STARTABLE_PLAYER_COUNTS,
-  TOPIC_THINKING_SECONDS,
   TURN_INTRO_MS,
   type SpecialShape,
 } from "@gaya/shared";
@@ -60,9 +59,6 @@ export function App() {
   const [previewPopup, setPreviewPopup] = useState<PopupScene | null>(null);
   const [previewReady, setPreviewReady] = useState(false);
   const [showTopicPopup, setShowTopicPopup] = useState(true);
-  const [thinkingEndsAt, setThinkingEndsAt] = useState(
-    () => Date.now() + TOPIC_THINKING_SECONDS * 1000,
-  );
 
   const connect = async (create: boolean) => {
     if (!SERVER_URL) {
@@ -89,7 +85,6 @@ export function App() {
       });
       roomRef.current = joinedRoom;
       setRoomCode(joinedRoom.roomId);
-      setThinkingEndsAt(Date.now() + TOPIC_THINKING_SECONDS * 1000);
       setShowTopicPopup(true);
       const url = new URL(location.href);
       url.searchParams.delete("room");
@@ -287,11 +282,6 @@ export function App() {
                 <button
                   key={scene}
                   onClick={() => {
-                    if (scene === "lobby") {
-                      setThinkingEndsAt(
-                        Date.now() + TOPIC_THINKING_SECONDS * 1000,
-                      );
-                    }
                     if (scene === "result") {
                       const cells =
                         devPaintCells.current?.slice() ??
@@ -414,7 +404,6 @@ export function App() {
             <ProgressionPopup
               scene={previewPopup}
               preview
-              thinkingEndsAt={thinkingEndsAt}
               players={[
                 { displayName: "あなた", ready: previewReady },
                 { displayName: "メンターA", ready: true },
@@ -436,7 +425,6 @@ export function App() {
             ready
             readyCount={4}
             canStart
-            onOpenTopicPopup={() => setPreviewReady(false)}
             onReady={() => setPreviewReady(false)}
             onStart={() => setPreviewPopup("countdown")}
             onClose={() => setPreviewPopup(null)}
@@ -449,7 +437,6 @@ export function App() {
             <ProgressionPopup
               scene="lobby"
               roomCode={roomCode}
-              thinkingEndsAt={thinkingEndsAt}
               players={players.map((player) => ({
                 displayName: player.displayName,
                 ready: player.ready,
@@ -484,7 +471,6 @@ export function App() {
               onPracticeColorSelect={(color) =>
                 roomRef.current?.send("practice-color", color)
               }
-              onOpenTopicPopup={() => setShowTopicPopup(true)}
               ready={localPlayer?.ready ?? false}
               readyCount={players.filter((player) => player.ready).length}
               onReady={() => {

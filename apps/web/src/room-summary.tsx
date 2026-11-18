@@ -7,7 +7,6 @@ interface RoomSummaryProps {
   canStart?: boolean;
   onStart?: () => void;
   onClose?: () => void;
-  onOpenTopicPopup?: () => void;
   practiceColor?: string;
   onPracticeColorSelect?: (color: string) => void;
   ready?: boolean;
@@ -21,7 +20,6 @@ export function RoomSummary({
   canStart = false,
   onStart,
   onClose,
-  onOpenTopicPopup,
   practiceColor = "#ff4f8b",
   onPracticeColorSelect,
   ready = false,
@@ -77,23 +75,14 @@ export function RoomSummary({
         color={practiceColor}
         onSelect={onPracticeColorSelect}
       />
-      {onOpenTopicPopup && (
-        <button
-          type="button"
-          className="room-summary-topic-button"
-          onClick={onOpenTopicPopup}
-        >
-          話題のヒントを見る
-        </button>
-      )}
       {onReady && (
         <button
           className="room-summary-ready"
           onClick={onReady}
-          aria-label={ready ? "準備を取り消す" : "話題が決まった！（準備OK）"}
+          aria-label={ready ? "準備を取り消す" : "準備OKにする"}
           aria-pressed={ready}
         >
-          <span>{ready ? "準備完了 ✓" : "話題が決まった！（準備OK）"}</span>
+          <span>{ready ? "準備完了 ✓" : "準備OKにする"}</span>
           <span className="room-summary-ready-count">
             {readyCount}/{names.length}人
           </span>

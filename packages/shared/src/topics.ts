@@ -1,5 +1,3 @@
-export const TOPIC_THINKING_SECONDS = 60;
-
 export const PRESENTATION_TOPICS = [
   "最近やらかした大失敗",
   "実は人生で一番恥ずかしかった瞬間",

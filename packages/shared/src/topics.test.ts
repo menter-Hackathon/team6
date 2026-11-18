@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   PRESENTATION_TOPICS,
-  TOPIC_THINKING_SECONDS,
   createTopicDeck,
   drawNextTopic,
   pickRandomTopics,
 } from "./index.js";
 
 describe("presentation topics", () => {
-  it("defines a 60-second thinking timer and unique topics", () => {
-    expect(TOPIC_THINKING_SECONDS).toBe(60);
+  it("defines a non-empty list of unique topics", () => {
     expect(PRESENTATION_TOPICS.length).toBeGreaterThanOrEqual(8);
     expect(new Set(PRESENTATION_TOPICS).size).toBe(PRESENTATION_TOPICS.length);
   });
