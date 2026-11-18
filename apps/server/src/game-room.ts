@@ -91,6 +91,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         x: player.x,
         z: player.z,
         yaw: player.yaw,
+        ...(parsed.data.kind === "ink" ? { pitch: parsed.data.pitch ?? 0 } : {}),
         team: player.team === "B" ? "B" : "A",
         ...(practice ? { practiceColor: player.practiceColor } : {}),
         kind: parsed.data.kind,

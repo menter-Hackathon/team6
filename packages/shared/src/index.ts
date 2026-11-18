@@ -101,6 +101,7 @@ export const paintKindSchema = z.enum([
 ]);
 export const paintRequestSchema = z.object({
   kind: paintKindSchema.exclude(["footprint", "slam"]),
+  pitch: z.number().finite().min(-Math.PI / 3).max(Math.PI / 3).optional(),
 });
 export const specialShapeSchema = z.enum(["ink", "star", "heart"]);
 export type SpecialShape = z.infer<typeof specialShapeSchema>;
@@ -116,6 +117,8 @@ export type PaintStroke = {
   x: number;
   z: number;
   yaw: number;
+  /** Vertical aim in radians; omitted by older clients. */
+  pitch?: number;
   team: "A" | "B";
   /** Lobby-only palette color; match strokes use the assigned team. */
   practiceColor?: string;
@@ -131,6 +134,8 @@ export { isFootprintOwned } from "./paint-ownership.js";
 
 export {
   paintDisks,
+  inkFlight,
+  inkTravelTime,
   inkOutlineRadius,
   type PaintDisk,
 } from "./paint-raster.js";

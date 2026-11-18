@@ -43,6 +43,7 @@ import type { GameState } from "./game-types";
 
 import {
   rotateYaw,
+  rotatePitch,
   toModelRotation,
   toWorldDirection,
 } from "./input-direction";
@@ -72,6 +73,7 @@ interface ControlState {
   jumpTime: number;
   specialShape: SpecialShape;
   yaw: number;
+  pitch: number;
   height: number;
   position: { x: number; z: number };
   sequence: number;
@@ -113,6 +115,7 @@ export function GameScene({
     jumpTime: -1,
     specialShape: "star",
     yaw: 0,
+    pitch: -0.45,
     height: 0,
     position: { x: 0, z: 0 },
     sequence: 0,
@@ -232,6 +235,7 @@ export function GameScene({
     const onMouseMove = (event: MouseEvent) => {
       if (document.pointerLockElement || controls.current.firing) {
         controls.current.yaw = rotateYaw(controls.current.yaw, event.movementX);
+        controls.current.pitch = rotatePitch(controls.current.pitch, event.movementY);
       }
     };
     const onClick = (event: MouseEvent) => {
@@ -342,12 +346,13 @@ export function GameScene({
             yaw: control.yaw,
             team: activeDevTeam.current,
             kind: "ink",
+            pitch: control.pitch,
             areaMultiplier: activeDevAreaMultiplier.current,
           } satisfies PaintStroke,
         }),
       );
     else if (roomRef.current?.state.phase === "playing" || roomRef.current?.state.phase === "lobby")
-      roomRef.current.send("paint", { kind: "ink" });
+      roomRef.current.send("paint", { kind: "ink", pitch: control.pitch });
   });
 
   const localId = roomRef.current?.sessionId;
@@ -478,6 +483,18 @@ function useDiveAppearance() {
   return { body, ripple, update };
 }
 
+function orbitPlayer(camera: THREE.Camera, position: THREE.Vector3, yaw: number, pitch: number) {
+  const centerY = position.y + PLAYER_SIZE / 2;
+  const radius = 6.5;
+  const horizontal = Math.cos(pitch) * radius;
+  camera.position.set(
+    position.x + Math.sin(yaw) * horizontal,
+    centerY - Math.sin(pitch) * radius,
+    position.z - Math.cos(yaw) * horizontal,
+  );
+  camera.lookAt(position.x, centerY, position.z);
+}
+
 function DevPlayer({
   controls,
   ownPaint,
@@ -520,6 +537,7 @@ function DevPlayer({
       controls.current.position = { x: 4, z: 6.5 };
       controls.current.height = 0;
       controls.current.yaw = 0;
+      controls.current.pitch = -0.45;
       controls.current.keys.clear();
       controls.current.firing = false;
       controls.current.jumpTime = -1;
@@ -558,12 +576,7 @@ function DevPlayer({
       object.position.y = 0;
       controls.current.position = { x: object.position.x, z: object.position.z };
       const yaw = controls.current.yaw;
-      camera.position.set(
-        object.position.x + Math.sin(yaw) * 6,
-        3.7,
-        object.position.z - Math.cos(yaw) * 6,
-      );
-      camera.lookAt(object.position.x, 1.1, object.position.z);
+      orbitPlayer(camera, object.position, yaw, controls.current.pitch);
       return;
     }
     const previousY = object.position.y;
@@ -800,19 +813,7 @@ function DevPlayer({
     }
     controls.current.position = { x: object.position.x, z: object.position.z };
     const yaw = controls.current.yaw;
-    camera.position.lerp(
-      new THREE.Vector3(
-        object.position.x + Math.sin(yaw) * 6,
-        3.7 + object.position.y,
-        object.position.z - Math.cos(yaw) * 6,
-      ),
-      1 - Math.exp(-delta * 8),
-    );
-    camera.lookAt(
-      object.position.x,
-      1.1 + object.position.y,
-      object.position.z,
-    );
+    orbitPlayer(camera, object.position, yaw, controls.current.pitch);
     const readout = document.getElementById("dev-readout");
     if (readout)
       readout.textContent = `状態 ${climbingWall.current ? "壁面潜航 ↑" : nowSubmerged ? "潜航 ×1.5" : "通常"} / 高さ ${object.position.y.toFixed(1)} / X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
@@ -1116,6 +1117,19 @@ function Field({
           metalness={0.05}
         />
       </mesh>
+      {/* The underside is visible only to a camera below the floor. */}
+      <mesh rotation-x={-Math.PI / 2} position-y={-0.25}>
+        <planeGeometry args={[200, 200]} />
+        <meshBasicMaterial color="#e0e3da" side={THREE.BackSide} transparent opacity={0.12} depthWrite={false} />
+      </mesh>
+      <mesh rotation-x={-Math.PI / 2}>
+        <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
+        <meshBasicMaterial color="#f7f8ee" side={THREE.BackSide} transparent opacity={0.2} depthWrite={false} />
+      </mesh>
+      <mesh rotation-x={-Math.PI / 2} position-y={0.018}>
+        <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
+        <meshBasicMaterial map={texture} side={THREE.BackSide} transparent opacity={0.3} depthWrite={false} />
+      </mesh>
       <Grid
         position={[0, 0.012, 0]}
         args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]}
@@ -1173,7 +1187,6 @@ function Player({
   const initialized = useRef(false);
   const previousPhase = useRef<string | undefined>(undefined);
   const { camera } = useThree();
-  const cameraOffset = useMemo(() => new THREE.Vector3(), []);
   const cameraTarget = useMemo(() => new THREE.Vector3(), []);
 
   useFrame((_, delta) => {
@@ -1240,16 +1253,7 @@ function Player({
         z: object.position.z,
       };
       const yaw = controls.current.yaw;
-      cameraOffset.set(Math.sin(yaw) * 6, 3.7, -Math.cos(yaw) * 6);
-      camera.position.lerp(
-        cameraTarget.copy(object.position).add(cameraOffset),
-        1 - Math.exp(-delta * 8),
-      );
-      camera.lookAt(
-        object.position.x,
-        1.1 + object.position.y,
-        object.position.z,
-      );
+      orbitPlayer(camera, object.position, yaw, controls.current.pitch);
     } else {
       cameraTarget.set(player.x, 0, player.z);
       object.position.lerp(cameraTarget, 1 - Math.exp(-delta * 10));
