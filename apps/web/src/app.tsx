@@ -15,6 +15,7 @@ import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
 import { TeamSelection } from "./team-selection";
+import { TranscriptionPanel } from "./speech/transcription-panel";
 import { TeamColorPicker } from "./team-color-picker";
 
 type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
@@ -150,6 +151,7 @@ export function App() {
           <p className="eyebrow">STRUCTURE TEST / 3D FOUNDATION</p>
           <h1>ガヤでスプラトゥーン</h1>
         </div>
+        <TranscriptionPanel />
         <button onClick={toggleDevMode}>
           {devMode ? "検証モードを終了" : "操作を検証"}
         </button>
