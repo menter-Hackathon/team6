@@ -47,6 +47,10 @@ export function jumpHeight(time: number): number {
   return JUMP_HEIGHT * Math.sin((Math.PI * time) / JUMP_DURATION);
 }
 export const PRESENTATION_SECONDS = 30;
+export const TALK_DURATION_OPTIONS = [10, 20, 30, 40, 50, 60] as const;
+export const talkDurationSchema = z.number().int().refine(
+  (seconds) => TALK_DURATION_OPTIONS.some((option) => option === seconds),
+);
 export const GAME_START_COUNTDOWN_SECONDS = 7;
 export const TURN_INTRO_MS = 2650;
 export const STARTABLE_PLAYER_COUNTS = [4, 6, 8] as const;

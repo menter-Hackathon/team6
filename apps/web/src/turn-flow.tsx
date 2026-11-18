@@ -7,6 +7,7 @@ interface TurnFlowProps {
   turnNumber: number;
   turnCount: number;
   endsAt: number;
+  talkDuration?: number;
   preview?: boolean;
   onClose?: () => void;
 }
@@ -17,11 +18,12 @@ export function TurnFlow({
   turnNumber,
   turnCount,
   endsAt,
+  talkDuration = PRESENTATION_SECONDS,
   preview = false,
   onClose,
 }: TurnFlowProps) {
   const [stage, setStage] = useState<"next" | "presentation" | "timer">("next");
-  const [remaining, setRemaining] = useState(PRESENTATION_SECONDS);
+  const [remaining, setRemaining] = useState(talkDuration);
 
   useEffect(() => {
     const presentationTimer = window.setTimeout(
@@ -39,7 +41,7 @@ export function TurnFlow({
           Math.max(
             0,
             Math.min(
-              PRESENTATION_SECONDS,
+              talkDuration,
               Math.ceil((endsAt - Date.now()) / 1000),
             ),
           ),
@@ -51,7 +53,7 @@ export function TurnFlow({
       window.clearTimeout(moveTimer);
       window.clearInterval(clock);
     };
-  }, [endsAt]);
+  }, [endsAt, talkDuration]);
 
   return (
     <>
@@ -95,7 +97,7 @@ export function TurnFlow({
               aria-hidden={stage === "next"}
             >
               {isYourTurn
-                ? "30秒で話してみよう！"
+                ? `${talkDuration}秒で話してみよう！`
                 : "ガヤを入れて盛り上げよう！"}
             </p>
           </section>

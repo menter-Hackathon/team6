@@ -47,10 +47,12 @@ export function DevMatchFlow({
   const [endsAt, setEndsAt] = useState(0);
   const [resultCells, setResultCells] = useState<Uint8Array | null>(null);
   const [showLobby, setShowLobby] = useState(true);
+  const [teamOffset, setTeamOffset] = useState(0);
+  const [talkDuration, setTalkDuration] = useState(PRESENTATION_SECONDS);
   const players = Array.from({ length: count }, (_, index) => ({
     id: index === 0 ? "you" : `com-${index}`,
     displayName: index === 0 ? "あなた" : `COM ${index}`,
-    team: (index % 2 === 0 ? "A" : "B") as "A" | "B",
+    team: ((index + teamOffset) % 2 === 0 ? "A" : "B") as "A" | "B",
     ready: index === 0 ? ready : true,
   }));
 
@@ -70,11 +72,11 @@ export function DevMatchFlow({
     if (phase !== "countdown") return;
     const timer = window.setTimeout(() => {
       setTurnIndex(0);
-      setEndsAt(Date.now() + TURN_INTRO_MS + PRESENTATION_SECONDS * 1000);
+      setEndsAt(Date.now() + TURN_INTRO_MS + talkDuration * 1000);
       setPhase("playing");
     }, GAME_START_COUNTDOWN_SECONDS * 1000);
     return () => window.clearTimeout(timer);
-  }, [phase]);
+  }, [phase, talkDuration]);
 
   useEffect(() => {
     if (phase !== "playing") return;
@@ -87,13 +89,13 @@ export function DevMatchFlow({
           setPhase("result");
         } else {
           setTurnIndex(turnIndex + 1);
-          setEndsAt(Date.now() + TURN_INTRO_MS + PRESENTATION_SECONDS * 1000);
+          setEndsAt(Date.now() + TURN_INTRO_MS + talkDuration * 1000);
         }
       },
       Math.max(0, endsAt - Date.now()),
     );
     return () => window.clearTimeout(timer);
-  }, [phase, turnIndex, endsAt, count, cells]);
+  }, [phase, turnIndex, endsAt, count, cells, talkDuration]);
 
   const nextTurn = () => {
     if (turnIndex + 1 >= count) {
@@ -103,7 +105,7 @@ export function DevMatchFlow({
       setPhase("result");
     } else {
       setTurnIndex(turnIndex + 1);
-      setEndsAt(Date.now() + TURN_INTRO_MS + PRESENTATION_SECONDS * 1000);
+      setEndsAt(Date.now() + TURN_INTRO_MS + talkDuration * 1000);
     }
   };
 
@@ -193,7 +195,10 @@ export function DevMatchFlow({
           colorA={colorA}
           colorB={colorB}
           isHost
+          talkDuration={talkDuration}
+          onTalkDurationSelect={setTalkDuration}
           onColorSelect={onColorSelect}
+          onReshuffle={() => setTeamOffset((value) => value + 1)}
           onStart={startMatch}
         />
       )}
@@ -206,6 +211,7 @@ export function DevMatchFlow({
           turnNumber={turnIndex + 1}
           turnCount={count}
           endsAt={endsAt}
+          talkDuration={talkDuration}
         />
       )}
       {phase === "result" && resultCells && (

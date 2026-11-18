@@ -560,9 +560,12 @@ export function App() {
               colorA={gameState.colorA}
               colorB={gameState.colorB}
               isHost={gameState.hostId === roomRef.current?.sessionId}
+              talkDuration={gameState.talkDuration}
+              onTalkDurationSelect={(seconds) => roomRef.current?.send("talk-duration", seconds)}
               onColorSelect={(team, color) =>
                 roomRef.current?.send("team-color", { team, color })
               }
+              onReshuffle={() => roomRef.current?.send("reshuffle-teams")}
               onStart={() => roomRef.current?.send("start")}
             />
           )}
@@ -590,6 +593,7 @@ export function App() {
               turnNumber={gameState.turnIndex}
               turnCount={gameState.speakerOrder.length}
               endsAt={gameState.turnEndsAt}
+              talkDuration={gameState.talkDuration}
             />
           )}
         {!devMode &&
