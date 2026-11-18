@@ -6,6 +6,8 @@ import {
   NEON_COLORS,
   STARTABLE_PLAYER_COUNTS,
   TURN_INTRO_MS,
+  createTopicDeck,
+  drawNextTopic,
   type SpecialShape,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
@@ -53,6 +55,18 @@ export function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [previewPopup, setPreviewPopup] = useState<PopupScene | null>(null);
   const [previewReady, setPreviewReady] = useState(false);
+  const previewDeckRef = useRef<string[]>(createTopicDeck());
+  const [previewTopic, setPreviewTopic] = useState(() => {
+    const initial = drawNextTopic(previewDeckRef.current);
+    previewDeckRef.current = initial.remainingDeck;
+    return initial.topic;
+  });
+
+  const rerollPreviewTopic = () => {
+    const next = drawNextTopic(previewDeckRef.current, previewTopic);
+    previewDeckRef.current = next.remainingDeck;
+    setPreviewTopic(next.topic);
+  };
 
   const connect = async (create: boolean) => {
     if (!SERVER_URL) {
@@ -232,6 +246,9 @@ export function App() {
             {gameState?.phase === "playing" &&
               `· 発表 ${gameState.turnIndex}/${gameState.speakerOrder.length}`}
           </p>
+          {gameState?.phase === "playing" && gameState.currentTopic && (
+            <p>お題: {gameState.currentTopic}</p>
+          )}
           <ul>
             {players.map((player) => (
               <li key={player.id}>
@@ -269,6 +286,7 @@ export function App() {
                 <button
                   key={scene}
                   onClick={() => {
+                    if (scene === "turn") rerollPreviewTopic();
                     setPreviewPopup(scene);
                     setPreviewReady(false);
                   }}
@@ -360,6 +378,8 @@ export function App() {
             turnNumber={1}
             turnCount={4}
             endsAt={Date.now() + TURN_INTRO_MS + 30_000}
+            topic={previewTopic}
+            onRerollTopic={rerollPreviewTopic}
             preview
             onClose={() => setPreviewPopup(null)}
           />
@@ -464,6 +484,8 @@ export function App() {
               turnNumber={gameState.turnIndex}
               turnCount={gameState.speakerOrder.length}
               endsAt={gameState.turnEndsAt}
+              topic={gameState.currentTopic}
+              onRerollTopic={() => roomRef.current?.send("reroll-topic")}
             />
           )}
         {!devMode &&

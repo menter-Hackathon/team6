@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { PRESENTATION_SECONDS, TURN_INTRO_MS } from "@gaya/shared";
+import {
+  PRESENTATION_SECONDS,
+  PRESENTATION_TOPICS,
+  TURN_INTRO_MS,
+} from "@gaya/shared";
 
 interface TurnFlowProps {
   speakerName: string;
@@ -7,7 +11,9 @@ interface TurnFlowProps {
   turnNumber: number;
   turnCount: number;
   endsAt: number;
+  topic?: string;
   preview?: boolean;
+  onRerollTopic?: () => void;
   onClose?: () => void;
 }
 
@@ -17,11 +23,14 @@ export function TurnFlow({
   turnNumber,
   turnCount,
   endsAt,
+  topic,
   preview = false,
+  onRerollTopic,
   onClose,
 }: TurnFlowProps) {
   const [stage, setStage] = useState<"next" | "presentation" | "timer">("next");
   const [remaining, setRemaining] = useState(PRESENTATION_SECONDS);
+  const activeTopic = topic?.trim() || PRESENTATION_TOPICS[0];
 
   useEffect(() => {
     const presentationTimer = window.setTimeout(
@@ -84,6 +93,13 @@ export function TurnFlow({
                 : `次は${speakerName}さんのターン`}
             </h2>
             <div
+              className={`turn-topic-card${stage === "presentation" ? " turn-presentation-enter" : ""}`}
+              aria-hidden={stage === "next"}
+            >
+              <span className="turn-topic-label">TOPIC / トークテーマ</span>
+              <p className="turn-topic-text">「{activeTopic}」</p>
+            </div>
+            <div
               className={`turn-intro-time${stage === "presentation" ? " turn-presentation-enter" : ""}`}
               aria-hidden={stage === "next"}
             >
@@ -95,8 +111,8 @@ export function TurnFlow({
               aria-hidden={stage === "next"}
             >
               {isYourTurn
-                ? "30秒で話してみよう！"
-                : "ガヤを入れて盛り上げよう！"}
+                ? "お題に沿って30秒で話してみよう！"
+                : "話を聞いてガヤで盛り上げよう！"}
             </p>
           </section>
         </div>
@@ -114,8 +130,23 @@ export function TurnFlow({
             {remaining}
             <small>秒</small>
           </strong>
+          <div className="turn-timer-topic" aria-label="現在のお題">
+            <span className="turn-timer-topic-label">お題</span>
+            <p className="turn-timer-topic-text">{activeTopic}</p>
+          </div>
+          {isYourTurn && onRerollTopic && (
+            <button
+              type="button"
+              className="turn-topic-reroll"
+              onClick={onRerollTopic}
+            >
+              別のお題にする
+            </button>
+          )}
           {preview && (
             <button
+              type="button"
+              className="turn-timer-close"
               onClick={onClose}
               aria-label="発表ターンのプレビューを閉じる"
             >

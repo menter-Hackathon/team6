@@ -1007,9 +1007,32 @@ kbd {
   align-items: center;
   justify-content: center;
 }
+.progression-turn-popup--next .turn-topic-card,
 .progression-turn-popup--next .turn-intro-time,
 .progression-turn-popup--next .turn-intro-hint {
   visibility: hidden;
+}
+.turn-topic-card {
+  width: 100%;
+  margin: 6px 0 8px;
+  padding: 12px 16px;
+  border: 1px solid #6882b8;
+  border-radius: 14px;
+  background: #11192d;
+}
+.turn-topic-label {
+  display: block;
+  color: #9ee8ff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+.turn-topic-text {
+  margin: 6px 0 0 !important;
+  color: #fff !important;
+  font-size: clamp(16px, 3.6vw, 20px);
+  font-weight: 800;
+  line-height: 1.35 !important;
 }
 .turn-intro-time {
   margin: 14px 0;
@@ -1063,9 +1086,10 @@ kbd {
   top: 16px;
   left: 16px;
   display: grid;
-  gap: 2px;
-  min-width: 138px;
-  padding: 10px 16px;
+  gap: 4px;
+  min-width: 190px;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 12px 16px;
   border: 1px solid #9caff0;
   border-radius: 14px;
   background: #182139;
@@ -1087,7 +1111,41 @@ kbd {
   margin-left: 3px;
   font-size: 15px;
 }
-.turn-timer button {
+.turn-timer-topic {
+  margin-top: 4px;
+  padding-top: 7px;
+  border-top: 1px solid #354569;
+}
+.turn-timer-topic-label {
+  display: block;
+  color: #9ee8ff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+.turn-timer-topic-text {
+  margin: 3px 0 0;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.turn-topic-reroll {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border: 1px solid #758bc0;
+  border-radius: 8px;
+  background: #273556;
+  color: #f7f8ff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.turn-topic-reroll:hover {
+  background: #33456e;
+}
+.turn-timer-close {
   position: absolute;
   top: 5px;
   right: 7px;
