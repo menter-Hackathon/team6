@@ -1,15 +1,36 @@
-import { Grid, Sky } from "@react-three/drei";
+import { Grid, Html } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { Room } from "@colyseus/sdk";
 import {
-  FIELD_HALF_SIZE,
+  FIELD_HALF_WIDTH,
+  FIELD_HALF_DEPTH,
+  advanceSpecial,
+  advanceJump,
+  jumpHeight,
   INPUT_SEND_RATE,
   PLAYER_SPEED,
+  PLAYER_SIZE,
+  DIVE_SPEED,
+  DISC_SPEED,
+  INK_SHOT_INTERVAL,
+  updateDiveState,
+  type DiveState,
+  PAINT_GRID_SIZE,
+  isFootprintOwned,
+  rasterizePaintStroke,
+  type PaintStroke,
   type MoveInput,
+  type SpecialShape,
+  NEON_COLORS,
+  practiceColorOwner,
 } from "@gaya/shared";
 import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { bleedSpecialPaint } from "./paint-bleed";
+import { useSpecialAppearance } from "./special-appearance";
+import { InkEffects, INK_SETTLE_SECONDS } from "./ink-effects";
 import type { GameState } from "./game-types";
+
 import {
   rotateYaw,
   toModelRotation,
@@ -19,61 +40,207 @@ import {
 interface GameSceneProps {
   roomRef: MutableRefObject<Room<GameState> | null>;
   playerIds: string[];
+  devMode?: boolean;
+  specialShape: SpecialShape;
+  colorA?: string | undefined;
+  colorB?: string | undefined;
 }
 
 interface ControlState {
   keys: Set<string>;
+  firing: boolean;
+  specialTime: number;
+  jumpTime: number;
+  specialShape: SpecialShape;
   yaw: number;
+  position: { x: number; z: number };
   sequence: number;
   latestInput: MoveInput;
 }
 
-export function GameScene({ roomRef, playerIds }: GameSceneProps) {
+export function GameScene({
+  roomRef,
+  playerIds,
+  devMode = false,
+  specialShape,
+  colorA = "#ff4f8b",
+  colorB = "#37d9ff",
+}: GameSceneProps) {
+  const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
+  const devColor = useRef(colorA);
+  devColor.current = colorA;
   const controls = useRef<ControlState>({
     keys: new Set(),
+    firing: false,
+    specialTime: -1,
+    jumpTime: -1,
+    specialShape: "star",
     yaw: 0,
+    position: { x: 0, z: 0 },
     sequence: 0,
-    latestInput: { sequence: 0, x: 0, z: 0, yaw: 0 },
+    latestInput: { sequence: 0, x: 0, z: 0, yaw: 0, dive: false },
   });
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) =>
+    const activateSpecial = () => {
+      if (devMode) {
+        if (controls.current.specialTime < 0) {
+          controls.current.specialShape = specialShape;
+          controls.current.specialTime = 0;
+          controls.current.firing = false;
+        }
+      } else {
+        const room = roomRef.current;
+        if (room?.state.phase === "playing" || room?.state.phase === "lobby")
+          room.send("special", { shape: specialShape });
+        controls.current.jumpTime = -1;
+      }
+    };
+    window.addEventListener("activate-special", activateSpecial);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        !document.pointerLockElement &&
+        event.target instanceof HTMLElement &&
+        (event.target.isContentEditable ||
+          /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(event.target.tagName))
+      )
+        return;
+      if (event.code === "KeyF" && !event.repeat) {
+        event.preventDefault();
+        activateSpecial();
+        return;
+      }
+      if (event.code === "Space") {
+        event.preventDefault();
+        if (
+          event.repeat ||
+          controls.current.jumpTime >= 0 ||
+          controls.current.specialTime >= 0 ||
+          controls.current.keys.has("ShiftLeft") ||
+          controls.current.keys.has("ShiftRight")
+        )
+          return;
+        if (devMode) controls.current.jumpTime = 0;
+        else if (
+          roomRef.current?.state.phase === "lobby" ||
+          roomRef.current?.state.phase === "playing"
+        ) {
+          controls.current.jumpTime = 0;
+          roomRef.current.send("jump");
+        }
+        return;
+      }
+      if (
+        [
+          "ArrowUp",
+          "ArrowDown",
+          "ArrowLeft",
+          "ArrowRight",
+          "Space",
+          "ShiftLeft",
+          "ShiftRight",
+        ].includes(event.code)
+      )
+        event.preventDefault();
+      if (
+        ["KeyQ", "KeyE"].includes(event.code) &&
+        !event.repeat &&
+        !(event.target instanceof HTMLInputElement)
+      ) {
+        const kind = event.code === "KeyQ" ? "ring" : "line";
+        if (
+          controls.current.keys.has("ShiftLeft") ||
+          controls.current.keys.has("ShiftRight")
+        )
+          return;
+        if (devMode && controls.current.specialTime >= 0) return;
+        if (devMode) {
+          window.dispatchEvent(
+            new CustomEvent("dev-paint", {
+              detail: {
+                revision: 0,
+                ...controls.current.position,
+                yaw: controls.current.yaw,
+                team: "A",
+                practiceColor: devColor.current,
+                kind,
+              },
+            }),
+          );
+        } else {
+          roomRef.current?.send("paint", { kind });
+        }
+      }
       controls.current.keys.add(event.code);
+    };
     const onKeyUp = (event: KeyboardEvent) =>
       controls.current.keys.delete(event.code);
+    const onBlur = () => {
+      controls.current.keys.clear();
+      controls.current.firing = false;
+    };
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.button === 0 && event.target instanceof HTMLCanvasElement)
+        controls.current.firing = true;
+    };
+    const onMouseUp = () => {
+      controls.current.firing = false;
+    };
+    const onLockChange = () => {
+      if (!document.pointerLockElement) onBlur();
+    };
     const onMouseMove = (event: MouseEvent) => {
-      if (document.pointerLockElement) {
+      if (document.pointerLockElement || controls.current.firing) {
         controls.current.yaw = rotateYaw(controls.current.yaw, event.movementX);
       }
     };
     const onClick = (event: MouseEvent) => {
       if (
         event.target instanceof HTMLCanvasElement &&
-        roomRef.current?.state.phase === "playing"
+        (devMode ||
+          roomRef.current?.state.phase === "playing" ||
+          roomRef.current?.state.phase === "lobby")
       ) {
-        void event.target.requestPointerLock();
+        if (document.activeElement instanceof HTMLElement)
+          document.activeElement.blur();
+        void event.target.requestPointerLock().catch(() => {
+          /* Drag-to-aim remains available if pointer lock is unavailable. */
+        });
       }
     };
 
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mouseup", onMouseUp);
+    document.addEventListener("pointerlockchange", onLockChange);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
     window.addEventListener("mousemove", onMouseMove);
     document.body.addEventListener("click", onClick);
     return () => {
+      window.removeEventListener("activate-special", activateSpecial);
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener("pointerlockchange", onLockChange);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
       window.removeEventListener("mousemove", onMouseMove);
       document.body.removeEventListener("click", onClick);
     };
-  }, []);
+  }, [devMode, roomRef, specialShape]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       const room = roomRef.current;
       if (!room) return;
       const keys = controls.current.keys;
-      const forward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
-      const right = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
+      const forward =
+        Number(keys.has("KeyW") || keys.has("ArrowUp")) -
+        Number(keys.has("KeyS") || keys.has("ArrowDown"));
+      const right =
+        Number(keys.has("KeyD") || keys.has("ArrowRight")) -
+        Number(keys.has("KeyA") || keys.has("ArrowLeft"));
       const yaw = controls.current.yaw;
       const direction = toWorldDirection(forward, right, yaw);
       controls.current.sequence += 1;
@@ -82,6 +249,9 @@ export function GameScene({ roomRef, playerIds }: GameSceneProps) {
         x: direction.x,
         z: direction.z,
         yaw,
+        dive:
+          (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
+          controls.current.jumpTime < 0,
       };
       controls.current.latestInput = input;
       room.send("move", input);
@@ -89,69 +259,602 @@ export function GameScene({ roomRef, playerIds }: GameSceneProps) {
     return () => window.clearInterval(interval);
   }, [roomRef]);
 
+  const shotClock = useRef(0);
+  useFrame((_, delta) => {
+    shotClock.current = Math.max(0, shotClock.current - delta);
+    const control = controls.current;
+    const networkPlayer = roomRef.current?.state.players.get(
+      roomRef.current.sessionId,
+    );
+    const specialActive =
+      (devMode ? control.specialTime : (networkPlayer?.specialTime ?? -1)) >= 0;
+    const button = document.getElementById(
+      "special-button",
+    ) as HTMLButtonElement | null;
+    const picker = document.getElementById(
+      "special-shape",
+    ) as HTMLSelectElement | null;
+    if (picker) picker.disabled = specialActive;
+    if (button) {
+      button.disabled =
+        specialActive ||
+        (!devMode &&
+          roomRef.current?.state.phase !== "playing" &&
+          roomRef.current?.state.phase !== "lobby");
+      button.textContent = specialActive
+        ? "回転ジャンプ中…"
+        : `F  必殺技 · ${specialShape === "ink" ? "● インク" : specialShape === "heart" ? "♥ ハート" : "★ スター"}スラム`;
+    }
+    if (
+      specialActive ||
+      !control.firing ||
+      control.keys.has("ShiftLeft") ||
+      control.keys.has("ShiftRight") ||
+      shotClock.current > 0
+    )
+      return;
+    shotClock.current = INK_SHOT_INTERVAL;
+    if (devMode)
+      window.dispatchEvent(
+        new CustomEvent("dev-paint", {
+          detail: {
+            revision: 0,
+            ...control.position,
+            yaw: control.yaw,
+            team: "A",
+            practiceColor: devColor.current,
+            kind: "ink",
+          } satisfies PaintStroke,
+        }),
+      );
+    else if (
+      roomRef.current?.state.phase === "playing" ||
+      roomRef.current?.state.phase === "lobby"
+    )
+      roomRef.current.send("paint", { kind: "ink" });
+  });
+
   const localId = roomRef.current?.sessionId;
 
   return (
     <>
-      <color attach="background" args={["#10131c"]} />
-      <fog attach="fog" args={["#10131c", 22, 48]} />
-      <ambientLight intensity={0.9} />
+      <color attach="background" args={["#ebece5"]} />
+      <fog attach="fog" args={["#ebece5", 24, 55]} />
+      <hemisphereLight args={["#ffffff", "#8e9c86", 2.7]} />
       <directionalLight
         castShadow
-        intensity={2.4}
+        intensity={3}
         position={[8, 14, 5]}
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-left={-18}
+        shadow-camera-right={18}
+        shadow-camera-top={18}
+        shadow-camera-bottom={-18}
+        shadow-normalBias={0.03}
       />
-      <Sky sunPosition={[4, 2, 8]} turbidity={6} rayleigh={0.7} />
-      <Field />
-      {playerIds.map((playerId, index) => (
+
+      <Field
+        room={roomRef.current}
+        devMode={devMode}
+        devOwnPaint={devOwnPaint}
+        colorA={colorA}
+        colorB={colorB}
+      />
+      {devMode && (
+        <DevPlayer
+          controls={controls}
+          ownPaint={devOwnPaint}
+          color={colorA}
+          devColor={devColor}
+        />
+      )}
+      {playerIds.map((playerId) => (
         <Player
           key={playerId}
           playerId={playerId}
+          displayName={
+            roomRef.current?.state.players.get(playerId)?.displayName ?? ""
+          }
           local={playerId === localId}
           roomRef={roomRef}
           controls={controls}
-          color={index % 2 === 0 ? "#ff4f8b" : "#37d9ff"}
+          color={
+            roomRef.current?.state.phase === "lobby"
+              ? (roomRef.current?.state.players.get(playerId)?.practiceColor ??
+                colorA)
+              : roomRef.current?.state.players.get(playerId)?.team === "B"
+                ? colorB
+                : colorA
+          }
         />
       ))}
     </>
   );
 }
 
-function Field() {
+function useDiveAppearance() {
+  const body = useRef<THREE.Mesh>(null);
+  const ripple = useRef<THREE.Mesh>(null);
+  const sink = useRef(0);
+  const rippleAge = useRef(1);
+  const wasSubmerged = useRef(false);
+
+  const update = (dive: boolean, submerged: boolean, delta: number) => {
+    if (submerged !== wasSubmerged.current) {
+      rippleAge.current = 0;
+      wasSubmerged.current = submerged;
+    }
+    sink.current = THREE.MathUtils.damp(
+      sink.current,
+      submerged ? -1.1 : 0,
+      submerged || !dive ? 12 : 2.6,
+      delta,
+    );
+    if (body.current) {
+      body.current.position.y = 0.5 + sink.current;
+      body.current.visible = sink.current > -1;
+    }
+    rippleAge.current += delta;
+    if (ripple.current) {
+      const progress = Math.min(rippleAge.current / 0.55, 1);
+      ripple.current.visible = progress < 1;
+      ripple.current.scale.setScalar(0.7 + progress * 1.6);
+      (ripple.current.material as THREE.MeshBasicMaterial).opacity =
+        0.8 * (1 - progress);
+    }
+  };
+  return { body, ripple, update };
+}
+
+function DevPlayer({
+  controls,
+  ownPaint,
+  color,
+  devColor,
+}: {
+  controls: MutableRefObject<ControlState>;
+  ownPaint: MutableRefObject<(x: number, z: number) => boolean>;
+  color: string;
+  devColor: MutableRefObject<string>;
+}) {
+  const group = useRef<THREE.Group>(null);
+  const appearance = useDiveAppearance();
+  const specialAppearance = useSpecialAppearance();
+  const { camera } = useThree();
+  const diveState = useRef<DiveState>({
+    submerged: false,
+    gapSeconds: 0,
+    team: 1,
+  });
+  useFrame((_, delta) => {
+    const object = group.current;
+    if (!object) return;
+    controls.current.jumpTime = advanceJump(
+      controls.current.jumpTime,
+      Math.min(delta, 0.1),
+    );
+    object.position.y = jumpHeight(controls.current.jumpTime);
+    const special = advanceSpecial(
+      controls.current.specialTime,
+      Math.min(delta, 0.1),
+    );
+    controls.current.specialTime = special.time;
+    const specialActive = special.time >= 0 || special.landed;
+    if (special.landed)
+      window.dispatchEvent(
+        new CustomEvent("dev-paint", {
+          detail: {
+            revision: 0,
+            x: object.position.x,
+            z: object.position.z,
+            yaw: controls.current.yaw,
+            team: "A",
+            practiceColor: devColor.current,
+            kind: "slam",
+            specialShape: controls.current.specialShape,
+          } satisfies PaintStroke,
+        }),
+      );
+    const keys = controls.current.keys;
+    const direction = toWorldDirection(
+      Number(keys.has("KeyW") || keys.has("ArrowUp")) -
+        Number(keys.has("KeyS") || keys.has("ArrowDown")),
+      Number(keys.has("KeyD") || keys.has("ArrowRight")) -
+        Number(keys.has("KeyA") || keys.has("ArrowLeft")),
+      controls.current.yaw,
+    );
+    if (specialActive) {
+      direction.x = 0;
+      direction.z = 0;
+      controls.current.jumpTime = -1;
+      object.position.y = 0;
+    }
+    const length = Math.hypot(direction.x, direction.z);
+    if (length > 1) {
+      direction.x /= length;
+      direction.z /= length;
+    }
+    const dive =
+      !specialActive &&
+      controls.current.jumpTime < 0 &&
+      (keys.has("ShiftLeft") || keys.has("ShiftRight"));
+    const before = updateDiveState(
+      diveState.current,
+      dive,
+      ownPaint.current(object.position.x, object.position.z),
+      0,
+      1,
+    );
+    const submerged = before.submerged;
+    const oldX = object.position.x,
+      oldZ = object.position.z;
+    const speed = dive ? (submerged ? DIVE_SPEED : DISC_SPEED) : PLAYER_SPEED;
+    object.position.x = THREE.MathUtils.clamp(
+      object.position.x + direction.x * speed * delta,
+      -FIELD_HALF_WIDTH + 0.5,
+      FIELD_HALF_WIDTH - 0.5,
+    );
+    object.position.z = THREE.MathUtils.clamp(
+      object.position.z + direction.z * speed * delta,
+      -FIELD_HALF_DEPTH + 0.5,
+      FIELD_HALF_DEPTH - 0.5,
+    );
+    diveState.current = updateDiveState(
+      before,
+      dive,
+      ownPaint.current(object.position.x, object.position.z),
+      Math.min(delta, 0.1),
+      1,
+    );
+    const nowSubmerged = diveState.current.submerged;
+    if (
+      !dive &&
+      controls.current.jumpTime < 0 &&
+      Math.hypot(object.position.x - oldX, object.position.z - oldZ) > 0.001
+    ) {
+      window.dispatchEvent(
+        new CustomEvent("dev-paint", {
+          detail: {
+            revision: 0,
+            fromX: oldX,
+            fromZ: oldZ,
+            x: object.position.x,
+            z: object.position.z,
+            yaw: controls.current.yaw,
+            team: "A",
+            practiceColor: devColor.current,
+            kind: "footprint",
+          } satisfies PaintStroke,
+        }),
+      );
+    }
+    appearance.update(dive, nowSubmerged, delta);
+    specialAppearance(
+      appearance.body.current,
+      controls.current.specialTime,
+      delta,
+    );
+    object.rotation.y = toModelRotation(controls.current.yaw);
+    controls.current.position = { x: object.position.x, z: object.position.z };
+    const yaw = controls.current.yaw;
+    camera.position.lerp(
+      new THREE.Vector3(
+        object.position.x + Math.sin(yaw) * 6,
+        3.7 + object.position.y,
+        object.position.z - Math.cos(yaw) * 6,
+      ),
+      1 - Math.exp(-delta * 8),
+    );
+    camera.lookAt(
+      object.position.x,
+      1.1 + object.position.y,
+      object.position.z,
+    );
+    const readout = document.getElementById("dev-readout");
+    if (readout)
+      readout.textContent = `状態 ${nowSubmerged ? "潜航 ×1.5" : "通常"} / X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
+  });
+  return (
+    <group ref={group}>
+      <mesh ref={appearance.body} castShadow receiveShadow position-y={0.5}>
+        <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      <mesh
+        ref={appearance.ripple}
+        visible={false}
+        rotation-x={-Math.PI / 2}
+        position-y={0.05}
+      >
+        <ringGeometry args={[0.45, 0.57, 40]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh rotation-x={-Math.PI / 2} position-y={0.025}>
+        <ringGeometry args={[0.58, 0.68, 32]} />
+        <meshBasicMaterial color="white" />
+      </mesh>
+    </group>
+  );
+}
+
+function Field({
+  room,
+  devMode,
+  devOwnPaint,
+  colorA,
+  colorB,
+}: {
+  room: Room<GameState> | null;
+  devMode: boolean;
+  devOwnPaint: MutableRefObject<(x: number, z: number) => boolean>;
+  colorA: string;
+  colorB: string;
+}) {
+  const canvas = useMemo(() => {
+    const element = document.createElement("canvas");
+    element.width = element.height = PAINT_GRID_SIZE;
+    return element;
+  }, []);
+  const texture = useMemo(() => {
+    const value = new THREE.CanvasTexture(canvas);
+    value.colorSpace = THREE.SRGBColorSpace;
+    return value;
+  }, [canvas]);
+  const revision = useRef(0);
+  const effects = useMemo(() => new InkEffects(), []);
+  const flushPaint = useRef<() => void>(() => {});
+  useFrame((_, delta) => {
+    effects.update(delta);
+    flushPaint.current();
+  });
+  useEffect(
+    () => () => {
+      effects.dispose();
+      texture.dispose();
+    },
+    [effects, texture],
+  );
+  const cells = useMemo(() => new Uint8Array(PAINT_GRID_SIZE ** 2), []);
+  const colors = useRef({ colorA, colorB });
+  colors.current = { colorA, colorB };
+  useEffect(() => {
+    if (!room && !devMode) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    effects.clear();
+    effects.setColors(colors.current.colorA, colors.current.colorB);
+    const practiceRgb = NEON_COLORS.map(({ hex }) =>
+      [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16)),
+    );
+    const setPixel = (
+      data: Uint8ClampedArray,
+      offset: number,
+      team: number,
+    ) => {
+      const practice =
+        devMode ||
+        room?.state.phase === "lobby" ||
+        room?.state.phase === "team_selection";
+      const currentA = [1, 3, 5].map((index) =>
+        parseInt(colors.current.colorA.slice(index, index + 2), 16),
+      );
+      const currentB = [1, 3, 5].map((index) =>
+        parseInt(colors.current.colorB.slice(index, index + 2), 16),
+      );
+      const rgb =
+        practice && practiceRgb[team - 1]
+          ? practiceRgb[team - 1]!
+          : team === 1
+            ? currentA
+            : currentB;
+      data[offset] = rgb[0]!;
+      data[offset + 1] = rgb[1]!;
+      data[offset + 2] = rgb[2]!;
+      data[offset + 3] = 255;
+    };
+    cells.fill(0);
+    revision.current = 0;
+    ctx.clearRect(0, 0, PAINT_GRID_SIZE, PAINT_GRID_SIZE);
+    texture.needsUpdate = true;
+    const image = ctx.createImageData(PAINT_GRID_SIZE, PAINT_GRID_SIZE);
+    if (devMode)
+      devOwnPaint.current = (x, z) =>
+        isFootprintOwned(
+          cells,
+          x,
+          z,
+          practiceColorOwner(colors.current.colorA),
+        );
+    let disposed = false;
+    let syncing = !devMode;
+    const pending = new Map<number, PaintStroke>();
+    const displayQueue: { stroke: PaintStroke; at: number }[] = [];
+    flushPaint.current = () => {
+      let minX = PAINT_GRID_SIZE,
+        minY = PAINT_GRID_SIZE,
+        maxX = -1,
+        maxY = -1;
+      while (displayQueue.length && displayQueue[0]!.at <= performance.now()) {
+        const { stroke } = displayQueue.shift()!;
+        const team = stroke.practiceColor
+          ? practiceColorOwner(stroke.practiceColor)
+          : stroke.team === "A"
+            ? 1
+            : 2;
+        if (stroke.kind === "slam") {
+          const bleed = bleedSpecialPaint(
+            stroke,
+            image,
+            colors.current.colorA,
+            colors.current.colorB,
+          );
+          if (bleed) {
+            minX = Math.min(minX, bleed.left);
+            minY = Math.min(minY, bleed.top);
+            maxX = Math.max(maxX, bleed.right);
+            maxY = Math.max(maxY, bleed.bottom);
+          }
+        }
+        rasterizePaintStroke(stroke, (x, y) => {
+          const offset = (y * PAINT_GRID_SIZE + x) * 4;
+          setPixel(image.data, offset, team);
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        });
+      }
+      if (maxX >= 0) {
+        ctx.putImageData(
+          image,
+          0,
+          0,
+          minX,
+          minY,
+          maxX - minX + 1,
+          maxY - minY + 1,
+        );
+        texture.needsUpdate = true;
+      }
+    };
+    const paint = (stroke: PaintStroke) => {
+      if (disposed) return;
+      if (!devMode && stroke.revision <= revision.current) return;
+      if (!devMode && syncing) {
+        pending.set(stroke.revision, stroke);
+        return;
+      }
+      if (!devMode && stroke.revision !== revision.current + 1) {
+        syncing = true;
+        pending.set(stroke.revision, stroke);
+        room?.send("paint-snapshot");
+        return;
+      }
+      if (!devMode) revision.current = stroke.revision;
+      const flightSeconds = effects.emit(stroke);
+      const team = stroke.practiceColor
+        ? practiceColorOwner(stroke.practiceColor)
+        : stroke.team === "A"
+          ? 1
+          : 2;
+      rasterizePaintStroke(stroke, (x, y) => {
+        cells[y * PAINT_GRID_SIZE + x] = team;
+      });
+      // Bake only after the airborne drop lands and its transient splat has expanded.
+      displayQueue.push({
+        stroke,
+        at: performance.now() + (flightSeconds + INK_SETTLE_SECONDS) * 1000,
+      });
+    };
+    const devPaint = (event: Event) =>
+      paint((event as CustomEvent<PaintStroke>).detail);
+    if (devMode) window.addEventListener("dev-paint", devPaint);
+    const removePaint = room?.onMessage("paint", paint);
+    const removeSnapshot = room?.onMessage(
+      "paint-snapshot",
+      async (snapshot: { revision: number; data: string }) => {
+        if (snapshot.revision < revision.current) return;
+        const bytes = Uint8Array.from(atob(snapshot.data), (char) =>
+          char.charCodeAt(0),
+        );
+        const stream = new Blob([bytes])
+          .stream()
+          .pipeThrough(new DecompressionStream("deflate"));
+        const received = new Uint8Array(
+          await new Response(stream).arrayBuffer(),
+        );
+        if (
+          disposed ||
+          snapshot.revision < revision.current ||
+          received.length !== cells.length
+        )
+          return;
+        displayQueue.length = 0;
+        effects.clear();
+        cells.set(received);
+        image.data.fill(0);
+        for (let i = 0; i < cells.length; i++) {
+          const team = cells[i];
+          if (!team) continue;
+          const offset = i * 4;
+          setPixel(image.data, offset, team);
+        }
+        ctx.putImageData(image, 0, 0);
+        revision.current = snapshot.revision;
+        texture.needsUpdate = true;
+        syncing = false;
+        const queued = [...pending.values()].sort(
+          (a, b) => a.revision - b.revision,
+        );
+        pending.clear();
+        for (const stroke of queued) paint(stroke);
+      },
+    );
+    room?.send("paint-snapshot");
+    return () => {
+      disposed = true;
+      pending.clear();
+      displayQueue.length = 0;
+      flushPaint.current = () => {};
+      devOwnPaint.current = () => false;
+      removePaint?.();
+      removeSnapshot?.();
+      window.removeEventListener("dev-paint", devPaint);
+    };
+  }, [room, devMode, canvas, texture, devOwnPaint, cells, effects]);
   return (
     <group>
+      <primitive object={effects.group} />
+      <mesh receiveShadow rotation-x={-Math.PI / 2} position-y={-0.25}>
+        <planeGeometry args={[200, 200]} />
+        <meshStandardMaterial color="#e0e3da" roughness={0.85} />
+      </mesh>
       <mesh receiveShadow rotation-x={-Math.PI / 2}>
-        <planeGeometry args={[FIELD_HALF_SIZE * 2, FIELD_HALF_SIZE * 2]} />
-        <meshStandardMaterial color="#272d3d" roughness={0.88} />
+        <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
+        <meshStandardMaterial color="#f7f8ee" roughness={0.65} />
+      </mesh>
+      <mesh rotation-x={-Math.PI / 2} position-y={0.018}>
+        <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
+        <meshStandardMaterial
+          map={texture}
+          transparent
+          depthWrite={false}
+          roughness={0.22}
+          metalness={0.05}
+        />
       </mesh>
       <Grid
         position={[0, 0.012, 0]}
-        args={[FIELD_HALF_SIZE * 2, FIELD_HALF_SIZE * 2]}
+        args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]}
         cellSize={1}
         cellThickness={0.6}
-        cellColor="#424b62"
+        cellColor="#e0e4d9"
         sectionSize={4}
         sectionThickness={1.2}
-        sectionColor="#76809a"
+        sectionColor="#d0d7c7"
         fadeDistance={36}
         infiniteGrid={false}
       />
       {[
-        [0, 1.2, -FIELD_HALF_SIZE],
-        [0, 1.2, FIELD_HALF_SIZE],
-        [-FIELD_HALF_SIZE, 1.2, 0],
-        [FIELD_HALF_SIZE, 1.2, 0],
+        [0, 0, -FIELD_HALF_DEPTH],
+        [0, 0, FIELD_HALF_DEPTH],
+        [-FIELD_HALF_WIDTH, 0, 0],
+        [FIELD_HALF_WIDTH, 0, 0],
       ].map((position, index) => (
         <mesh key={index} position={position as [number, number, number]}>
           <boxGeometry
             args={
               index < 2
-                ? [FIELD_HALF_SIZE * 2, 2.4, 0.25]
-                : [0.25, 2.4, FIELD_HALF_SIZE * 2]
+                ? [FIELD_HALF_WIDTH * 2, 0.3, 0.25]
+                : [0.25, 0.3, FIELD_HALF_DEPTH * 2]
             }
           />
-          <meshStandardMaterial color="#1a1f2c" transparent opacity={0.75} />
+          <meshStandardMaterial color="#d5dccc" />
         </mesh>
       ))}
     </group>
@@ -160,15 +863,25 @@ function Field() {
 
 interface PlayerProps {
   playerId: string;
+  displayName: string;
   local: boolean;
   color: string;
   roomRef: MutableRefObject<Room<GameState> | null>;
   controls: MutableRefObject<ControlState>;
 }
 
-function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
+function Player({
+  playerId,
+  displayName,
+  local,
+  color,
+  roomRef,
+  controls,
+}: PlayerProps) {
   const group = useRef<THREE.Group>(null);
   const predicted = useRef(new THREE.Vector3());
+  const appearance = useDiveAppearance();
+  const specialAppearance = useSpecialAppearance();
   const initialized = useRef(false);
   const { camera } = useThree();
   const cameraOffset = useMemo(() => new THREE.Vector3(), []);
@@ -178,6 +891,23 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
     const player = roomRef.current?.state.players.get(playerId);
     const object = group.current;
     if (!player || !object) return;
+    const specialActive = player.specialTime >= 0;
+    if (local && specialActive) controls.current.jumpTime = -1;
+    if (local)
+      controls.current.jumpTime = advanceJump(
+        controls.current.jumpTime,
+        Math.min(delta, 0.1),
+      );
+    const jumpTime = local ? controls.current.jumpTime : player.jumpTime;
+    const diving =
+      !specialActive &&
+      jumpTime < 0 &&
+      (local
+        ? controls.current.keys.has("ShiftLeft") ||
+          controls.current.keys.has("ShiftRight")
+        : player.dive);
+    appearance.update(diving, diving && player.submerged, delta);
+    specialAppearance(appearance.body.current, player.specialTime, delta);
 
     if (!initialized.current) {
       predicted.current.set(player.x, 0, player.z);
@@ -188,26 +918,46 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
       const input = controls.current.latestInput;
       const length = Math.hypot(input.x, input.z);
       const scale = length > 1 ? 1 / length : 1;
-      predicted.current.x += input.x * scale * PLAYER_SPEED * delta;
-      predicted.current.z += input.z * scale * PLAYER_SPEED * delta;
+      const speed = input.dive
+        ? player.submerged
+          ? DIVE_SPEED
+          : DISC_SPEED
+        : PLAYER_SPEED;
+      const phase = roomRef.current?.state.phase;
+      if (!specialActive && (phase === "lobby" || phase === "playing")) {
+        predicted.current.x += input.x * scale * speed * delta;
+        predicted.current.z += input.z * scale * speed * delta;
+      } else {
+        predicted.current.set(player.x, 0, player.z);
+      }
       const error = predicted.current.distanceTo(
         cameraTarget.set(player.x, 0, player.z),
       );
       if (error > 2.5) predicted.current.copy(cameraTarget);
       else predicted.current.lerp(cameraTarget, 1 - Math.exp(-delta * 4));
       object.position.copy(predicted.current);
+      object.position.y = jumpHeight(jumpTime);
       object.rotation.y = toModelRotation(controls.current.yaw);
 
+      controls.current.position = {
+        x: object.position.x,
+        z: object.position.z,
+      };
       const yaw = controls.current.yaw;
-      cameraOffset.set(Math.sin(yaw) * 7, 5.2, -Math.cos(yaw) * 7);
+      cameraOffset.set(Math.sin(yaw) * 6, 3.7, -Math.cos(yaw) * 6);
       camera.position.lerp(
         cameraTarget.copy(object.position).add(cameraOffset),
         1 - Math.exp(-delta * 8),
       );
-      camera.lookAt(object.position.x, 1.1, object.position.z);
+      camera.lookAt(
+        object.position.x,
+        1.1 + object.position.y,
+        object.position.z,
+      );
     } else {
       cameraTarget.set(player.x, 0, player.z);
       object.position.lerp(cameraTarget, 1 - Math.exp(-delta * 10));
+      object.position.y = jumpHeight(jumpTime);
       object.rotation.y = THREE.MathUtils.lerp(
         object.rotation.y,
         toModelRotation(player.yaw),
@@ -218,16 +968,29 @@ function Player({ playerId, local, color, roomRef, controls }: PlayerProps) {
 
   return (
     <group ref={group}>
-      <mesh castShadow position-y={0.75}>
-        <capsuleGeometry args={[0.42, 0.7, 8, 16]} />
+      {displayName && (
+        <Html center position={[0, 1.55, 0]} style={{ pointerEvents: "none" }}>
+          <span className="player-gamertag" style={{ borderColor: color }}>
+            {displayName}
+          </span>
+        </Html>
+      )}
+      <mesh ref={appearance.body} castShadow receiveShadow position-y={0.5}>
+        <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
         <meshStandardMaterial color={color} roughness={0.45} metalness={0.1} />
       </mesh>
-      <mesh castShadow position={[0, 1.1, 0.39]}>
-        <boxGeometry args={[0.4, 0.18, 0.16]} />
-        <meshStandardMaterial
-          color="#f5f7ff"
-          emissive={color}
-          emissiveIntensity={0.3}
+      <mesh
+        ref={appearance.ripple}
+        visible={false}
+        rotation-x={-Math.PI / 2}
+        position-y={0.05}
+      >
+        <ringGeometry args={[0.45, 0.57, 40]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0}
+          depthWrite={false}
         />
       </mesh>
       {local && (
