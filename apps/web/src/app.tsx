@@ -7,9 +7,8 @@ import {
   PAINT_GRID_SIZE,
   countPaintedCells,
   STARTABLE_PLAYER_COUNTS,
+  TOPIC_THINKING_SECONDS,
   TURN_INTRO_MS,
-  createTopicDeck,
-  drawNextTopic,
   type SpecialShape,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
@@ -60,18 +59,10 @@ export function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [previewPopup, setPreviewPopup] = useState<PopupScene | null>(null);
   const [previewReady, setPreviewReady] = useState(false);
-  const previewDeckRef = useRef<string[]>(createTopicDeck());
-  const [previewTopic, setPreviewTopic] = useState(() => {
-    const initial = drawNextTopic(previewDeckRef.current);
-    previewDeckRef.current = initial.remainingDeck;
-    return initial.topic;
-  });
-
-  const rerollPreviewTopic = () => {
-    const next = drawNextTopic(previewDeckRef.current, previewTopic);
-    previewDeckRef.current = next.remainingDeck;
-    setPreviewTopic(next.topic);
-  };
+  const [showTopicPopup, setShowTopicPopup] = useState(true);
+  const [thinkingEndsAt, setThinkingEndsAt] = useState(
+    () => Date.now() + TOPIC_THINKING_SECONDS * 1000,
+  );
 
   const connect = async (create: boolean) => {
     if (!SERVER_URL) {
@@ -98,6 +89,8 @@ export function App() {
       });
       roomRef.current = joinedRoom;
       setRoomCode(joinedRoom.roomId);
+      setThinkingEndsAt(Date.now() + TOPIC_THINKING_SECONDS * 1000);
+      setShowTopicPopup(true);
       const url = new URL(location.href);
       url.searchParams.delete("room");
       history.replaceState(null, "", url);
@@ -252,9 +245,6 @@ export function App() {
             {gameState?.phase === "playing" &&
               `· 発表 ${gameState.turnIndex}/${gameState.speakerOrder.length}`}
           </p>
-          {gameState?.phase === "playing" && gameState.currentTopic && (
-            <p>お題: {gameState.currentTopic}</p>
-          )}
           <ul>
             {players.map((player) => (
               <li key={player.id}>
@@ -297,7 +287,11 @@ export function App() {
                 <button
                   key={scene}
                   onClick={() => {
-                    if (scene === "turn") rerollPreviewTopic();
+                    if (scene === "lobby") {
+                      setThinkingEndsAt(
+                        Date.now() + TOPIC_THINKING_SECONDS * 1000,
+                      );
+                    }
                     if (scene === "result") {
                       const cells =
                         devPaintCells.current?.slice() ??
@@ -397,8 +391,6 @@ export function App() {
             turnNumber={1}
             turnCount={4}
             endsAt={Date.now() + TURN_INTRO_MS + 30_000}
-            topic={previewTopic}
-            onRerollTopic={rerollPreviewTopic}
             preview
             onClose={() => setPreviewPopup(null)}
           />
@@ -422,14 +414,15 @@ export function App() {
             <ProgressionPopup
               scene={previewPopup}
               preview
+              thinkingEndsAt={thinkingEndsAt}
               players={[
-                { displayName: "あなた", ready: true },
+                { displayName: "あなた", ready: previewReady },
                 { displayName: "メンターA", ready: true },
                 { displayName: "メンターB", ready: false },
                 { displayName: "メンターC", ready: true },
               ]}
               isHost
-              isReady
+              isReady={previewReady}
               speakerName="メンターA"
               onClose={() => setPreviewPopup(null)}
               onReady={() => setPreviewReady(true)}
@@ -440,14 +433,49 @@ export function App() {
           <RoomSummary
             roomCode="ABCD12"
             names={["あなた", "メンターA", "メンターB", "メンターC"]}
+            ready
+            readyCount={4}
             canStart
+            onOpenTopicPopup={() => setPreviewReady(false)}
+            onReady={() => setPreviewReady(false)}
             onStart={() => setPreviewPopup("countdown")}
             onClose={() => setPreviewPopup(null)}
           />
         )}
         {!devMode &&
           connectionState === "connected" &&
-          gameState?.phase === "lobby" && (
+          gameState?.phase === "lobby" &&
+          showTopicPopup && (
+            <ProgressionPopup
+              scene="lobby"
+              roomCode={roomCode}
+              thinkingEndsAt={thinkingEndsAt}
+              players={players.map((player) => ({
+                displayName: player.displayName,
+                ready: player.ready,
+              }))}
+              isHost={gameState.hostId === roomRef.current?.sessionId}
+              isReady={localPlayer?.ready ?? false}
+              canStart={canStart}
+              practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
+              onPracticeColorSelect={(color) =>
+                roomRef.current?.send("practice-color", color)
+              }
+              onClose={() => setShowTopicPopup(false)}
+              onReady={() => {
+                const nextReady = !localPlayer?.ready;
+                roomRef.current?.send("ready", nextReady);
+                if (nextReady) setShowTopicPopup(false);
+              }}
+              {...(gameState.hostId === roomRef.current?.sessionId
+                ? { onStart: () => roomRef.current?.send("prepare-teams") }
+                : {})}
+            />
+          )}
+        {!devMode &&
+          connectionState === "connected" &&
+          gameState?.phase === "lobby" &&
+          !showTopicPopup && (
             <RoomSummary
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
@@ -456,11 +484,14 @@ export function App() {
               onPracticeColorSelect={(color) =>
                 roomRef.current?.send("practice-color", color)
               }
+              onOpenTopicPopup={() => setShowTopicPopup(true)}
               ready={localPlayer?.ready ?? false}
               readyCount={players.filter((player) => player.ready).length}
-              onReady={() =>
-                roomRef.current?.send("ready", !localPlayer?.ready)
-              }
+              onReady={() => {
+                const nextReady = !localPlayer?.ready;
+                roomRef.current?.send("ready", nextReady);
+                if (!nextReady) setShowTopicPopup(true);
+              }}
               {...(gameState.hostId === roomRef.current?.sessionId
                 ? { onStart: () => roomRef.current?.send("prepare-teams") }
                 : {})}
@@ -504,8 +535,6 @@ export function App() {
               turnNumber={gameState.turnIndex}
               turnCount={gameState.speakerOrder.length}
               endsAt={gameState.turnEndsAt}
-              topic={gameState.currentTopic}
-              onRerollTopic={() => roomRef.current?.send("reroll-topic")}
             />
           )}
         {!devMode &&

@@ -27,6 +27,5 @@ export class GameState extends Schema {
   @type("string") turnOrder = "alternating";
   @type("uint32") turnIndex = 0;
   @type("float64") turnEndsAt = 0;
-  @type("string") currentTopic = "";
   @type(["string"]) speakerOrder = new ArraySchema<string>();
 }

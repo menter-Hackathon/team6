@@ -434,7 +434,7 @@ kbd {
   cursor: default;
 }
 .progression-popup--lobby {
-  width: min(420px, 100%);
+  width: min(460px, 100%);
   padding: 26px;
   border: 1px solid #536178;
   border-radius: 18px;
@@ -442,9 +442,115 @@ kbd {
   text-align: left;
 }
 .progression-popup--lobby h2 {
-  margin: 0;
-  font-size: 28px;
+  margin: 4px 0 6px;
+  font-size: 26px;
   letter-spacing: -0.035em;
+}
+.lobby-thinking-lead {
+  margin: 0 0 14px;
+  color: #b7c4d8 !important;
+  font-size: 13px;
+  line-height: 1.45 !important;
+}
+.lobby-thinking-timer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid #6b7ea0;
+  border-radius: 12px;
+  background: #202a3f;
+}
+.lobby-thinking-timer--ready {
+  border-color: #55e39e;
+  background: #19312e;
+}
+.lobby-thinking-timer > div {
+  display: grid;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.lobby-thinking-timer-label {
+  color: #9ee8ff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.lobby-thinking-timer-value {
+  color: #ff8cc6;
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+.lobby-thinking-timer--ready .lobby-thinking-timer-value {
+  color: #55e39e;
+}
+.lobby-thinking-timer-note {
+  margin: 0 !important;
+  color: #d6e0f0 !important;
+  font-size: 12px;
+  line-height: 1.4 !important;
+}
+.lobby-topic-box {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #586c8e;
+  border-radius: 12px;
+  background: #1d2638;
+}
+.lobby-topic-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.lobby-topic-box-header span {
+  color: #9ee8ff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.lobby-topic-shuffle {
+  padding: 5px 9px;
+  border: 1px solid #7f94b8;
+  border-radius: 6px;
+  background: #2a3750;
+  color: #f7f8ff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lobby-topic-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lobby-topic-list li {
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #121826;
+  color: #f7f8ff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.room-summary-topic-button {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid #758bc0;
+  border-radius: 8px;
+  background: #243149;
+  color: #e9f4ff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .progression-popup--lobby .progression-code {
   display: flex;
@@ -1007,32 +1113,9 @@ kbd {
   align-items: center;
   justify-content: center;
 }
-.progression-turn-popup--next .turn-topic-card,
 .progression-turn-popup--next .turn-intro-time,
 .progression-turn-popup--next .turn-intro-hint {
   visibility: hidden;
-}
-.turn-topic-card {
-  width: 100%;
-  margin: 6px 0 8px;
-  padding: 12px 16px;
-  border: 1px solid #6882b8;
-  border-radius: 14px;
-  background: #11192d;
-}
-.turn-topic-label {
-  display: block;
-  color: #9ee8ff;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-}
-.turn-topic-text {
-  margin: 6px 0 0 !important;
-  color: #fff !important;
-  font-size: clamp(16px, 3.6vw, 20px);
-  font-weight: 800;
-  line-height: 1.35 !important;
 }
 .turn-intro-time {
   margin: 14px 0;
@@ -1086,10 +1169,9 @@ kbd {
   top: 16px;
   left: 16px;
   display: grid;
-  gap: 4px;
-  min-width: 190px;
-  max-width: min(280px, calc(100vw - 32px));
-  padding: 12px 16px;
+  gap: 2px;
+  min-width: 138px;
+  padding: 10px 16px;
   border: 1px solid #9caff0;
   border-radius: 14px;
   background: #182139;
@@ -1111,41 +1193,7 @@ kbd {
   margin-left: 3px;
   font-size: 15px;
 }
-.turn-timer-topic {
-  margin-top: 4px;
-  padding-top: 7px;
-  border-top: 1px solid #354569;
-}
-.turn-timer-topic-label {
-  display: block;
-  color: #9ee8ff;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-}
-.turn-timer-topic-text {
-  margin: 3px 0 0;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.35;
-}
-.turn-topic-reroll {
-  margin-top: 6px;
-  padding: 6px 10px;
-  border: 1px solid #758bc0;
-  border-radius: 8px;
-  background: #273556;
-  color: #f7f8ff;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.turn-topic-reroll:hover {
-  background: #33456e;
-}
-.turn-timer-close {
+.turn-timer button {
   position: absolute;
   top: 5px;
   right: 7px;

@@ -1,3 +1,5 @@
+export const TOPIC_THINKING_SECONDS = 60;
+
 export const PRESENTATION_TOPICS = [
   "最近やらかした大失敗",
   "実は人生で一番恥ずかしかった瞬間",
@@ -19,7 +21,9 @@ export const PRESENTATION_TOPICS = [
 
 export type PresentationTopic = (typeof PRESENTATION_TOPICS)[number];
 
-export function createTopicDeck(random: () => number = Math.random): string[] {
+export function createTopicDeck(
+  random: () => number = Math.random,
+): string[] {
   const deck: string[] = [...PRESENTATION_TOPICS];
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
@@ -29,6 +33,19 @@ export function createTopicDeck(random: () => number = Math.random): string[] {
     deck[clamped] = temp;
   }
   return deck;
+}
+
+export function pickRandomTopics(
+  count = 3,
+  exclude: readonly string[] = [],
+  random: () => number = Math.random,
+): string[] {
+  const safeCount = Math.max(1, Math.min(PRESENTATION_TOPICS.length, count));
+  const excludedSet = new Set(exclude);
+  const shuffled = createTopicDeck(random);
+  const preferred = shuffled.filter((topic) => !excludedSet.has(topic));
+  const fallback = shuffled.filter((topic) => excludedSet.has(topic));
+  return [...preferred, ...fallback].slice(0, safeCount);
 }
 
 export function drawNextTopic(

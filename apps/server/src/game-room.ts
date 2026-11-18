@@ -22,8 +22,6 @@ import {
   practiceColorSchema,
   practiceColorOwner,
   advanceJump,
-  createTopicDeck,
-  drawNextTopic,
   type MoveInput,
   countPaintedCells,
 } from "@gaya/shared";
@@ -41,7 +39,6 @@ export class GameRoom extends Room<{ state: GameState }> {
   private readonly lastPaint = new Map<string, number>();
   private readonly specialShapes = new Map<string, SpecialShape>();
   private readonly dives = new Map<string, DiveState>();
-  private topicDeck: string[] = [];
   private turnTimer: ReturnType<typeof setInterval> | undefined;
 
   override onCreate(options: unknown): void {
@@ -201,8 +198,6 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.paint.reset();
       this.state.scoreA = 0;
       this.state.scoreB = 0;
-      this.topicDeck = createTopicDeck();
-      this.state.currentTopic = "";
       this.broadcast("paint-snapshot", {
         revision: this.paint.revision,
         data: deflateSync(this.paint.cells).toString("base64"),
@@ -216,15 +211,6 @@ export class GameRoom extends Room<{ state: GameState }> {
           if (Date.now() >= this.state.turnEndsAt) this.advanceTurn();
         }, 250);
       }, GAME_START_COUNTDOWN_SECONDS * 1000);
-    });
-    this.onMessage("reroll-topic", (client) => {
-      if (this.state.phase !== "playing" || this.state.turnIndex === 0) return;
-      const currentSpeakerId =
-        this.state.speakerOrder[this.state.turnIndex - 1];
-      if (currentSpeakerId !== client.sessionId) return;
-      const nextTopic = drawNextTopic(this.topicDeck, this.state.currentTopic);
-      this.topicDeck = nextTopic.remainingDeck;
-      this.state.currentTopic = nextTopic.topic;
     });
   }
 
@@ -298,13 +284,9 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.state.scoreB = scoreB;
       this.state.phase = "result";
       this.state.turnEndsAt = 0;
-      this.state.currentTopic = "";
       if (this.turnTimer) clearInterval(this.turnTimer);
       return;
     }
-    const nextTopic = drawNextTopic(this.topicDeck, this.state.currentTopic);
-    this.topicDeck = nextTopic.remainingDeck;
-    this.state.currentTopic = nextTopic.topic;
     this.state.turnEndsAt =
       Date.now() + TURN_INTRO_MS + PRESENTATION_SECONDS * 1000;
     this.state.turnIndex += 1;

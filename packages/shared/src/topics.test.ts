@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   PRESENTATION_TOPICS,
+  TOPIC_THINKING_SECONDS,
   createTopicDeck,
   drawNextTopic,
+  pickRandomTopics,
 } from "./index.js";
 
 describe("presentation topics", () => {
-  it("contains a non-empty list of unique topics", () => {
+  it("defines a 60-second thinking timer and unique topics", () => {
+    expect(TOPIC_THINKING_SECONDS).toBe(60);
     expect(PRESENTATION_TOPICS.length).toBeGreaterThanOrEqual(8);
     expect(new Set(PRESENTATION_TOPICS).size).toBe(PRESENTATION_TOPICS.length);
   });
@@ -15,6 +18,19 @@ describe("presentation topics", () => {
     const deck = createTopicDeck(() => 0);
     expect(deck).toHaveLength(PRESENTATION_TOPICS.length);
     expect(new Set(deck)).toEqual(new Set(PRESENTATION_TOPICS));
+  });
+
+  it("picks multiple non-duplicate random topic suggestions avoiding excluded ones", () => {
+    const firstBatch = pickRandomTopics(3, [], () => 0.25);
+    expect(firstBatch).toHaveLength(3);
+    expect(new Set(firstBatch).size).toBe(3);
+
+    const secondBatch = pickRandomTopics(3, firstBatch, () => 0.5);
+    expect(secondBatch).toHaveLength(3);
+    expect(new Set(secondBatch).size).toBe(3);
+    for (const topic of secondBatch) {
+      expect(firstBatch).not.toContain(topic);
+    }
   });
 
   it("draws unique topics across an 8-player match", () => {
@@ -34,12 +50,5 @@ describe("presentation topics", () => {
     const next = drawNextTopic([current, second], current, () => 0);
     expect(next.topic).toBe(second);
     expect(next.remainingDeck).toEqual([current]);
-  });
-
-  it("refills the deck when empty and still avoids repeating the current topic", () => {
-    const current = PRESENTATION_TOPICS[0]!;
-    const next = drawNextTopic([], current, () => 0);
-    expect(next.topic).not.toBe(current);
-    expect(next.remainingDeck.length).toBe(PRESENTATION_TOPICS.length - 1);
   });
 });

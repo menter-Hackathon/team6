@@ -129,8 +129,10 @@ export {
 
 export { specialOutline } from "./special-outline.js";
 export {
+  TOPIC_THINKING_SECONDS,
   PRESENTATION_TOPICS,
   createTopicDeck,
+  pickRandomTopics,
   drawNextTopic,
   type PresentationTopic,
 } from "./topics.js";
