@@ -15,6 +15,7 @@ import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
 import { TeamSelection } from "./team-selection";
+import { InkExperimentButton } from "./speech/ink-experiment-button";
 import { TranscriptionPanel } from "./speech/transcription-panel";
 import { TeamColorPicker } from "./team-color-picker";
 
@@ -245,8 +246,10 @@ export function App() {
           </ul>
         </section>
       ) : devMode ? (
-        <section className="lobby-panel lobby-panel--dev">
-          <h2>開発者用 検証モード</h2>
+        <details className="lobby-panel lobby-panel--dev" open>
+          <summary className="dev-panel-summary">
+            <h2>開発者用 検証モード</h2>
+          </summary>
           <p>サーバーに接続せずに操作を確認できます。</p>
           <ul className="dev-controls-list">
             <li>WASD・矢印キー：移動</li>
@@ -287,7 +290,7 @@ export function App() {
               ),
             )}
           </div>
-        </section>
+        </details>
       ) : null}
 
       <section
@@ -310,6 +313,7 @@ export function App() {
             />
           </Suspense>
         </Canvas>
+        <InkExperimentButton />
         <label className="special-shape-picker">
           着地のインク
           <select

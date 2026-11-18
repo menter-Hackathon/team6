@@ -17,7 +17,9 @@ export const INK_SETTLE_SECONDS = 0.22;
 interface Shot {
   origin: THREE.Vector3;
   velocity: THREE.Vector3;
-  stroke: PaintStroke;
+  stroke?: PaintStroke;
+  voiceImpact?: PaintDisk;
+  yaw: number;
   shed: number;
   duration: number;
   trail: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
@@ -36,6 +38,7 @@ interface Spread {
   radius: number;
   impact: boolean;
   delay: number;
+  transient: boolean;
 }
 const AXIS = new THREE.Vector3(0, 1, 0);
 const GRAVITY = 16;
@@ -169,11 +172,54 @@ export class InkEffects {
       origin,
       velocity: velocity.clone(),
       stroke,
+      yaw: stroke.yaw,
       shed: 0,
       duration,
       trail: this.createTrail(team),
     };
     return duration;
+  }
+
+  /** Local voice feedback has no paint stroke and cannot change ownership. */
+  emitVoice(
+    x: number,
+    z: number,
+    yaw: number,
+    level: number,
+    height = 0,
+  ): void {
+    if (this.drops.length >= MAX_SECONDARY_DROPS) return;
+    const strength = THREE.MathUtils.clamp(level, 0, 1);
+    const angle = yaw + (Math.random() - 0.5) * 0.18;
+    const forward = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
+    const origin = new THREE.Vector3(x, height + 0.85, z).addScaledVector(
+      forward,
+      0.8,
+    );
+    const reach = 2.6 + strength * 2.2;
+    const destination = new THREE.Vector3(x, 0.035, z).addScaledVector(
+      forward,
+      reach,
+    );
+    const duration = 0.24 + strength * 0.08;
+    const velocity = destination.clone().sub(origin).divideScalar(duration);
+    velocity.y += 0.5 * GRAVITY * duration;
+    const radius = (0.13 + strength * 0.11) * INK_SCALE;
+    const drop = this.addDrop(origin, velocity, radius, 0);
+    drop.shot = {
+      origin,
+      velocity: velocity.clone(),
+      yaw: angle,
+      duration,
+      shed: 0,
+      voiceImpact: {
+        x: destination.x,
+        z: destination.z,
+        radius: 0.5 + strength * 0.6,
+        organic: true,
+      },
+      trail: this.createTrail(0),
+    };
   }
 
   private createTrail(team: number): Shot["trail"] {
@@ -288,6 +334,7 @@ export class InkEffects {
     team: number,
     impact: boolean,
     delay: number,
+    transient = false,
   ): void {
     if (this.spreads.length >= 120) return;
     const mesh = new THREE.Mesh(
@@ -296,23 +343,36 @@ export class InkEffects {
         : disk.organic
           ? this.splat
           : this.circle,
-      this.materials[team]!,
+      transient ? this.materials[team]!.clone() : this.materials[team]!,
     );
+    if (transient) {
+      mesh.material.transparent = true;
+      mesh.material.depthWrite = false;
+    }
     mesh.rotation.x = -Math.PI / 2;
     if (disk.outlineShape) mesh.rotation.z = -(disk.rotation ?? 0);
     mesh.position.set(disk.x, 0.027, disk.z);
     mesh.scale.setScalar(0.001);
     this.group.add(mesh);
-    this.spreads.push({ mesh, age: 0, radius: disk.radius, impact, delay });
+    this.spreads.push({
+      mesh,
+      age: 0,
+      radius: disk.radius,
+      impact,
+      delay,
+      transient,
+    });
   }
 
   private impact(shot: Shot, team: number): void {
-    this.spread(shot.stroke, team);
-    const center = paintDisks(shot.stroke)[0]!;
+    if (shot.stroke) this.spread(shot.stroke, team);
+    else if (shot.voiceImpact)
+      this.addSpread(shot.voiceImpact, team, true, 0, true);
+    const center = shot.voiceImpact ?? paintDisks(shot.stroke!)[0]!;
     const forward = new THREE.Vector3(
-      -Math.sin(shot.stroke.yaw),
+      -Math.sin(shot.yaw),
       0,
-      Math.cos(shot.stroke.yaw),
+      Math.cos(shot.yaw),
     );
     // A low fan of liquid flicks follows the incoming momentum, rather than a fountain.
     for (let i = 0; i < 6 && this.drops.length < MAX_SECONDARY_DROPS; i++) {
@@ -435,7 +495,13 @@ export class InkEffects {
         (p.radius * expansion) / (1 + pressure),
         1,
       );
-      if (p.age >= INK_SETTLE_SECONDS) {
+      if (p.transient) {
+        const fade = THREE.MathUtils.clamp((p.age - 0.12) / 0.42, 0, 1);
+        (p.mesh.material as THREE.MeshStandardMaterial).opacity =
+          (1 - fade) ** 2;
+      }
+      if (p.age >= (p.transient ? 0.54 : INK_SETTLE_SECONDS)) {
+        if (p.transient) (p.mesh.material as THREE.Material).dispose();
         this.group.remove(p.mesh);
         this.spreads.splice(i, 1);
       }
@@ -444,6 +510,8 @@ export class InkEffects {
 
   clear(): void {
     for (const drop of this.drops) drop.shot?.trail.geometry.dispose();
+    for (const spread of this.spreads)
+      if (spread.transient) (spread.mesh.material as THREE.Material).dispose();
     this.group.clear();
     this.drops = [];
     this.spreads = [];

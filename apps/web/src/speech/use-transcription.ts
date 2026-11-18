@@ -3,6 +3,8 @@ import { MicrophoneCapture } from "./capture";
 import { monoAudio, resampleAudio, SPEECH_SAMPLE_RATE } from "./audio";
 import type { SpeechRequest, SpeechResponse, Transcript } from "./protocol";
 
+import { reportVoiceInput } from "./voice-feedback";
+
 type Phase = "idle" | "loading" | "ready" | "error";
 interface Job {
   id: string;
@@ -53,6 +55,7 @@ export function useTranscription() {
     capture.current = null;
     generation.current++;
     current?.stop(flush);
+    reportVoiceInput(0, false);
     setListening(false);
     setStarting(false);
     setActivity({ level: 0, speaking: false });
@@ -61,7 +64,7 @@ export function useTranscription() {
     if (!alive.current || !ready.current) return;
     if (queue.current.length + Number(active.current !== null) >= MAX_PENDING) {
       setError(
-        "文字起こしが追いつかないため、この発話の認識をスキップしました。処理が終わってからもう一度話してください。",
+        "文字起こしが追いつかないため、この発話の認識をスキップしました。インク演出は続きます。",
       );
       return;
     }
@@ -161,7 +164,7 @@ export function useTranscription() {
     }
   }
   async function start() {
-    if (!ready.current || capture.current) return;
+    if (capture.current) return;
     setError("");
     setStarting(true);
     const current = new MicrophoneCapture(),
@@ -172,6 +175,7 @@ export function useTranscription() {
         (audio) => submit(audio, "microphone"),
         (level, speaking) => {
           if (!alive.current || capture.current !== current) return;
+          reportVoiceInput(level, speaking);
           if (performance.now() - lastMeter.current < 90) return;
           lastMeter.current = performance.now();
           setActivity({ level, speaking });
@@ -236,6 +240,7 @@ export function useTranscription() {
     const pageHide = () => {
       capture.current?.stop(false);
       capture.current = null;
+      reportVoiceInput(0, false);
     };
     window.addEventListener("pagehide", pageHide);
     return () => {

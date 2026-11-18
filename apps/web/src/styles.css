@@ -1157,3 +1157,32 @@ kbd {
     right: 12px;
   }
 }
+
+.dev-panel-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.dev-panel-summary::-webkit-details-marker {
+  display: none;
+}
+.dev-panel-summary h2 {
+  margin: 0;
+}
+.dev-panel-summary::after {
+  content: "＋";
+  font-size: 22px;
+  color: #aeb9d0;
+}
+.lobby-panel--dev[open] > .dev-panel-summary::after {
+  content: "−";
+}
+.dev-panel-summary:focus-visible {
+  outline: 2px solid #ff82b7;
+  outline-offset: 6px;
+  border-radius: 4px;
+}

@@ -223,3 +223,36 @@
     gap: 9px;
   }
 }
+
+.ink-experiment-button {
+  position: fixed;
+  z-index: 26;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 2px solid #ff9ac2;
+  border-radius: 16px;
+  padding: 12px 22px;
+  background: #cf3378;
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  box-shadow: 0 6px 24px #a7185940;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+.ink-experiment-button small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 400;
+}
+.ink-experiment-button[data-active="true"] {
+  background: #f5559c;
+  transform: translateX(-50%) scale(0.96);
+}
+.ink-experiment-button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 4px;
+}

@@ -24,7 +24,7 @@ export function TranscriptionPanel() {
           }
         }}
       >
-        {speech.listening ? "● マイク入力中" : "音声を文字化"}
+        {speech.listening ? "● マイク入力中" : "音声・インク"}
       </button>
       {open && (
         <section
@@ -48,7 +48,7 @@ export function TranscriptionPanel() {
             </button>
           </header>
           <p className="speech-note">
-            音声は外部に送信しません。初回のみ認識モデルをダウンロードします。
+            インク演出は画面下のボタンで試せます。マイクは文字起こし用です。音声は外部に送信しません。
           </p>
           {speech.phase !== "ready" ? (
             <div className="speech-setup">
@@ -86,11 +86,7 @@ export function TranscriptionPanel() {
               ) : (
                 <button
                   onClick={() => void speech.start()}
-                  disabled={
-                    speech.phase !== "ready" ||
-                    speech.decoding ||
-                    speech.pending >= 3
-                  }
+                  disabled={speech.decoding || speech.pending >= 3}
                 >
                   マイクで開始
                 </button>
@@ -133,7 +129,7 @@ export function TranscriptionPanel() {
               value={speech.activity.level}
             />
             <p className="speech-note">
-              話し終わると文字にします。長い発話は約6秒ごとに区切ります。
+              文字起こしを使う場合は認識モデルを準備してください。インク演出にマイクは不要です。
             </p>
           </>
           <div className="speech-feedback" role="status" aria-live="polite">
@@ -145,7 +141,7 @@ export function TranscriptionPanel() {
                   ? "文字起こしの準備ができています"
                   : speech.listening
                     ? "マイク入力中です（モデル未準備）"
-                    : "モデルを準備すると使えます"}
+                    : "インク演出は画面下のボタンで試せます"}
           </div>
           {speech.error && (
             <p className="speech-error" role="alert">
@@ -182,7 +178,7 @@ export function TranscriptionPanel() {
             <p className="speech-empty">認識結果がここに表示されます。</p>
           )}
           <p className="speech-footnote">
-            分類モデルは未接続です。ゲームの塗りには反映しません。
+            分類モデルは未接続です。ボタンによるインクは見た目だけの演出です。
           </p>
         </section>
       )}

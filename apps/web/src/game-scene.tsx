@@ -30,6 +30,7 @@ import { bleedSpecialPaint } from "./paint-bleed";
 import { useSpecialAppearance } from "./special-appearance";
 import { InkEffects, INK_SETTLE_SECONDS } from "./ink-effects";
 import type { GameState } from "./game-types";
+import { buttonInkInput, VoiceInkPulse } from "./speech/voice-feedback";
 
 import {
   rotateYaw,
@@ -53,6 +54,7 @@ interface ControlState {
   jumpTime: number;
   specialShape: SpecialShape;
   yaw: number;
+  height: number;
   position: { x: number; z: number };
   sequence: number;
   latestInput: MoveInput;
@@ -76,6 +78,7 @@ export function GameScene({
     jumpTime: -1,
     specialShape: "star",
     yaw: 0,
+    height: 0,
     position: { x: 0, z: 0 },
     sequence: 0,
     latestInput: { sequence: 0, x: 0, z: 0, yaw: 0, dive: false },
@@ -314,6 +317,42 @@ export function GameScene({
       roomRef.current.send("paint", { kind: "ink" });
   });
 
+  // Kept entirely outside Field's paint/snapshot/rasterization path.
+  const voiceEffects = useMemo(() => new InkEffects(), []);
+  const voicePulse = useMemo(() => new VoiceInkPulse(), []);
+  useEffect(() => () => voiceEffects.dispose(), [voiceEffects]);
+  useFrame((_, delta) => {
+    voiceEffects.update(delta);
+    const room = roomRef.current;
+    const player = room?.state.players.get(room.sessionId);
+    if (!devMode && !player) return;
+    const strength = voicePulse.update(
+      delta,
+      0.65,
+      buttonInkInput.active,
+      true,
+    );
+    if (strength === null) return;
+    const practice =
+      !room ||
+      room.state.phase === "lobby" ||
+      room.state.phase === "team_selection";
+    const color = practice
+      ? (player?.practiceColor ?? colorA)
+      : player?.team === "B"
+        ? colorB
+        : colorA;
+    voiceEffects.setColors(color, color);
+    const control = controls.current;
+    voiceEffects.emitVoice(
+      control.position.x,
+      control.position.z,
+      control.yaw,
+      strength,
+      control.height,
+    );
+  });
+
   const localId = roomRef.current?.sessionId;
 
   return (
@@ -333,6 +372,7 @@ export function GameScene({
         shadow-normalBias={0.03}
       />
 
+      <primitive object={voiceEffects.group} />
       <Field
         room={roomRef.current}
         devMode={devMode}
@@ -535,6 +575,7 @@ function DevPlayer({
       delta,
     );
     object.rotation.y = toModelRotation(controls.current.yaw);
+    controls.current.height = object.position.y;
     controls.current.position = { x: object.position.x, z: object.position.z };
     const yaw = controls.current.yaw;
     camera.position.lerp(
@@ -939,6 +980,7 @@ function Player({
       object.position.y = jumpHeight(jumpTime);
       object.rotation.y = toModelRotation(controls.current.yaw);
 
+      controls.current.height = object.position.y;
       controls.current.position = {
         x: object.position.x,
         z: object.position.z,
