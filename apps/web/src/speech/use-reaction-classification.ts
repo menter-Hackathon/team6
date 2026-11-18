@@ -5,6 +5,8 @@ import {
   type ReactionSegment,
 } from "@gaya/shared";
 import { AizuchiStream, immediateAizuchiText } from "./aizuchi-stream";
+import { forkTrace, traceStage } from "../latency-trace";
+import { markLongSpeech } from "./voice-feedback";
 import { createReactionClient } from "./reaction-client";
 import type { Transcript } from "./protocol";
 
@@ -26,6 +28,7 @@ interface Job {
   prefixSegments: ReactionSegment[];
   source: string;
   userNames: string[];
+  roomId?: string;
 }
 const server =
   import.meta.env.VITE_SERVER_URL ??
@@ -37,7 +40,13 @@ const API = `${server.replace(/\/$/, "")}/api/reaction`;
 export function useReactionClassification(
   enabled: boolean,
   registeredUserNames: readonly string[] = [],
+  roomId?: string,
 ) {
+  // During a turn the server swaps in the current speaker's entered story as the source (D-090).
+  const roomIdRef = useRef(roomId);
+  roomIdRef.current = roomId;
+  const roomField = () =>
+    roomIdRef.current ? { roomId: roomIdRef.current } : {};
   const client = useRef(createReactionClient(API));
   const stream = useRef(new AizuchiStream());
   const [previewParts, setPreviewParts] = useState<ReactionSegment[]>([]);
@@ -83,6 +92,7 @@ export function useReactionClassification(
       reaction: text,
       source: sourceRef.current,
       userNames: userNamesRef.current,
+      ...roomField(),
     });
     if (!pair.success) {
       updateJudgment(id, { state: "failed" });
@@ -112,17 +122,29 @@ export function useReactionClassification(
       prefixSegments: sealed.parts,
       source: pair.data.source,
       userNames: pair.data.userNames,
+      ...(pair.data.roomId ? { roomId: pair.data.roomId } : {}),
     });
     setPending(jobs.current.length + Number(busy.current));
     void pump();
   }
-  function emit(segments: ReactionSegment[]) {
-    for (const segment of segments)
+  function emit(
+    segments: ReactionSegment[],
+    id: string,
+    via: "interim" | "final",
+  ) {
+    for (const segment of segments) {
+      const traceKey = forkTrace(id);
+      traceStage(traceKey, "classified", {
+        text: segment.text,
+        level: segment.level,
+        via,
+      });
       window.dispatchEvent(
         new CustomEvent("classified-reaction", {
-          detail: { level: segment.level },
+          detail: { level: segment.level, traceKey },
         }),
       );
+    }
   }
   function finish(
     id: string,
@@ -156,7 +178,12 @@ export function useReactionClassification(
     try {
       const started = performance.now();
       const decision = await client.current.evaluate(
-        { source: job.source, reaction: job.text, userNames: job.userNames },
+        {
+          source: job.source,
+          reaction: job.text,
+          userNames: job.userNames,
+          ...(job.roomId ? { roomId: job.roomId } : {}),
+        },
         requestController.signal,
       );
       const fresh = decision.segments ?? [
@@ -166,7 +193,7 @@ export function useReactionClassification(
       const elapsedMs = performance.now() - started;
       if (!active.current || version !== generation.current) return;
       finish(job.id, job.fullText, segments, elapsedMs);
-      emit(fresh);
+      emit(fresh, job.id, "final");
     } catch (reason) {
       if (active.current && version === generation.current) {
         setError(
@@ -196,6 +223,7 @@ export function useReactionClassification(
       reaction: text,
       source: sourceRef.current,
       userNames: userNamesRef.current,
+      ...roomField(),
     });
     if (!pair.success) return;
     const revision = stream.current.preview(id);
@@ -205,9 +233,15 @@ export function useReactionClassification(
       delayMs: immediateAizuchiText(text) ? 0 : 80,
       onResult: (decision) => {
         if (!active.current || version !== generation.current) return;
+        // Still talking through a long sentence: grow ink to 1.5x right away.
+        if (
+          decision.level === "長い文章" ||
+          decision.segments?.some((part) => part.level === "長い文章")
+        )
+          markLongSpeech();
         const fresh = stream.current.commit(id, revision, text, decision);
         if (!fresh.length) return;
-        emit(fresh);
+        emit(fresh, id, "interim");
         setPreviewParts(stream.current.emitted(id));
       },
     });
@@ -258,8 +292,10 @@ export function useReactionClassification(
         item?.source === "microphone" &&
         typeof item.text === "string" &&
         typeof item.id === "string"
-      )
+      ) {
+        traceStage(item.id, "final", { text: item.text });
         submitRef.current(item.text, item.id);
+      }
     };
     const interim = (event: Event) => {
       const { text, id } =
@@ -272,12 +308,14 @@ export function useReactionClassification(
         reaction: text,
         source: sourceRef.current,
         userNames: userNamesRef.current,
+        ...roomField(),
       });
       if (!pair.success) return;
       if (typeof id !== "string") {
         client.current.prefetch(pair.data);
         return;
       }
+      traceStage(id, "interim", { text: pair.data.reaction });
       preview(pair.data.reaction, id);
     };
     window.addEventListener("interim-transcript", interim);

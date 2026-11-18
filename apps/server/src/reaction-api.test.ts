@@ -3,6 +3,10 @@ import express from "express";
 import type { Server } from "node:http";
 import { createReactionRouter } from "./reaction-api.js";
 import { ReactionEvaluator } from "./reaction-evaluator.js";
+import {
+  registerEpisodeSource,
+  unregisterEpisodeSource,
+} from "./episode-sources.js";
 let server: Server | undefined;
 afterEach(async () => {
   if (server)
@@ -94,4 +98,40 @@ it("returns separately judged aizuchi in one response", async () => {
     ],
   });
   expect(evaluate).toHaveBeenCalledTimes(3);
+});
+
+it("uses the current speaker's entered story as the source for a room, without returning it", async () => {
+  const evaluate = vi.fn(async () => ({ level: "除外" }));
+  const api = await serve(new ReactionEvaluator(async () => evaluate));
+  const story = "駅前のラーメン屋で1時間並んだ話";
+  registerEpisodeSource("ROOM1", () => story);
+  try {
+    const post = (body: object) =>
+      fetch(`${api}/evaluate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const response = await post({
+      reaction: "2000円って書いてある",
+      roomId: "ROOM1",
+    });
+    expect(await response.json()).toEqual({ level: "除外" });
+    expect(evaluate).toHaveBeenLastCalledWith({
+      source: story,
+      reaction: "2000円って書いてある",
+    });
+    // Unknown room: falls back to the request's own source.
+    await post({
+      reaction: "それはやばい",
+      roomId: "NOPE",
+      source: "手入力の話",
+    });
+    expect(evaluate).toHaveBeenLastCalledWith({
+      source: "手入力の話",
+      reaction: "それはやばい",
+    });
+  } finally {
+    unregisterEpisodeSource("ROOM1");
+  }
 });

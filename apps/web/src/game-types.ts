@@ -14,6 +14,7 @@ export interface PlayerState {
   dive: boolean;
   submerged: boolean;
   lastProcessedInput: number;
+  hasEpisode: boolean;
 }
 
 export interface GameState {

@@ -122,14 +122,16 @@ describe("voice-scaled ink", () => {
     team: "A",
     kind: "ink",
   } as const;
-  it("keeps the impact point and scales the splat 0.9x quietly and 1.2x while voiced", () => {
+  it("keeps the impact point and scales the splat 0.9x / 1.2x / 1.5x by voice", () => {
     const plain = paintDisks(base),
-      quiet = paintDisks({ ...base, scale: inkShotScale(false) }),
-      loud = paintDisks({ ...base, scale: inkShotScale(true) });
+      quiet = paintDisks({ ...base, scale: inkShotScale(undefined) }),
+      loud = paintDisks({ ...base, scale: inkShotScale("voiced") }),
+      long = paintDisks({ ...base, scale: inkShotScale("long") });
     expect(quiet[0]!.x).toBeCloseTo(plain[0]!.x);
     expect(quiet[0]!.z).toBeCloseTo(plain[0]!.z);
     expect(quiet[0]!.radius).toBeCloseTo(plain[0]!.radius * 0.9);
     expect(loud[0]!.radius).toBeCloseTo(plain[0]!.radius * 1.2);
+    expect(long[0]!.radius).toBeCloseTo(plain[0]!.radius * 1.5);
     expect(loud[3]!.z - loud[0]!.z).toBeCloseTo(
       (plain[3]!.z - plain[0]!.z) * 1.2,
     );
@@ -143,13 +145,14 @@ describe("voice-scaled ink", () => {
       plain,
     );
   });
-  it("accepts the voiced flag on paint requests", () => {
-    expect(paintRequestSchema.parse({ kind: "ink", voiced: true })).toEqual({
+  it("accepts only the known voice states on paint requests", () => {
+    expect(paintRequestSchema.parse({ kind: "ink", voice: "long" })).toEqual({
       kind: "ink",
-      voiced: true,
+      voice: "long",
     });
+    expect(paintRequestSchema.parse({ kind: "ink" })).toEqual({ kind: "ink" });
     expect(
-      paintRequestSchema.safeParse({ kind: "ink", voiced: "yes" }).success,
+      paintRequestSchema.safeParse({ kind: "ink", voice: "huge" }).success,
     ).toBe(false);
   });
 });

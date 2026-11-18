@@ -152,6 +152,9 @@ export function App() {
           <h1>ガヤでスプラトゥーン</h1>
         </div>
         <TranscriptionPanel
+          roomId={
+            connectionState === "connected" && roomCode ? roomCode : undefined
+          }
           userNames={
             players.length
               ? players.map((player) => player.displayName)
@@ -451,6 +454,11 @@ export function App() {
               onReady={() =>
                 roomRef.current?.send("ready", !localPlayer?.ready)
               }
+              episodeSaved={localPlayer?.hasEpisode ?? false}
+              episodeCount={
+                players.filter((player) => player.hasEpisode).length
+              }
+              onEpisodeSave={(text) => roomRef.current?.send("episode", text)}
               {...(gameState.hostId === roomRef.current?.sessionId
                 ? { onStart: () => roomRef.current?.send("prepare-teams") }
                 : {})}

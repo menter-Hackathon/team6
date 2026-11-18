@@ -7,10 +7,15 @@ export const reactionLevelSchema = z.enum([
   "除外",
 ]);
 export type ReactionLevel = z.infer<typeof reactionLevelSchema>;
+export const EPISODE_MAX_LENGTH = 2000;
+/** The story a player will tell, entered before the match (D-090). Empty clears it. */
+export const episodeSchema = z.string().trim().max(EPISODE_MAX_LENGTH);
 export const reactionRequestSchema = z.object({
   reaction: z.string().trim().min(1).max(500),
-  source: z.string().trim().max(2000).default(""),
+  source: z.string().trim().max(EPISODE_MAX_LENGTH).default(""),
   userNames: z.array(z.string().trim().min(1).max(20)).max(32).default([]),
+  /** Lets the server use the current speaker's entered story as the source. */
+  roomId: z.string().trim().min(1).max(32).optional(),
 });
 export const reactionSegmentSchema = z.object({
   text: z.string().min(1).max(500),

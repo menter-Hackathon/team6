@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PracticeColorPicker } from "./practice-color-picker";
+import { EpisodeInput } from "./episode-input";
 
 interface RoomSummaryProps {
   roomCode: string;
@@ -12,6 +13,9 @@ interface RoomSummaryProps {
   ready?: boolean;
   readyCount?: number;
   onReady?: () => void;
+  episodeSaved?: boolean;
+  episodeCount?: number;
+  onEpisodeSave?: (text: string) => void;
 }
 
 export function RoomSummary({
@@ -25,6 +29,9 @@ export function RoomSummary({
   ready = false,
   readyCount = 0,
   onReady,
+  episodeSaved = false,
+  episodeCount = 0,
+  onEpisodeSave,
 }: RoomSummaryProps) {
   const [linkCopyMessage, setLinkCopyMessage] = useState("");
   const copyInviteLink = async () => {
@@ -75,6 +82,14 @@ export function RoomSummary({
         color={practiceColor}
         onSelect={onPracticeColorSelect}
       />
+      {onEpisodeSave && (
+        <EpisodeInput
+          saved={episodeSaved}
+          enteredCount={episodeCount}
+          playerCount={names.length}
+          onSave={onEpisodeSave}
+        />
+      )}
       {onReady && (
         <button
           className="room-summary-ready"

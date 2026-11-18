@@ -1,6 +1,7 @@
 import { Router, json } from "express";
 import { reactionRequestSchema } from "@gaya/shared";
 import { EvaluatorBusyError, ReactionEvaluator } from "./reaction-evaluator.js";
+import { currentEpisode } from "./episode-sources.js";
 
 export function createReactionRouter(evaluator = new ReactionEvaluator()) {
   const router = Router();
@@ -27,8 +28,14 @@ export function createReactionRouter(evaluator = new ReactionEvaluator()) {
     const controller = new AbortController();
     const closed = () => controller.abort();
     response.on("close", closed);
+    // During a turn, the speaker's entered story is the source (D-090).
+    const { roomId, ...reactionPair } = pair.data;
+    const source = currentEpisode(roomId) || reactionPair.source;
     try {
-      const decision = await evaluator.classify(pair.data, controller.signal);
+      const decision = await evaluator.classify(
+        { ...reactionPair, source },
+        controller.signal,
+      );
       if (!controller.signal.aborted) response.json(decision);
     } catch (error) {
       if (!controller.signal.aborted)

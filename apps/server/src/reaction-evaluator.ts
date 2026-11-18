@@ -123,7 +123,7 @@ export class ReactionEvaluator {
 async function loadEvaluator(): Promise<Evaluate> {
   const { initProximity, initExampleModels, evaluate } =
     await import("reaction-evaluator");
-  // Keep the supplied fp32 model and thresholds; quantization would change the classifier.
+  // The library picks the model (Ruri v3 30m q8, D-088); keep its thresholds as supplied.
   const analyzer = await initProximity({
     cacheDir: process.env.MODEL_CACHE_DIR ?? resolve(".cache/reaction-models"),
   });

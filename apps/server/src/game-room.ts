@@ -25,8 +25,13 @@ import {
   practiceColorOwner,
   advanceJump,
   type MoveInput,
+  episodeSchema,
 } from "@gaya/shared";
 import { GameState, PlayerState } from "./game-state.js";
+import {
+  registerEpisodeSource,
+  unregisterEpisodeSource,
+} from "./episode-sources.js";
 import { PaintField } from "./paint.js";
 import { deflateSync } from "node:zlib";
 import { movePlayer, movementSpeed } from "./movement.js";
@@ -42,12 +47,15 @@ export class GameRoom extends Room<{ state: GameState }> {
   private readonly specialShapes = new Map<string, SpecialShape>();
   private readonly dives = new Map<string, DiveState>();
   private turnTimer: ReturnType<typeof setInterval> | undefined;
+  /** Entered stories by session id (D-090). Server memory only; never synced. */
+  private readonly episodes = new Map<string, string>();
 
   override onCreate(options: unknown): void {
     const settings = roomOptionsSchema.parse(options);
     this.roomId = randomBytes(4).toString("hex").toUpperCase();
     this.setState(new GameState());
     this.state.turnOrder = settings.turnOrder;
+    registerEpisodeSource(this.roomId, () => this.currentEpisode());
     this.setPatchRate(1000 / SERVER_TICK_RATE);
     this.setSimulationInterval(
       (deltaMilliseconds) => this.update(deltaMilliseconds / 1000),
@@ -102,7 +110,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         ...(practice ? { practiceColor: player.practiceColor } : {}),
         kind: parsed.data.kind,
         ...(parsed.data.kind === "ink"
-          ? { scale: inkShotScale(parsed.data.voiced) }
+          ? { scale: inkShotScale(parsed.data.voice) }
           : {}),
       };
       this.paint.apply(stroke);
@@ -144,6 +152,16 @@ export class GameRoom extends Room<{ state: GameState }> {
     this.onMessage("paint-snapshot", (client) =>
       this.sendPaintSnapshot(client),
     );
+    this.onMessage("episode", (client, payload: unknown) => {
+      if (this.state.phase === "result" || this.state.phase === "closed")
+        return;
+      const parsed = episodeSchema.safeParse(payload);
+      const player = this.state.players.get(client.sessionId);
+      if (!parsed.success || !player) return;
+      if (parsed.data) this.episodes.set(client.sessionId, parsed.data);
+      else this.episodes.delete(client.sessionId);
+      player.hasEpisode = parsed.data.length > 0;
+    });
     this.onMessage("ready", (client, payload: unknown) => {
       if (this.state.phase !== "lobby" || typeof payload !== "boolean") return;
       const player = this.state.players.get(client.sessionId);
@@ -243,6 +261,7 @@ export class GameRoom extends Room<{ state: GameState }> {
 
   override onLeave(client: Client): void {
     this.movementInputs.delete(client.sessionId);
+    this.episodes.delete(client.sessionId);
     this.lastPaint.delete(client.sessionId);
     this.lastReactionPaint.delete(client.sessionId);
     this.dives.delete(client.sessionId);
@@ -268,6 +287,8 @@ export class GameRoom extends Room<{ state: GameState }> {
 
   override onDispose(): void {
     if (this.turnTimer) clearInterval(this.turnTimer);
+    unregisterEpisodeSource(this.roomId);
+    this.episodes.clear();
     this.state.phase = "closed";
   }
 
@@ -282,6 +303,13 @@ export class GameRoom extends Room<{ state: GameState }> {
     const a = players.filter((player) => player.team === "A");
     const b = players.filter((player) => player.team === "B");
     return a.flatMap((player, index) => [player, b[index]!]);
+  }
+
+  /** The current speaker's entered story, used as the source for others' gaya. */
+  private currentEpisode(): string {
+    if (this.state.phase !== "playing" || this.state.turnIndex === 0) return "";
+    const speaker = this.state.speakerOrder[this.state.turnIndex - 1];
+    return speaker ? (this.episodes.get(speaker) ?? "") : "";
   }
 
   private advanceTurn(): void {

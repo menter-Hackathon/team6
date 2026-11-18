@@ -14,6 +14,8 @@ export class PlayerState extends Schema {
   @type("boolean") dive = false;
   @type("boolean") submerged = false;
   @type("uint32") lastProcessedInput = 0;
+  /** Whether this player has entered their story; the text itself stays on the server. */
+  @type("boolean") hasEpisode = false;
 }
 
 export class GameState extends Schema {

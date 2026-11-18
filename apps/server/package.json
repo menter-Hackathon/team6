@@ -17,7 +17,7 @@
     "@gaya/shared": "*",
     "cors": "2.8.6",
     "express": "5.3.0",
-    "reaction-evaluator": "file:../../vendor/reaction-evaluator-0.2.0-4c37735a0330.tgz"
+    "reaction-evaluator": "file:../../vendor/reaction-evaluator-0.7.0-bb7d32109df7.tgz"
   },
   "devDependencies": {
     "@types/cors": "2.8.19",

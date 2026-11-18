@@ -46,7 +46,21 @@ import { AIZUCHI_MOTION_SECONDS, AIZUCHI_LAND_TIME } from "./aizuchi-motion";
 import { useAizuchiAppearance } from "./use-aizuchi-appearance";
 import { useSpecialAppearance } from "./special-appearance";
 import { InkEffects, INK_SETTLE_SECONDS } from "./ink-effects";
-import { isVoicedNow } from "./speech/voice-feedback";
+import { currentInkVoice } from "./speech/voice-feedback";
+import {
+  finishTrace,
+  recordInkRoundTrip,
+  recordUnconfirmedShot,
+  traceStage,
+} from "./latency-trace";
+
+/** Unconfirmed after this long means the server rejected the shot. */
+const PREDICTION_TIMEOUT_MS = 1500;
+/** A local shot drawn before the server confirms it (visual only). */
+interface PredictedPaint {
+  stroke: PaintStroke & { height?: number };
+  traceKey?: string;
+}
 import type { GameState } from "./game-types";
 
 import {
@@ -91,7 +105,9 @@ export function GameScene({
   colorB = "#37d9ff",
 }: GameSceneProps) {
   const aizuchiTime = useRef(AIZUCHI_MOTION_SECONDS);
-  const reactionInputs = useRef<{ level: ReactionLevel; at: number }[]>([]);
+  const reactionInputs = useRef<
+    { level: ReactionLevel; at: number; traceKey?: string }[]
+  >([]);
   const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
   const devColor = useRef(colorA);
   devColor.current = colorA;
@@ -125,15 +141,24 @@ export function GameScene({
       }
     };
     window.addEventListener("activate-special", activateSpecial);
-    const enqueueReaction = (level: ReactionLevel) => {
+    const enqueueReaction = (level: ReactionLevel, traceKey?: string) => {
       if (reactionEffect(level) && reactionInputs.current.length < 32)
-        reactionInputs.current.push({ level, at: performance.now() });
+        reactionInputs.current.push({
+          level,
+          at: performance.now(),
+          ...(traceKey ? { traceKey } : {}),
+        });
+      else finishTrace(traceKey);
     };
     const classified = (event: Event) => {
-      const parsed = reactionResponseSchema.safeParse(
-        (event as CustomEvent).detail,
-      );
-      if (parsed.success) enqueueReaction(parsed.data.level);
+      const detail = (event as CustomEvent).detail;
+      const parsed = reactionResponseSchema.safeParse(detail);
+      const traceKey: unknown = detail?.traceKey;
+      if (parsed.success)
+        enqueueReaction(
+          parsed.data.level,
+          typeof traceKey === "string" ? traceKey : undefined,
+        );
     };
     const responseMotion = (event: Event) => {
       const actorId: unknown = (event as CustomEvent).detail?.actorId;
@@ -375,7 +400,7 @@ export function GameScene({
       control.tapPending = false;
     const queue = reactionInputs.current;
     while (queue.length && performance.now() - queue[0]!.at > 15000)
-      queue.shift();
+      finishTrace(queue.shift()!.traceKey);
     const canReact =
       !specialActive &&
       !responseAirborne &&
@@ -386,6 +411,7 @@ export function GameScene({
         roomRef.current?.state.phase === "lobby" ||
         roomRef.current?.state.phase === "playing");
     let reactionKind: "reaction-fan" | "ink" | undefined;
+    let traceKey: string | undefined;
     if (
       queue.length &&
       canReact &&
@@ -393,9 +419,13 @@ export function GameScene({
         ? reactionClock.current <= 0
         : shotClock.current <= 0)
     ) {
-      const action = reactionEffect(queue.shift()!.level);
+      const reaction = queue.shift()!;
+      const action = reactionEffect(reaction.level);
+      traceKey = reaction.traceKey;
       if (action === "slam") {
         window.dispatchEvent(new Event("activate-special"));
+        traceStage(traceKey, "sent");
+        finishTrace(traceKey);
         return;
       }
       if (action) reactionKind = action;
@@ -419,8 +449,8 @@ export function GameScene({
       window.dispatchEvent(
         new CustomEvent("aizuchi-motion", { detail: { actorId: "dev" } }),
       );
-    // D-085: ordinary ink is 0.9x, and 1.2x while the local mic hears voice.
-    const voiced = kind === "ink" && isVoicedNow();
+    // D-085: ink is 0.9x silent, 1.2x while voiced, 1.5x mid long sentence.
+    const voice = kind === "ink" ? currentInkVoice() : undefined;
     if (devMode)
       window.dispatchEvent(
         new CustomEvent("dev-paint", {
@@ -432,18 +462,42 @@ export function GameScene({
             team: "A",
             practiceColor: devColor.current,
             kind,
-            ...(kind === "ink" ? { scale: inkShotScale(voiced) } : {}),
+            ...(kind === "ink" ? { scale: inkShotScale(voice) } : {}),
           } satisfies PaintStroke,
         }),
       );
     else if (
-      roomRef.current?.state.phase === "playing" ||
-      roomRef.current?.state.phase === "lobby"
-    )
-      roomRef.current.send(
-        "paint",
-        kind === "ink" ? { kind, voiced } : { kind },
+      networkPlayer &&
+      (roomRef.current?.state.phase === "playing" ||
+        roomRef.current?.state.phase === "lobby")
+    ) {
+      const room = roomRef.current;
+      room.send("paint", voice ? { kind, voice } : { kind });
+      // Draw our own shot now; the server's echo then only bakes ownership.
+      const practice = room.state.phase === "lobby";
+      window.dispatchEvent(
+        new CustomEvent<PredictedPaint>("predicted-paint", {
+          detail: {
+            stroke: {
+              revision: 0,
+              actorId: room.sessionId,
+              height: control.height,
+              ...control.position,
+              yaw: control.yaw,
+              team: networkPlayer.team === "B" ? "B" : "A",
+              ...(practice
+                ? { practiceColor: networkPlayer.practiceColor }
+                : {}),
+              kind,
+              ...(kind === "ink" ? { scale: inkShotScale(voice) } : {}),
+            },
+            ...(traceKey ? { traceKey } : {}),
+          },
+        }),
       );
+    }
+    traceStage(traceKey, "sent");
+    if (devMode) finishTrace(traceKey);
   });
 
   const localId = roomRef.current?.sessionId;
@@ -1035,13 +1089,31 @@ function Field({
         return;
       }
       if (!devMode) revision.current = stroke.revision;
-      if (!devMode && stroke.kind === "reaction-fan" && stroke.actorId)
+      const now = performance.now();
+      const prediction =
+        !devMode && stroke.actorId && stroke.actorId === room?.sessionId
+          ? claimPrediction(stroke.kind, now)
+          : undefined;
+      if (
+        !prediction &&
+        !devMode &&
+        stroke.kind === "reaction-fan" &&
+        stroke.actorId
+      )
         window.dispatchEvent(
           new CustomEvent("aizuchi-motion", {
             detail: { actorId: stroke.actorId },
           }),
         );
-      const flightSeconds = effects.emit(stroke);
+      // Our own shot was already drawn at send time; don't fire it twice.
+      const flightSeconds = prediction
+        ? prediction.flight
+        : effects.emit(stroke);
+      if (prediction) {
+        if (stroke.kind === "ink") recordInkRoundTrip(now - prediction.at);
+        traceStage(prediction.traceKey, "echo", {}, now);
+        finishTrace(prediction.traceKey);
+      }
       const team = stroke.practiceColor
         ? practiceColorOwner(stroke.practiceColor)
         : stroke.team === "A"
@@ -1053,9 +1125,52 @@ function Field({
       // Bake only after the airborne drop lands and its transient splat has expanded.
       displayQueue.push({
         stroke,
-        at: performance.now() + (flightSeconds + INK_SETTLE_SECONDS) * 1000,
+        at:
+          (prediction?.at ?? now) + (flightSeconds + INK_SETTLE_SECONDS) * 1000,
       });
     };
+    // Shots we drew before the server confirmed them, oldest first.
+    const predictions: {
+      kind: PaintStroke["kind"];
+      at: number;
+      flight: number;
+      traceKey?: string;
+    }[] = [];
+    const expirePredictions = (now: number) => {
+      while (
+        predictions.length &&
+        now - predictions[0]!.at > PREDICTION_TIMEOUT_MS
+      ) {
+        // Rejected by the server (rate limit, dive, phase): it never painted.
+        recordUnconfirmedShot();
+        finishTrace(predictions.shift()!.traceKey);
+      }
+    };
+    const claimPrediction = (kind: PaintStroke["kind"], now: number) => {
+      expirePredictions(now);
+      const index = predictions.findIndex((entry) => entry.kind === kind);
+      return index < 0 ? undefined : predictions.splice(index, 1)[0];
+    };
+    const predicted = (event: Event) => {
+      if (disposed || devMode) return;
+      const { stroke, traceKey } = (event as CustomEvent<PredictedPaint>)
+        .detail;
+      const now = performance.now();
+      expirePredictions(now);
+      if (stroke.kind === "reaction-fan" && stroke.actorId)
+        window.dispatchEvent(
+          new CustomEvent("aizuchi-motion", {
+            detail: { actorId: stroke.actorId },
+          }),
+        );
+      predictions.push({
+        kind: stroke.kind,
+        at: now,
+        flight: effects.emit(stroke),
+        ...(traceKey ? { traceKey } : {}),
+      });
+    };
+    window.addEventListener("predicted-paint", predicted);
     const devPaint = (event: Event) =>
       paint((event as CustomEvent<PaintStroke>).detail);
     if (devMode) window.addEventListener("dev-paint", devPaint);
@@ -1110,6 +1225,8 @@ function Field({
       removePaint?.();
       removeSnapshot?.();
       window.removeEventListener("dev-paint", devPaint);
+      window.removeEventListener("predicted-paint", predicted);
+      predictions.length = 0;
     };
   }, [room, devMode, canvas, texture, devOwnPaint, cells, effects]);
   return (
