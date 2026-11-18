@@ -1406,3 +1406,24 @@ kbd {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.team-screen-back {
+  background: #b9f2e8;
+  transform: rotate(1.5deg);
+}
+.team-screen-back span { font-size: 23px; vertical-align: -2px; }
+.team-screen-actions button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  filter: grayscale(.35);
+}
+.team-screen-actions button:disabled:hover { transform: none; filter: grayscale(.35); }
+
+.room-summary-waiting,
+.progression-popup--lobby .lobby-replay-waiting {
+  margin: 8px 0;
+  color: #f7eb3d;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+}

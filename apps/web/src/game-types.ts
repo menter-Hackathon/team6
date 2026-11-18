@@ -29,5 +29,6 @@ export interface GameState {
   turnEndsAt: number;
   countdownEndsAt: number;
   talkDuration: number;
+  replayPlayerCount: number;
   speakerOrder: string[];
 }

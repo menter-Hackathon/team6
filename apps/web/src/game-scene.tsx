@@ -23,6 +23,7 @@ import {
   type SpecialShape,
   NEON_COLORS,
   practiceColorOwner,
+  teamStartPosition,
 } from "@gaya/shared";
 import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -42,6 +43,8 @@ interface GameSceneProps {
   playerIds: string[];
   devMode?: boolean;
   devComCount?: number;
+  devMatchPhase?: string | undefined;
+  devTeamOffset?: number;
   devTeam: "A" | "B";
   devAreaMultiplier?: number;
   devCanPaint?: boolean;
@@ -69,6 +72,8 @@ export function GameScene({
   playerIds,
   devMode = false,
   devComCount = 0,
+  devMatchPhase,
+  devTeamOffset = 0,
   devTeam,
   devAreaMultiplier = 1,
   devCanPaint = true,
@@ -352,6 +357,7 @@ export function GameScene({
         devMode={devMode}
         devOwnPaint={devOwnPaint}
         devPaintCells={devPaintCells}
+        devCanPaint={activeDevCanPaint}
         colorA={colorA}
         colorB={colorB}
       />
@@ -364,16 +370,23 @@ export function GameScene({
           areaMultiplier={activeDevAreaMultiplier}
           canPaint={activeDevCanPaint}
           canMove={activeDevCanMove}
+          startPosition={devMatchPhase ? teamStartPosition(devTeamOffset % 2 === 0 ? "A" : "B", 0, (devComCount + 1) / 2) : undefined}
+          phase={devMatchPhase}
         />
       )}
       {devMode &&
         Array.from({ length: devComCount }, (_, index) => {
-          const team = (index + 1) % 2 === 0 ? "A" : "B";
+          const rosterIndex = index + 1;
+          const team = (rosterIndex + devTeamOffset) % 2 === 0 ? "A" : "B";
           const angle = (index / Math.max(devComCount, 1)) * Math.PI * 2;
+          const lineup = devMatchPhase === "countdown" || devMatchPhase === "playing" || devMatchPhase === "result";
+          const slot = Array.from({ length: rosterIndex + 1 }, (_, playerIndex) => playerIndex)
+            .filter((playerIndex) => (playerIndex + devTeamOffset) % 2 === (rosterIndex + devTeamOffset) % 2).length - 1;
+          const start = teamStartPosition(team, slot, (devComCount + 1) / 2);
           return (
             <group
               key={index}
-              position={[Math.cos(angle) * 5, 0, Math.sin(angle) * 5]}
+              position={lineup ? [start.x, 0, start.z] : [Math.cos(angle) * 5, 0, Math.sin(angle) * 5]}
             >
               <mesh castShadow receiveShadow position-y={0.5}>
                 <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
@@ -451,6 +464,8 @@ function DevPlayer({
   areaMultiplier,
   canPaint,
   canMove,
+  startPosition,
+  phase,
 }: {
   controls: MutableRefObject<ControlState>;
   ownPaint: MutableRefObject<(x: number, z: number) => boolean>;
@@ -459,8 +474,11 @@ function DevPlayer({
   areaMultiplier: MutableRefObject<number>;
   canPaint: MutableRefObject<boolean>;
   canMove: MutableRefObject<boolean>;
+  startPosition: { x: number; z: number; yaw: number } | undefined;
+  phase: string | undefined;
 }) {
   const group = useRef<THREE.Group>(null);
+  const previousPhase = useRef<string | undefined>(undefined);
   const appearance = useDiveAppearance();
   const specialAppearance = useSpecialAppearance();
   const { camera } = useThree();
@@ -472,11 +490,25 @@ function DevPlayer({
   useFrame((_, delta) => {
     const object = group.current;
     if (!object) return;
+    if (phase === "countdown" && previousPhase.current !== "countdown" && startPosition) {
+      object.position.set(startPosition.x, 0, startPosition.z);
+      controls.current.position = { x: startPosition.x, z: startPosition.z };
+      controls.current.yaw = startPosition.yaw;
+      object.rotation.y = toModelRotation(startPosition.yaw);
+    }
+    previousPhase.current = phase;
     if (!canMove.current) {
       controls.current.jumpTime = -1;
       controls.current.specialTime = -1;
       object.position.y = 0;
       controls.current.position = { x: object.position.x, z: object.position.z };
+      const yaw = controls.current.yaw;
+      camera.position.set(
+        object.position.x + Math.sin(yaw) * 6,
+        3.7,
+        object.position.z - Math.cos(yaw) * 6,
+      );
+      camera.lookAt(object.position.x, 1.1, object.position.z);
       return;
     }
     controls.current.jumpTime = advanceJump(
@@ -638,6 +670,7 @@ function Field({
   devMode,
   devOwnPaint,
   devPaintCells,
+  devCanPaint,
   colorA,
   colorB,
 }: {
@@ -645,6 +678,7 @@ function Field({
   devMode: boolean;
   devOwnPaint: MutableRefObject<(x: number, z: number) => boolean>;
   devPaintCells: MutableRefObject<Uint8Array | null>;
+  devCanPaint: MutableRefObject<boolean>;
   colorA: string;
   colorB: string;
 }) {
@@ -805,8 +839,9 @@ function Field({
         at: performance.now() + (flightSeconds + INK_SETTLE_SECONDS) * 1000,
       });
     };
-    const devPaint = (event: Event) =>
-      paint((event as CustomEvent<PaintStroke>).detail);
+    const devPaint = (event: Event) => {
+      if (devCanPaint.current) paint((event as CustomEvent<PaintStroke>).detail);
+    };
     const resetDevPaint = () => {
       displayQueue.length = 0;
       effects.clear();
@@ -947,6 +982,7 @@ function Player({
   const appearance = useDiveAppearance();
   const specialAppearance = useSpecialAppearance();
   const initialized = useRef(false);
+  const previousPhase = useRef<string | undefined>(undefined);
   const { camera } = useThree();
   const cameraOffset = useMemo(() => new THREE.Vector3(), []);
   const cameraTarget = useMemo(() => new THREE.Vector3(), []);
@@ -955,6 +991,14 @@ function Player({
     const player = roomRef.current?.state.players.get(playerId);
     const object = group.current;
     if (!player || !object) return;
+    const phase = roomRef.current?.state.phase;
+    if (phase === "countdown" && previousPhase.current !== "countdown") {
+      predicted.current.set(player.x, 0, player.z);
+      object.position.set(player.x, 0, player.z);
+      object.rotation.y = toModelRotation(player.yaw);
+      if (local) controls.current.yaw = player.yaw;
+    }
+    previousPhase.current = phase;
     const specialActive = player.specialTime >= 0;
     if (local && specialActive) controls.current.jumpTime = -1;
     if (local)
@@ -987,7 +1031,6 @@ function Player({
           ? DIVE_SPEED
           : DISC_SPEED
         : PLAYER_SPEED;
-      const phase = roomRef.current?.state.phase;
       if (!specialActive && (phase === "playing" || phase === "lobby")) {
         predicted.current.x += input.x * scale * speed * delta;
         predicted.current.z += input.z * scale * speed * delta;

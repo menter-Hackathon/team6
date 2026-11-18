@@ -10,6 +10,8 @@ interface TeamSelectionProps {
   onTalkDurationSelect: (seconds: number) => void;
   onColorSelect: (team: "A" | "B", color: string) => void;
   onReshuffle: () => void;
+  onReturnToLobby: () => void;
+  canStart?: boolean;
   onStart: () => void;
 }
 
@@ -22,6 +24,8 @@ export function TeamSelection({
   onTalkDurationSelect,
   onColorSelect,
   onReshuffle,
+  onReturnToLobby,
+  canStart = true,
   onStart,
 }: TeamSelectionProps) {
   return (
@@ -64,8 +68,9 @@ export function TeamSelection({
         <footer className="team-screen-footer">
           {!isHost && <p>ルーム作成者がチームを決めています…</p>}
           {isHost && <div className="team-screen-actions">
+            <button className="team-screen-back" type="button" onClick={onReturnToLobby}><span aria-hidden="true">↶</span> ロビーに戻る</button>
             <button className="team-screen-reshuffle" type="button" onClick={onReshuffle}><span aria-hidden="true">↻</span> 選び直す</button>
-            <button className="team-screen-start" type="button" onClick={onStart}>このチームでスタート <span aria-hidden="true">➜</span></button>
+            <button className="team-screen-start" type="button" disabled={!canStart} onClick={onStart}>このチームでスタート <span aria-hidden="true">➜</span></button>
           </div>}
         </footer>
       </section>

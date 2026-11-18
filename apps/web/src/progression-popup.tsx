@@ -12,6 +12,7 @@ interface ProgressionPopupProps {
   isHost?: boolean;
   isReady?: boolean;
   canStart?: boolean;
+  requiredPlayerCount?: number;
   practiceColor?: string;
   onPracticeColorSelect?: (color: string) => void;
   speakerName?: string;
@@ -31,6 +32,7 @@ export function ProgressionPopup({
   isHost = false,
   isReady = false,
   canStart = false,
+  requiredPlayerCount = 0,
   practiceColor = "#ff4f8b",
   onPracticeColorSelect,
   speakerName = "プレイヤー",
@@ -166,9 +168,14 @@ export function ProgressionPopup({
             <p className="lobby-ready-count">
               準備完了{" "}
               <strong>
-                {readyCount} / {players.length}
+                {readyCount} / {Math.max(requiredPlayerCount, players.length)}
               </strong>
             </p>
+            {requiredPlayerCount > players.length && (
+              <p className="lobby-replay-waiting" role="status">
+                再戦にはあと{requiredPlayerCount - players.length}人の入室が必要です
+              </p>
+            )}
             <ul className="lobby-names" aria-label="参加中のプレイヤー">
               {players.map((player, index) => (
                 <li key={index}>{player.displayName}</li>
@@ -184,7 +191,9 @@ export function ProgressionPopup({
                   disabled={!canStart}
                   title={
                     !canStart
-                      ? "4・6・8人で全員が準備すると開始できます"
+                      ? requiredPlayerCount > 0
+                        ? `${requiredPlayerCount}人全員が揃って準備完了すると開始できます`
+                        : "4・6・8人で全員が準備すると開始できます"
                       : undefined
                   }
                   onClick={onStart}

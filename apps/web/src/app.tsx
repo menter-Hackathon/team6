@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { Client, type Room } from "@colyseus/sdk";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   GAME_ROOM_NAME,
   NEON_COLORS,
@@ -68,7 +68,12 @@ export function App() {
   const [devMatchCount, setDevMatchCount] = useState(4);
   const [devMatchTurn, setDevMatchTurn] = useState<DevMatchTurn | null>(null);
   const [devMatchPhase, setDevMatchPhase] = useState<DevMatchPhase>("lobby");
+  const [devTeamOffset, setDevTeamOffset] = useState(0);
   const [showTopicPopup, setShowTopicPopup] = useState(true);
+  const syncDevTeamOffset = useCallback((offset: number) => {
+    setDevTeamOffset(offset);
+    setDevTeam(offset % 2 === 0 ? "A" : "B");
+  }, []);
 
   const connect = async (create: boolean) => {
     if (!SERVER_URL) {
@@ -146,6 +151,7 @@ export function App() {
     setDevMatchActive(false);
     setDevMatchTurn(null);
     setDevMatchPhase("lobby");
+    setDevTeamOffset(0);
   };
 
   const leaveRoom = () => {
@@ -162,6 +168,7 @@ export function App() {
   const canStart =
     gameState?.hostId === roomRef.current?.sessionId &&
     STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) &&
+    (gameState?.replayPlayerCount === 0 || players.length === gameState?.replayPlayerCount) &&
     players.every((player) => player.ready);
   const canReplay =
     gameState?.hostId === roomRef.current?.sessionId &&
@@ -169,7 +176,11 @@ export function App() {
     players.filter((player) => player.team === "A").length === players.length / 2 &&
     players.filter((player) => player.team === "B").length === players.length / 2;
   const devSpeakerBlocked =
-    devMatchActive && devMatchTurn?.isYourTurn && devTeam === "A";
+    devMatchActive && devMatchTurn?.isYourTurn === true;
+  const devMatchCanPaint =
+    !devMatchActive ||
+    devMatchPhase === "lobby" ||
+    (devMatchPhase === "playing" && devMatchTurn !== null && !devSpeakerBlocked);
   const devAreaMultiplier =
     devMatchActive &&
     devMatchTurn &&
@@ -375,10 +386,12 @@ export function App() {
               playerIds={devMode ? [] : playerIds}
               devMode={devMode}
               devComCount={devMatchActive ? devMatchCount - 1 : 0}
+              devMatchPhase={devMatchActive ? devMatchPhase : undefined}
+              devTeamOffset={devTeamOffset}
               devTeam={devTeam}
               devAreaMultiplier={devAreaMultiplier}
               devCanMove={!devMatchActive || devMatchPhase === "lobby" || devMatchPhase === "playing"}
-              devCanPaint={(!devMatchActive || devMatchPhase === "lobby" || devMatchPhase === "playing") && !devSpeakerBlocked}
+              devCanPaint={devMatchCanPaint}
               devPaintCells={devPaintCells}
               specialShape={specialShape}
               colorA={devMode ? devColorA : gameState?.colorA}
@@ -439,6 +452,7 @@ export function App() {
             onCountChange={setDevMatchCount}
             onTurnChange={setDevMatchTurn}
             onPhaseChange={setDevMatchPhase}
+            onTeamOffsetChange={syncDevTeamOffset}
             onColorSelect={(team, color) => {
               if (team === "A") setDevColorA(color);
               else setDevColorB(color);
@@ -447,6 +461,7 @@ export function App() {
               setDevMatchActive(false);
               setDevMatchTurn(null);
               setDevMatchPhase("lobby");
+              setDevTeamOffset(0);
             }}
           />
         )}
@@ -525,6 +540,7 @@ export function App() {
               isHost={gameState.hostId === roomRef.current?.sessionId}
               isReady={localPlayer?.ready ?? false}
               canStart={canStart}
+              requiredPlayerCount={gameState.replayPlayerCount}
               practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
               onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               onClose={() => setShowTopicPopup(false)}
@@ -546,6 +562,7 @@ export function App() {
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
               canStart={canStart}
+              requiredPlayerCount={gameState.replayPlayerCount}
               practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
               onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               ready={localPlayer?.ready ?? false}
@@ -574,6 +591,8 @@ export function App() {
                 roomRef.current?.send("team-color", { team, color })
               }
               onReshuffle={() => roomRef.current?.send("reshuffle-teams")}
+              onReturnToLobby={() => roomRef.current?.send("return-to-lobby")}
+              canStart={players.length === gameState.speakerOrder.length && (gameState.replayPlayerCount === 0 || players.length === gameState.replayPlayerCount)}
               onStart={() => roomRef.current?.send("start")}
             />
           )}

@@ -29,6 +29,7 @@ interface Props {
   onCountChange: (count: number) => void;
   onTurnChange: (turn: DevMatchTurn | null) => void;
   onPhaseChange: (phase: DevMatchPhase) => void;
+  onTeamOffsetChange: (offset: number) => void;
   onClose: () => void;
 }
 
@@ -40,6 +41,7 @@ export function DevMatchFlow({
   onCountChange,
   onTurnChange,
   onPhaseChange,
+  onTeamOffsetChange,
   onClose,
 }: Props) {
   const [count, setCount] = useState<4 | 6 | 8>(4);
@@ -59,18 +61,19 @@ export function DevMatchFlow({
   }));
 
   useEffect(() => onPhaseChange(phase), [phase, onPhaseChange]);
+  useEffect(() => onTeamOffsetChange(teamOffset), [teamOffset, onTeamOffsetChange]);
 
   useEffect(() => {
     onTurnChange(
       phase === "playing"
         ? {
             count,
-            speakerTeam: turnIndex % 2 === 0 ? "A" : "B",
-            isYourTurn: turnIndex === 0,
+            speakerTeam: players[turnIndex]!.team,
+            isYourTurn: players[turnIndex]!.id === "you",
           }
         : null,
     );
-  }, [phase, count, turnIndex, onTurnChange]);
+  }, [phase, count, turnIndex, teamOffset, ready, onTurnChange]);
 
   useEffect(() => {
     if (phase !== "countdown") return;
@@ -201,6 +204,7 @@ export function DevMatchFlow({
           onTalkDurationSelect={setTalkDuration}
           onColorSelect={onColorSelect}
           onReshuffle={() => setTeamOffset((value) => value + 1)}
+          onReturnToLobby={() => { setPhase("lobby"); setReady(false); setShowLobby(true); }}
           onStart={startMatch}
         />
       )}

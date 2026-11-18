@@ -25,6 +25,7 @@ import {
   type MoveInput,
   countPaintedCells,
   speakerTeamAreaMultiplier,
+  teamStartPosition,
 } from "@gaya/shared";
 import { GameState, PlayerState } from "./game-state.js";
 import { PaintField } from "./paint.js";
@@ -174,6 +175,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       const players = Array.from(this.state.players.values());
       if (
         !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
+        (this.state.replayPlayerCount > 0 && players.length !== this.state.replayPlayerCount) ||
         players.some((player) => !player.ready)
       )
         return;
@@ -217,11 +219,22 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.state.turnIndex = 0;
       this.state.turnEndsAt = 0;
       this.state.countdownEndsAt = 0;
+      this.state.replayPlayerCount = players.length;
       this.broadcast("paint-snapshot", {
         revision: this.paint.revision,
         data: deflateSync(this.paint.cells).toString("base64"),
       });
       this.state.phase = "team_selection";
+    });
+    this.onMessage("return-to-lobby", (client) => {
+      if (client.sessionId !== this.state.hostId || this.state.phase !== "team_selection") return;
+      this.state.phase = "lobby";
+      this.state.replayPlayerCount = 0;
+      this.state.speakerOrder.clear();
+      this.state.players.forEach((player) => {
+        player.team = "";
+        player.ready = false;
+      });
     });
     this.onMessage("start", (client) => {
       if (
@@ -229,13 +242,27 @@ export class GameRoom extends Room<{ state: GameState }> {
         this.state.phase !== "team_selection"
       )
         return;
+      const players = Array.from(this.state.players.values());
+      if (
+        !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
+        (this.state.replayPlayerCount > 0 && players.length !== this.state.replayPlayerCount) ||
+        players.some((player) => !player.ready) ||
+        players.filter((player) => player.team === "A").length !== players.length / 2 ||
+        players.filter((player) => player.team === "B").length !== players.length / 2
+      ) return;
+      this.state.replayPlayerCount = 0;
       this.paint.reset();
       this.lastPaint.clear();
+      const teams = {
+        A: Array.from(this.state.players.values()).filter((player) => player.team === "A"),
+        B: Array.from(this.state.players.values()).filter((player) => player.team === "B"),
+      };
       this.state.players.forEach((player, sessionId) => {
-        const index = Array.from(this.state.players.keys()).indexOf(sessionId);
-        player.x = (index % 4) * 2 - 3;
-        player.z = Math.floor(index / 4) * 2 - 1;
-        player.yaw = 0;
+        const team = player.team === "B" ? "B" : "A";
+        const position = teamStartPosition(team, teams[team].indexOf(player), teams[team].length);
+        player.x = position.x;
+        player.z = position.z;
+        player.yaw = position.yaw;
         player.jumpTime = -1;
         player.specialTime = -1;
         player.dive = false;

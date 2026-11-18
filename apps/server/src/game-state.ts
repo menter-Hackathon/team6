@@ -30,5 +30,6 @@ export class GameState extends Schema {
   @type("float64") turnEndsAt = 0;
   @type("float64") countdownEndsAt = 0;
   @type("uint8") talkDuration = PRESENTATION_SECONDS;
+  @type("uint8") replayPlayerCount = 0;
   @type(["string"]) speakerOrder = new ArraySchema<string>();
 }
