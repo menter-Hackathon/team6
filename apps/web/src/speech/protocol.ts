@@ -1,6 +1,11 @@
-export const WHISPER_MODEL = "onnx-community/whisper-base";
+export const WHISPER_MODELS = {
+  fast: "onnx-community/whisper-tiny",
+  balanced: "onnx-community/whisper-base",
+} as const;
+export type SpeechModelChoice = keyof typeof WHISPER_MODELS;
 export type SpeechRequest =
-  { type: "load" } | { type: "transcribe"; id: string; audio: Float32Array };
+  | { type: "load"; model: SpeechModelChoice }
+  | { type: "transcribe"; id: string; audio: Float32Array };
 export type SpeechResponse =
   | { type: "progress"; progress: number }
   | { type: "ready" }

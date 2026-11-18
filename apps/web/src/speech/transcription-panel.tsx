@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import type { SpeechModelChoice } from "./protocol";
 import { useTranscription } from "./use-transcription";
 import "./transcription.css";
 
@@ -49,6 +50,29 @@ export function TranscriptionPanel() {
           </header>
           <p className="speech-note">
             インク演出は画面下のボタンで試せます。マイクは文字起こし用です。音声は外部に送信しません。
+          </p>
+          <label className="speech-model">
+            認識モード
+            <select
+              aria-label="認識モード"
+              value={speech.model}
+              disabled={
+                speech.phase === "loading" ||
+                speech.listening ||
+                speech.starting ||
+                speech.decoding ||
+                speech.pending > 0
+              }
+              onChange={(event) =>
+                speech.changeModel(event.target.value as SpeechModelChoice)
+              }
+            >
+              <option value="fast">速度優先 · Whisper tiny</option>
+              <option value="balanced">精度優先 · Whisper base（従来）</option>
+            </select>
+          </label>
+          <p className="speech-note">
+            速度優先は聞き間違いが増える場合があります。切り替え後はモデルを準備してください。実マイクでの精度・速度の評価はまだです。
           </p>
           {speech.phase !== "ready" ? (
             <div className="speech-setup">

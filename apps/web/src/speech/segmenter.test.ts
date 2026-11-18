@@ -25,14 +25,25 @@ describe("speech segmentation", () => {
     feed(vad, 25, 0.04);
     expect(vad.speaking).toBe(true);
     expect(result).toHaveLength(0);
-    feed(vad, 20, 0);
+    feed(vad, 17, 0);
     expect(result).toHaveLength(0);
-    feed(vad, 15, 0);
+    feed(vad, 1, 0);
     expect(result).toHaveLength(1);
     expect(result[0]!.filter((value) => value > 0.02).length).toBe(25 * 320);
     expect(result[0]!.length / rate).toBeLessThan(1);
     feed(vad, 100, 0);
     expect(result).toHaveLength(1);
+  });
+  it("keeps a short pause within one utterance while ending promptly at 350ms", () => {
+    const result: Float32Array[] = [];
+    const vad = new SpeechSegmenter(rate, (audio) => result.push(audio));
+    feed(vad, 20, 0.04);
+    feed(vad, 12, 0);
+    feed(vad, 20, 0.04);
+    expect(result).toHaveLength(0);
+    feed(vad, 18, 0);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.filter((value) => value > 0.02).length).toBe(40 * 320);
   });
   it("bounds continuous speech to six seconds and flushes the last utterance on stop", () => {
     const result: Float32Array[] = [],

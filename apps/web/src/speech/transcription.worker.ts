@@ -5,7 +5,8 @@ import {
   type AutomaticSpeechRecognitionPipeline,
 } from "@huggingface/transformers";
 import {
-  WHISPER_MODEL,
+  WHISPER_MODELS,
+  type SpeechModelChoice,
   type SpeechRequest,
   type SpeechResponse,
 } from "./protocol";
@@ -16,30 +17,38 @@ env.allowLocalModels = false;
 if (env.backends.onnx.wasm) env.backends.onnx.wasm.numThreads = 1;
 let recognizer: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
 let busy = false;
+let model: SpeechModelChoice = "fast";
 const progress = new Map<string, { loaded: number; total: number }>();
 const post = (message: SpeechResponse) => scope.postMessage(message);
 
 function load(): Promise<AutomaticSpeechRecognitionPipeline> {
   if (!recognizer) {
-    recognizer = pipeline("automatic-speech-recognition", WHISPER_MODEL, {
-      device: "wasm",
-      dtype: "q8",
-      progress_callback: (event) => {
-        if (event.status !== "progress") return;
-        progress.set(event.file, { loaded: event.loaded, total: event.total });
-        const files = [...progress.values()],
-          total = files.reduce((n, file) => n + file.total, 0);
-        post({
-          type: "progress",
-          progress: total
-            ? Math.min(
-                99,
-                (files.reduce((n, file) => n + file.loaded, 0) / total) * 100,
-              )
-            : 0,
-        });
+    recognizer = pipeline(
+      "automatic-speech-recognition",
+      WHISPER_MODELS[model],
+      {
+        device: "wasm",
+        dtype: "q8",
+        progress_callback: (event) => {
+          if (event.status !== "progress") return;
+          progress.set(event.file, {
+            loaded: event.loaded,
+            total: event.total,
+          });
+          const files = [...progress.values()],
+            total = files.reduce((n, file) => n + file.total, 0);
+          post({
+            type: "progress",
+            progress: total
+              ? Math.min(
+                  99,
+                  (files.reduce((n, file) => n + file.loaded, 0) / total) * 100,
+                )
+              : 0,
+          });
+        },
       },
-    }).catch((error) => {
+    ).catch((error) => {
       recognizer = null;
       progress.clear();
       throw error;
@@ -54,6 +63,7 @@ scope.addEventListener(
     const request = event.data;
     try {
       if (request.type === "load") {
+        model = request.model;
         await load();
         post({ type: "ready" });
         return;

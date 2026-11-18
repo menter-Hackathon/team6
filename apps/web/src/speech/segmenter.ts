@@ -1,6 +1,6 @@
 import { joinAudio, resampleAudio } from "./audio";
 
-/** Short utterances: 120ms onset, 600ms silence, 250ms pre-roll, 6s maximum. */
+/** Short utterances: 120ms onset, 350ms silence, 250ms pre-roll, 6s maximum. */
 export class SpeechSegmenter {
   private pre: Float32Array[] = [];
   private chunks: Float32Array[] = [];
@@ -47,7 +47,7 @@ export class SpeechSegmenter {
         this.silence = 0;
       } else this.silence += seconds;
     }
-    if (this.silence >= 0.6 || this.duration >= 6) this.flush();
+    if (this.silence >= 0.35 || this.duration >= 6) this.flush();
   }
 
   flush(): void {

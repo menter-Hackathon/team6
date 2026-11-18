@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { MicrophoneCapture } from "./capture";
 import { monoAudio, resampleAudio, SPEECH_SAMPLE_RATE } from "./audio";
-import type { SpeechRequest, SpeechResponse, Transcript } from "./protocol";
+import type {
+  SpeechRequest,
+  SpeechResponse,
+  Transcript,
+  SpeechModelChoice,
+} from "./protocol";
 
 import { reportVoiceInput } from "./voice-feedback";
 
@@ -15,6 +20,7 @@ interface Job {
 const MAX_PENDING = 3;
 
 export function useTranscription() {
+  const [model, setModel] = useState<SpeechModelChoice>("fast");
   const [phase, setPhase] = useState<Phase>("idle"),
     [progress, setProgress] = useState(0);
   const [listening, setListening] = useState(false),
@@ -157,7 +163,7 @@ export function useTranscription() {
           "音声認識を起動できませんでした。ページを再読み込みして、もう一度準備してください。",
         );
       };
-      instance.postMessage({ type: "load" } satisfies SpeechRequest);
+      instance.postMessage({ type: "load", model } satisfies SpeechRequest);
     } catch {
       resetWorker("error");
       setError("このブラウザで音声認識を起動できませんでした。");
@@ -257,6 +263,16 @@ export function useTranscription() {
 
   return {
     phase,
+    model,
+    changeModel: (next: SpeechModelChoice) => {
+      if (starting || listening || decoding || pending || phase === "loading")
+        return;
+      stop(false);
+      resetWorker("idle");
+      setModel(next);
+      setProgress(0);
+      setError("");
+    },
     progress,
     listening,
     starting,

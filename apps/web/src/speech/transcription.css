@@ -256,3 +256,18 @@
   outline: 3px solid #fff;
   outline-offset: 4px;
 }
+
+.speech-model {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 12px;
+}
+.speech-model select {
+  width: 100%;
+  border: 1px solid #5c6d8b;
+  border-radius: 9px;
+  padding: 9px;
+  background: #25334b;
+  color: #fff;
+}
