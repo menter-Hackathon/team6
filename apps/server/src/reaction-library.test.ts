@@ -12,15 +12,12 @@ function scores(values: Partial<Record<keyof Models, number>>): Models {
     models[feature] = async () => values[feature] ?? 0;
   return models;
 }
-it("ships the updated product-word and combined-aizuchi rules with the same four levels", async () => {
+it("keeps the combined-aizuchi rule and leaves the product-word rule off (D-095)", async () => {
   const product = await evaluate(
     { source: "", reaction: "いいアイデア" },
     scores({ isAizuchi: 0.9 }),
   );
-  expect(product).toMatchObject({
-    level: "長い文章",
-    rule: "長い文章:プロダクトの話",
-  });
+  expect(product).toMatchObject({ level: "短い相槌", rule: "短い相槌" });
   const combined = await evaluate(
     { source: "", reaction: "すげえ、マジか天才、なるほど" },
     scores({ isAizuchiSet: 1 }),
