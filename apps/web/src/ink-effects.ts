@@ -18,6 +18,7 @@ interface Shot {
   origin: THREE.Vector3;
   velocity: THREE.Vector3;
   stroke: PaintStroke;
+  surfaceHit?: boolean;
   shed: number;
   duration: number;
   trail: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
@@ -111,14 +112,18 @@ export class InkEffects {
     this.geometry = new THREE.LatheGeometry(profile, 32);
   }
 
-  emit(stroke: PaintStroke): number {
+  emit(
+    stroke: PaintStroke,
+    surface?: THREE.Vector3,
+    surfaceHeight = 0,
+  ): number {
     const team = stroke.practiceColor
       ? practiceColorOwner(stroke.practiceColor) + 1
       : stroke.team === "A"
         ? 0
         : 1;
     if (stroke.kind !== "ink") {
-      this.spread(stroke, team);
+      this.spread(stroke, team, surfaceHeight);
       if (stroke.kind === "slam") {
         for (
           let i = 0;
@@ -129,7 +134,7 @@ export class InkEffects {
             speed = 3.5 + Math.random() * 3;
           const position = new THREE.Vector3(
             stroke.x + Math.cos(angle) * 0.6,
-            0.09,
+            0.09 + surfaceHeight,
             stroke.z + Math.sin(angle) * 0.6,
           );
           const velocity = new THREE.Vector3(
@@ -149,11 +154,12 @@ export class InkEffects {
     }
     const impact = paintDisks(stroke)[0]!;
     const origin = new THREE.Vector3(
-      stroke.x - Math.sin(stroke.yaw) * 0.65,
-      1.1,
-      stroke.z + Math.cos(stroke.yaw) * 0.65,
+      stroke.x - Math.sin(stroke.yaw) * (surface ? 0.32 : 0.65),
+      1.1 + ((stroke as PaintStroke & { height?: number }).height ?? 0),
+      stroke.z + Math.cos(stroke.yaw) * (surface ? 0.32 : 0.65),
     );
-    const destination = new THREE.Vector3(impact.x, 0.035, impact.z);
+    const destination =
+      surface?.clone() ?? new THREE.Vector3(impact.x, 0.035, impact.z);
     const duration = THREE.MathUtils.clamp(
       origin.distanceTo(destination) / 32,
       0.12,
@@ -169,6 +175,7 @@ export class InkEffects {
       origin,
       velocity: velocity.clone(),
       stroke,
+      surfaceHit: Boolean(surface),
       shed: 0,
       duration,
       trail: this.createTrail(team),
@@ -265,7 +272,7 @@ export class InkEffects {
     return drop;
   }
 
-  private spread(stroke: PaintStroke, team: number): void {
+  private spread(stroke: PaintStroke, team: number, surfaceHeight = 0): void {
     const disks = paintDisks(stroke);
     const step =
       stroke.kind === "ink" || stroke.kind === "slam"
@@ -279,6 +286,7 @@ export class InkEffects {
         stroke.kind === "ink" || stroke.kind === "slam"
           ? Math.min(i * 0.004, 0.025)
           : 0,
+        surfaceHeight,
       );
     }
   }
@@ -288,6 +296,7 @@ export class InkEffects {
     team: number,
     impact: boolean,
     delay: number,
+    surfaceHeight = 0,
   ): void {
     if (this.spreads.length >= 120) return;
     const mesh = new THREE.Mesh(
@@ -300,7 +309,7 @@ export class InkEffects {
     );
     mesh.rotation.x = -Math.PI / 2;
     if (disk.outlineShape) mesh.rotation.z = -(disk.rotation ?? 0);
-    mesh.position.set(disk.x, 0.027, disk.z);
+    mesh.position.set(disk.x, surfaceHeight + 0.027, disk.z);
     mesh.scale.setScalar(0.001);
     this.group.add(mesh);
     this.spreads.push({ mesh, age: 0, radius: disk.radius, impact, delay });
@@ -393,7 +402,7 @@ export class InkEffects {
           shot.shed++;
         }
         if (p.age >= shot.duration) {
-          this.impact(shot, p.team);
+          if (!shot.surfaceHit) this.impact(shot, p.team);
           this.removeDrop(p, i);
           continue;
         }
