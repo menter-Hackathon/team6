@@ -25,7 +25,7 @@ export function inkOutlineRadius(angle: number): number {
 }
 
 function inkLaunchAngle(pitch: number): number {
-  return Math.max(Math.PI / 36, pitch);
+  return Math.max(-Math.PI / 36, pitch);
 }
 
 // Solve the ballistic arc for the actual muzzle and impact, including raised surfaces.
