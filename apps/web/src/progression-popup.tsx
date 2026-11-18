@@ -64,14 +64,6 @@ export function ProgressionPopup({
   }, [scene, countdownRun]);
 
   useEffect(() => {
-    if (scene !== "lobby") return;
-    const rotateTimer = window.setInterval(() => {
-      setTopicSuggestions((prev) => pickRandomTopics(3, prev));
-    }, 6000);
-    return () => window.clearInterval(rotateTimer);
-  }, [scene]);
-
-  useEffect(() => {
     if (!preview || !onClose) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
