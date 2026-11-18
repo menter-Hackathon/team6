@@ -1427,3 +1427,53 @@ kbd {
   font-weight: 800;
   line-height: 1.4;
 }
+
+.dev-obstacle-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #627a7a;
+  border-radius: 9px;
+  background: #2b4140;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dev-obstacle-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #9ce0bd;
+}
+.lobby-panel .dev-obstacle-note {
+  color: #c8d4cf;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.dev-panel-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.dev-panel-summary::-webkit-details-marker {
+  display: none;
+}
+.dev-panel-summary h2 {
+  margin: 0;
+}
+.dev-panel-summary::after {
+  content: "＋";
+  font-size: 22px;
+  color: #aeb9d0;
+}
+.lobby-panel--dev[open] > .dev-panel-summary::after {
+  content: "−";
+}
+.dev-panel-summary:focus-visible {
+  outline: 2px solid #ff82b7;
+  outline-offset: 6px;
+}
