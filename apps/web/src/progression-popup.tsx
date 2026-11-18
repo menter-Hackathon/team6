@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { GAME_START_COUNTDOWN_SECONDS, pickRandomTopics } from "@gaya/shared";
 import { PracticeColorPicker } from "./practice-color-picker";
 
@@ -22,6 +22,8 @@ interface ProgressionPopupProps {
   onReady?: () => void;
   onStart?: () => void;
   onClose?: () => void;
+  /** The story field (D-090), shown under the talk topics in the lobby. */
+  episodeInput?: ReactNode;
 }
 
 export function ProgressionPopup({
@@ -42,6 +44,7 @@ export function ProgressionPopup({
   onReady,
   onStart,
   onClose,
+  episodeInput,
 }: ProgressionPopupProps) {
   const [secondsLeft, setSecondsLeft] = useState(GAME_START_COUNTDOWN_SECONDS);
   const [countdownRun, setCountdownRun] = useState(0);
@@ -186,6 +189,7 @@ export function ProgressionPopup({
                   {topicSuggestions.map((topic) => <li key={topic}>{topic}</li>)}
                 </ul>
               </div>
+              {episodeInput}
               <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
             </div>
           </>

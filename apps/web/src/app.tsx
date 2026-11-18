@@ -17,6 +17,11 @@ import { ProgressionPopup, type PopupScene } from "./progression-popup";
 import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
+import {
+  EMPTY_EPISODE_DRAFT,
+  EpisodeInput,
+  type EpisodeDraft,
+} from "./episode-input";
 import { TeamSelection } from "./team-selection";
 import { TranscriptionPanel } from "./speech/transcription-panel";
 import { TeamColorPicker } from "./team-color-picker";
@@ -37,6 +42,8 @@ export function App() {
   const [autoFire, setAutoFire] = useState(true);
   // D-086: the star/heart picker stays hidden; the special always lands as ink.
   const specialShape: SpecialShape = "ink";
+  const [episodeDraft, setEpisodeDraft] =
+    useState<EpisodeDraft>(EMPTY_EPISODE_DRAFT);
   const [devColorA, setDevColorA] = useState<string>(NEON_COLORS[0]!.hex);
   const [devColorB, setDevColorB] = useState<string>(NEON_COLORS[1]!.hex);
   const [devTeam, setDevTeam] = useState<"A" | "B">("A");
@@ -65,6 +72,8 @@ export function App() {
   );
   const [turnOrder, setTurnOrder] = useState("alternating");
   const [roomCode, setRoomCode] = useState("");
+  // A story belongs to one room; start fresh when the room changes.
+  useEffect(() => setEpisodeDraft(EMPTY_EPISODE_DRAFT), [roomCode]);
   const [errorMessage, setErrorMessage] = useState("");
   const [previewPopup, setPreviewPopup] = useState<PopupScene | null>(null);
   const [previewReady, setPreviewReady] = useState(false);
@@ -193,6 +202,18 @@ export function App() {
     !devSpeakerBlocked
       ? speakerTeamAreaMultiplier(devMatchTurn.count / 2)
       : 1;
+
+  // D-090: one story field, shown in whichever lobby view is open.
+  const episodeInput = (
+    <EpisodeInput
+      draft={episodeDraft}
+      onDraftChange={setEpisodeDraft}
+      saved={localPlayer?.hasEpisode ?? false}
+      enteredCount={players.filter((player) => player.hasEpisode).length}
+      playerCount={players.length}
+      onSave={(text) => roomRef.current?.send("episode", text)}
+    />
+  );
 
   return (
     <main className="game-shell">
@@ -592,6 +613,7 @@ export function App() {
               practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
               onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               onClose={() => setShowTopicPopup(false)}
+              episodeInput={episodeInput}
               onReady={() => {
                 const nextReady = !localPlayer?.ready;
                 roomRef.current?.send("ready", nextReady);
@@ -620,11 +642,7 @@ export function App() {
                 roomRef.current?.send("ready", nextReady);
                 if (!nextReady) setShowTopicPopup(true);
               }}
-              episodeSaved={localPlayer?.hasEpisode ?? false}
-              episodeCount={
-                players.filter((player) => player.hasEpisode).length
-              }
-              onEpisodeSave={(text) => roomRef.current?.send("episode", text)}
+              episodeInput={episodeInput}
               {...(gameState.hostId === roomRef.current?.sessionId
                 ? { onStart: () => roomRef.current?.send("prepare-teams") }
                 : {})}

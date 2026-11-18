@@ -45,6 +45,7 @@ import * as THREE from "three";
 import { bleedSpecialPaint } from "./paint-bleed";
 import { AIZUCHI_MOTION_SECONDS, AIZUCHI_LAND_TIME } from "./aizuchi-motion";
 import { useAizuchiAppearance } from "./use-aizuchi-appearance";
+import { INK_GLOSS, makeInkRelief, useInkEnvironment } from "./ink-material";
 import { useSpecialAppearance } from "./special-appearance";
 import { InkEffects, INK_SETTLE_SECONDS } from "./ink-effects";
 import { currentInkVoice } from "./speech/voice-feedback";
@@ -1069,6 +1070,9 @@ function Field({
   }, [canvas]);
   const revision = useRef(0);
   const effects = useMemo(() => new InkEffects(), []);
+  const inkEnvironment = useInkEnvironment();
+  useEffect(() => effects.setEnvironment(inkEnvironment), [effects, inkEnvironment]);
+  const inkRelief = useMemo(() => makeInkRelief(PAINT_GRID_SIZE), []);
   const flushPaint = useRef<() => void>(() => {});
   useFrame((_, delta) => {
     effects.update(delta);
@@ -1363,12 +1367,13 @@ function Field({
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position-y={0.018}>
         <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
-        <meshStandardMaterial
+        <meshPhysicalMaterial
           map={texture}
           transparent
           depthWrite={false}
-          roughness={0.22}
-          metalness={0.05}
+          {...INK_GLOSS}
+          envMap={inkEnvironment}
+          onBeforeCompile={inkRelief}
         />
       </mesh>
       {/* The underside is visible only to a camera below the floor. */}
