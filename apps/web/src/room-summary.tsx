@@ -54,7 +54,7 @@ export function RoomSummary({
         </button>
       )}
       <div className="room-summary-code">
-        <span>招待コード</span>
+        <span>INVITE CODE / 招待コード</span>
         <strong>{roomCode}</strong>
       </div>
       {!onClose && (

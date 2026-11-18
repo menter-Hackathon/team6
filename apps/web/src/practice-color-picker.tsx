@@ -12,7 +12,6 @@ export function PracticeColorPicker({
   return (
     <section className="team-color-picker" aria-label="練習用インクの色">
       <h3>練習用インク</h3>
-      <p>好きな色を選んでロビーで遊べます</p>
       <div className="team-color-swatches">
         {NEON_COLORS.map(({ name, hex }) => (
           <button
