@@ -24,6 +24,26 @@ export function inkOutlineRadius(angle: number): number {
   return 0.77 + 0.13 * Math.sin(angle * 7) + 0.1 * Math.cos(angle * 11);
 }
 
+function inkLaunchAngle(pitch: number): number {
+  return Math.max(-Math.PI / 36, pitch);
+}
+
+// Solve the ballistic arc for the actual muzzle and impact, including raised surfaces.
+export function inkTravelTime(pitch: number, horizontal: number, rise: number): number {
+  const drop = horizontal * Math.tan(inkLaunchAngle(pitch)) - rise;
+  return Math.max(0.03, Math.sqrt(Math.max(0, 2 * drop) / 16));
+}
+
+/** Horizontal travel before an ink shot returns to floor height. */
+export function inkFlight(pitch: number): { distance: number; duration: number } {
+  const angle = inkLaunchAngle(pitch);
+  const speed = 12;
+  const gravity = 16;
+  const verticalSpeed = speed * Math.sin(angle);
+  const duration = (verticalSpeed + Math.sqrt(verticalSpeed ** 2 + 2 * gravity * 1.1)) / gravity;
+  return { distance: speed * Math.cos(angle) * duration, duration };
+}
+
 /** Shared world-space geometry: render effects and server ownership use the same splat. */
 export function paintDisks(stroke: PaintStroke): PaintDisk[] {
   const disks: PaintDisk[] = [];
@@ -148,11 +168,11 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
     const center = {
       x: Math.max(
         -FIELD_HALF_WIDTH + 0.8,
-        Math.min(FIELD_HALF_WIDTH - 0.8, stroke.x + inkDx * 4.5),
+        Math.min(FIELD_HALF_WIDTH - 0.8, stroke.x + inkDx * inkFlight(stroke.pitch ?? 0).distance),
       ),
       z: Math.max(
         -FIELD_HALF_DEPTH + 0.8,
-        Math.min(FIELD_HALF_DEPTH - 0.8, stroke.z + dz * 4.5),
+        Math.min(FIELD_HALF_DEPTH - 0.8, stroke.z + dz * inkFlight(stroke.pitch ?? 0).distance),
       ),
     };
     disks.push({ ...center, radius: 0.9, organic: true });

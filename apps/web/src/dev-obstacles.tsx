@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { inkOutlineRadius, paintDisks, type PaintStroke } from "@gaya/shared";
+import { inkTravelTime, inkOutlineRadius, paintDisks, type PaintStroke } from "@gaya/shared";
 import {
   sweptInkContact,
   wallContours,
@@ -216,11 +216,7 @@ export function DevObstacles({
         stroke.z + Math.cos(stroke.yaw) * 0.32,
       );
       const target = new THREE.Vector3(destination.x, 0.035, destination.z);
-      const duration = THREE.MathUtils.clamp(
-        origin.distanceTo(target) / 32,
-        0.12,
-        0.52,
-      );
+      const duration = inkTravelTime(stroke.pitch ?? 0, Math.hypot(target.x - origin.x, target.z - origin.z), target.y - origin.y);
       let last = origin.clone();
       for (let step = 1; step <= 24; step++) {
         const t = step / 24,
