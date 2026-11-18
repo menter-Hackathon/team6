@@ -1,3 +1,12 @@
+import {
+  obstacleMove,
+  obstacleFloor,
+  paintedWall,
+  surfacePaintOwned,
+  BOX_HEIGHT,
+  type PaintedWall,
+} from "./dev-obstacle-layout";
+import { DevObstacles } from "./dev-obstacles";
 import { Grid, Html } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { Room } from "@colyseus/sdk";
@@ -42,6 +51,7 @@ interface GameSceneProps {
   roomRef: MutableRefObject<Room<GameState> | null>;
   playerIds: string[];
   devMode?: boolean;
+  showDevObstacles?: boolean;
   devComCount?: number;
   devMatchPhase?: string | undefined;
   devTeamOffset?: number;
@@ -62,6 +72,7 @@ interface ControlState {
   jumpTime: number;
   specialShape: SpecialShape;
   yaw: number;
+  height: number;
   position: { x: number; z: number };
   sequence: number;
   latestInput: MoveInput;
@@ -71,6 +82,7 @@ export function GameScene({
   roomRef,
   playerIds,
   devMode = false,
+  showDevObstacles = true,
   devComCount = 0,
   devMatchPhase,
   devTeamOffset = 0,
@@ -83,6 +95,8 @@ export function GameScene({
   colorA = "#ff4f8b",
   colorB = "#37d9ff",
 }: GameSceneProps) {
+  const devColor = useRef(colorA);
+  devColor.current = devTeam === "A" ? colorA : colorB;
   const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
   const activeDevTeam = useRef(devTeam);
   activeDevTeam.current = devTeam;
@@ -99,6 +113,7 @@ export function GameScene({
     jumpTime: -1,
     specialShape: "star",
     yaw: 0,
+    height: 0,
     position: { x: 0, z: 0 },
     sequence: 0,
     latestInput: { sequence: 0, x: 0, z: 0, yaw: 0, dive: false },
@@ -183,6 +198,7 @@ export function GameScene({
             new CustomEvent("dev-paint", {
               detail: {
                 revision: 0,
+                ...{ height: controls.current.height },
                 ...controls.current.position,
                 yaw: controls.current.yaw,
                 team: activeDevTeam.current,
@@ -321,6 +337,7 @@ export function GameScene({
         new CustomEvent("dev-paint", {
           detail: {
             revision: 0,
+            ...{ height: controls.current.height },
             ...control.position,
             yaw: control.yaw,
             team: activeDevTeam.current,
@@ -352,6 +369,9 @@ export function GameScene({
         shadow-normalBias={0.03}
       />
 
+      {devMode && showDevObstacles && (
+        <DevObstacles colorA={colorA} colorB={colorB} canPaint={devCanPaint} />
+      )}
       <Field
         room={roomRef.current}
         devMode={devMode}
@@ -365,6 +385,8 @@ export function GameScene({
         <DevPlayer
           controls={controls}
           ownPaint={devOwnPaint}
+          obstacles={showDevObstacles}
+          devColor={devColor}
           color={devTeam === "A" ? colorA : colorB}
           devTeam={activeDevTeam}
           areaMultiplier={activeDevAreaMultiplier}
@@ -460,6 +482,8 @@ function DevPlayer({
   controls,
   ownPaint,
   color,
+  devColor,
+  obstacles,
   devTeam,
   areaMultiplier,
   canPaint,
@@ -470,6 +494,8 @@ function DevPlayer({
   controls: MutableRefObject<ControlState>;
   ownPaint: MutableRefObject<(x: number, z: number) => boolean>;
   color: string;
+  devColor: MutableRefObject<string>;
+  obstacles: boolean;
   devTeam: MutableRefObject<"A" | "B">;
   areaMultiplier: MutableRefObject<number>;
   canPaint: MutableRefObject<boolean>;
@@ -482,6 +508,29 @@ function DevPlayer({
   const appearance = useDiveAppearance();
   const specialAppearance = useSpecialAppearance();
   const { camera } = useThree();
+  const jumpBase = useRef(0),
+    wasJumping = useRef(false),
+    fallSpeed = useRef(0);
+  const climbingWall = useRef<PaintedWall | null>(null);
+  const wallRipple = useRef<THREE.Mesh>(null);
+  useEffect(() => {
+    const reset = () => {
+      if (!group.current) return;
+      group.current.position.set(4, 0, 6.5);
+      controls.current.position = { x: 4, z: 6.5 };
+      controls.current.height = 0;
+      controls.current.yaw = 0;
+      controls.current.keys.clear();
+      controls.current.firing = false;
+      controls.current.jumpTime = -1;
+      controls.current.specialTime = -1;
+      wasJumping.current = false;
+      fallSpeed.current = 0;
+      climbingWall.current = null;
+    };
+    window.addEventListener("dev-obstacle-start", reset);
+    return () => window.removeEventListener("dev-obstacle-start", reset);
+  }, [controls]);
   const diveState = useRef<DiveState>({
     submerged: false,
     gapSeconds: 0,
@@ -495,6 +544,12 @@ function DevPlayer({
       controls.current.position = { x: startPosition.x, z: startPosition.z };
       controls.current.yaw = startPosition.yaw;
       object.rotation.y = toModelRotation(startPosition.yaw);
+    }
+    if (phase !== previousPhase.current) {
+      controls.current.height = 0;
+      wasJumping.current = false;
+      fallSpeed.current = 0;
+      climbingWall.current = null;
     }
     previousPhase.current = phase;
     if (!canMove.current) {
@@ -511,11 +566,17 @@ function DevPlayer({
       camera.lookAt(object.position.x, 1.1, object.position.z);
       return;
     }
+    const previousY = object.position.y;
+    if (controls.current.jumpTime >= 0 && !wasJumping.current)
+      jumpBase.current = previousY;
     controls.current.jumpTime = advanceJump(
       controls.current.jumpTime,
       Math.min(delta, 0.1),
     );
-    object.position.y = jumpHeight(controls.current.jumpTime);
+    object.position.y =
+      controls.current.jumpTime >= 0
+        ? jumpBase.current + jumpHeight(controls.current.jumpTime)
+        : previousY;
     const special = advanceSpecial(
       controls.current.specialTime,
       Math.min(delta, 0.1),
@@ -527,13 +588,14 @@ function DevPlayer({
         new CustomEvent("dev-paint", {
           detail: {
             revision: 0,
+            ...{ height: controls.current.height },
             x: object.position.x,
             z: object.position.z,
             yaw: controls.current.yaw,
             team: devTeam.current,
+            areaMultiplier: areaMultiplier.current,
             kind: "slam",
             specialShape: controls.current.specialShape,
-            areaMultiplier: areaMultiplier.current,
           } satisfies PaintStroke,
         }),
       );
@@ -549,7 +611,9 @@ function DevPlayer({
       direction.x = 0;
       direction.z = 0;
       controls.current.jumpTime = -1;
-      object.position.y = 0;
+      object.position.y = obstacles
+        ? obstacleFloor(object.position.x, object.position.z)
+        : 0;
     }
     const length = Math.hypot(direction.x, direction.z);
     if (length > 1) {
@@ -563,7 +627,15 @@ function DevPlayer({
     const before = updateDiveState(
       diveState.current,
       dive,
-      ownPaint.current(object.position.x, object.position.z),
+      obstacles
+        ? surfacePaintOwned(
+            object.position.x,
+            object.position.z,
+            object.position.y,
+            devColor.current,
+            ownPaint.current,
+          )
+        : ownPaint.current(object.position.x, object.position.z),
       0,
       devTeam.current === "A" ? 1 : 2,
     );
@@ -572,26 +644,108 @@ function DevPlayer({
       oldZ = object.position.z;
     const speed = dive ? (submerged ? DIVE_SPEED : DISC_SPEED) : PLAYER_SPEED;
     object.position.x = THREE.MathUtils.clamp(
-      object.position.x + direction.x * speed * delta,
+      object.position.x + direction.x * speed * Math.min(delta, 0.05),
       -FIELD_HALF_WIDTH + 0.5,
       FIELD_HALF_WIDTH - 0.5,
     );
     object.position.z = THREE.MathUtils.clamp(
-      object.position.z + direction.z * speed * delta,
+      object.position.z + direction.z * speed * Math.min(delta, 0.05),
       -FIELD_HALF_DEPTH + 0.5,
       FIELD_HALF_DEPTH - 0.5,
     );
+    if (obstacles) {
+      const resolved = obstacleMove(
+        oldX,
+        oldZ,
+        object.position.x,
+        object.position.z,
+        object.position.y,
+      );
+      object.position.x = resolved.x;
+      object.position.z = resolved.z;
+    }
+    const wall =
+      obstacles && dive
+        ? paintedWall(
+            object.position.x,
+            object.position.z,
+            previousY,
+            devColor.current,
+          )
+        : null;
+    const climbing =
+      wall && direction.x * wall.nx + direction.z * wall.nz < -0.1;
+    let mantled = false;
+    if (climbing && wall) {
+      object.position.x = wall.x + wall.nx * 0.035;
+      object.position.z = wall.z + wall.nz * 0.035;
+      object.position.y = previousY + 2.6 * Math.min(delta, 0.05);
+      controls.current.jumpTime = -1;
+      fallSpeed.current = 0;
+      if (object.position.y >= BOX_HEIGHT - 1.1) {
+        object.position.y = BOX_HEIGHT;
+        object.position.x = wall.x - wall.nx * 0.65;
+        object.position.z = wall.z - wall.nz * 0.65;
+        mantled = true;
+      }
+    } else if (climbingWall.current) {
+      const previous = climbingWall.current;
+      object.position.x = previous.x + previous.nx * 0.53;
+      object.position.z = previous.z + previous.nz * 0.53;
+    }
+    const candidateFloor = obstacles
+      ? obstacleFloor(object.position.x, object.position.z)
+      : 0;
+    const floor =
+      previousY >= candidateFloor - 0.02 || object.position.y >= candidateFloor
+        ? candidateFloor
+        : 0;
+    if (!specialActive && !climbing && !mantled) {
+      if (controls.current.jumpTime >= 0) {
+        if (object.position.y <= floor && object.position.y < previousY) {
+          object.position.y = floor;
+          controls.current.jumpTime = -1;
+          fallSpeed.current = 0;
+        }
+      } else {
+        fallSpeed.current =
+          previousY > floor
+            ? fallSpeed.current + 18 * Math.min(delta, 0.05)
+            : 0;
+        object.position.y = Math.max(
+          floor,
+          previousY - fallSpeed.current * Math.min(delta, 0.05),
+        );
+      }
+    }
+    climbingWall.current = climbing && !mantled ? wall : null;
+    wasJumping.current = controls.current.jumpTime >= 0;
+    controls.current.height = object.position.y;
     diveState.current = updateDiveState(
       before,
       dive,
-      ownPaint.current(object.position.x, object.position.z),
+      obstacles
+        ? surfacePaintOwned(
+            object.position.x,
+            object.position.z,
+            object.position.y,
+            devColor.current,
+            ownPaint.current,
+          )
+        : ownPaint.current(object.position.x, object.position.z),
       Math.min(delta, 0.1),
       devTeam.current === "A" ? 1 : 2,
     );
     const nowSubmerged = diveState.current.submerged;
+    const onObstacleTop =
+      obstacles &&
+      Math.abs(object.position.y - BOX_HEIGHT) < 0.02 &&
+      obstacleFloor(object.position.x, object.position.z) === BOX_HEIGHT;
     if (
-      !dive &&
+      (!dive || onObstacleTop) &&
       canPaint.current &&
+      !specialActive &&
+      !climbingWall.current &&
       controls.current.jumpTime < 0 &&
       Math.hypot(object.position.x - oldX, object.position.z - oldZ) > 0.001
     ) {
@@ -599,25 +753,51 @@ function DevPlayer({
         new CustomEvent("dev-paint", {
           detail: {
             revision: 0,
+            ...{ height: controls.current.height },
             fromX: oldX,
             fromZ: oldZ,
             x: object.position.x,
             z: object.position.z,
             yaw: controls.current.yaw,
             team: devTeam.current,
-            kind: "footprint",
             areaMultiplier: areaMultiplier.current,
+            kind: "footprint",
           } satisfies PaintStroke,
         }),
       );
     }
     appearance.update(dive, nowSubmerged, delta);
+    if (climbingWall.current) {
+      if (appearance.body.current) appearance.body.current.visible = false;
+      if (appearance.ripple.current) appearance.ripple.current.visible = false;
+    }
     specialAppearance(
       appearance.body.current,
       controls.current.specialTime,
       delta,
     );
     object.rotation.y = toModelRotation(controls.current.yaw);
+    if (wallRipple.current) {
+      const current = climbingWall.current;
+      wallRipple.current.visible = Boolean(current);
+      if (current) {
+        const localNormal = new THREE.Vector3(
+          current.nx,
+          0,
+          current.nz,
+        ).applyAxisAngle(new THREE.Vector3(0, 1, 0), -object.rotation.y);
+        wallRipple.current.position.set(
+          localNormal.x * 0.025,
+          0.45,
+          localNormal.z * 0.025,
+        );
+        wallRipple.current.rotation.set(
+          0,
+          Math.atan2(localNormal.x, localNormal.z),
+          0,
+        );
+      }
+    }
     controls.current.position = { x: object.position.x, z: object.position.z };
     const yaw = controls.current.yaw;
     camera.position.lerp(
@@ -635,10 +815,19 @@ function DevPlayer({
     );
     const readout = document.getElementById("dev-readout");
     if (readout)
-      readout.textContent = `状態 ${nowSubmerged ? "潜航 ×1.5" : "通常"} / X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
+      readout.textContent = `状態 ${climbingWall.current ? "壁面潜航 ↑" : nowSubmerged ? "潜航 ×1.5" : "通常"} / 高さ ${object.position.y.toFixed(1)} / X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
   });
   return (
     <group ref={group}>
+      <mesh ref={wallRipple} visible={false} scale={[1, 1.35, 1]}>
+        <ringGeometry args={[0.23, 0.29, 36]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.85}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
       <mesh ref={appearance.body} castShadow receiveShadow position-y={0.5}>
         <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
         <meshStandardMaterial color={color} />

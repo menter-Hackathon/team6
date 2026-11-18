@@ -32,6 +32,7 @@ const SERVER_URL =
       : "");
 
 export function App() {
+  const [showDevObstacles, setShowDevObstacles] = useState(true);
   const [specialShape, setSpecialShape] = useState<SpecialShape>("star");
   const [devColorA, setDevColorA] = useState<string>(NEON_COLORS[0]!.hex);
   const [devColorB, setDevColorB] = useState<string>(NEON_COLORS[1]!.hex);
@@ -289,9 +290,30 @@ export function App() {
           </ul>
         </section>
       ) : devMode ? (
-        <section className="lobby-panel lobby-panel--dev">
-          <h2>開発者用 検証モード</h2>
+        <details className="lobby-panel lobby-panel--dev" open>
+          <summary className="dev-panel-summary">
+            <h2>開発者用 検証モード</h2>
+          </summary>
           <p>サーバーに接続せずに操作を確認できます。</p>
+          <label className="dev-obstacle-toggle">
+            <input
+              type="checkbox"
+              checked={showDevObstacles}
+              onChange={(event) => setShowDevObstacles(event.target.checked)}
+            />
+            障害物を表示（4つの箱）
+          </label>
+          <button
+            onClick={(event) => {
+              window.dispatchEvent(new Event("dev-obstacle-start"));
+              event.currentTarget.blur();
+            }}
+          >
+            箱の前へ移動
+          </button>
+          <p className="dev-obstacle-note">
+            壁を通常インクで塗り、Shift＋壁方向への移動で上に登れます。側面・上面にも塗りが残ります（検証モード限定）。
+          </p>
           <ul className="dev-controls-list">
             <li>WASD・矢印キー：移動</li>
             <li>クリック：視点回転／長押しでインク発射</li>
@@ -367,7 +389,7 @@ export function App() {
               ),
             )}
           </div>
-        </section>
+        </details>
       ) : null}
 
       <section
@@ -385,6 +407,7 @@ export function App() {
               roomRef={roomRef}
               playerIds={devMode ? [] : playerIds}
               devMode={devMode}
+              showDevObstacles={showDevObstacles}
               devComCount={devMatchActive ? devMatchCount - 1 : 0}
               devMatchPhase={devMatchActive ? devMatchPhase : undefined}
               devTeamOffset={devTeamOffset}
