@@ -19,6 +19,7 @@ import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
 import { EntryScreen } from "./entry-screen";
+import { LobbyActions, LobbyColorButtons } from "./lobby-hud";
 import {
   EMPTY_EPISODE_DRAFT,
   EpisodeInput,
@@ -207,10 +208,6 @@ export function App() {
       ? speakerTeamAreaMultiplier(devMatchTurn.count / 2)
       : 1;
 
-  // A player can only get ready after writing (and saving) the episode they will tell.
-  const readyBlockedReason = localPlayer?.hasEpisode
-    ? undefined
-    : "話すエピソードを書いて保存すると、準備完了にできます";
   // D-090: one story field, shown in whichever lobby view is open.
   const episodeInput = (
     <EpisodeInput
@@ -438,22 +435,26 @@ export function App() {
           </Suspense>
         </Canvas>
         </div>
+        {devMode && (
+          <>
         <button
-          className="auto-fire-toggle"
-          aria-label="通常インクの常時発射"
-          aria-pressed={autoFire}
-          onClick={() => setAutoFire((active) => !active)}
-        >
-          <span aria-hidden="true">{autoFire ? "●" : "○"}</span>{" "}
-          通常インク常時発射：{autoFire ? "ON" : "OFF"}
-        </button>
-        <button
-          id="special-button"
-          className="special-button"
-          onClick={() => window.dispatchEvent(new Event("activate-special"))}
-        >
-          F 必殺技 · インクスラム
-        </button>
+              className="auto-fire-toggle"
+              aria-label="通常インクの常時発射"
+              aria-pressed={autoFire}
+              onClick={() => setAutoFire((active) => !active)}
+            >
+              <span aria-hidden="true">{autoFire ? "●" : "○"}</span>{" "}
+              通常インク常時発射：{autoFire ? "ON" : "OFF"}
+            </button>
+            <button
+              id="special-button"
+              className="special-button"
+              onClick={() => window.dispatchEvent(new Event("activate-special"))}
+            >
+              F 必殺技 · インクスラム
+            </button>
+          </>
+        )}
         <div className="crosshair" aria-hidden="true" />
         {devMode && (
           <output
@@ -577,11 +578,7 @@ export function App() {
               isReady={localPlayer?.ready ?? false}
               canStart={canStart}
               requiredPlayerCount={gameState.replayPlayerCount}
-              practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
-              onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               onClose={() => setShowTopicPopup(false)}
-              episodeInput={episodeInput}
-              readyBlockedReason={readyBlockedReason}
               onReady={() => {
                 const nextReady = !localPlayer?.ready;
                 roomRef.current?.send("ready", nextReady);
@@ -599,23 +596,30 @@ export function App() {
             <RoomSummary
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
-              canStart={canStart}
               requiredPlayerCount={gameState.replayPlayerCount}
-              practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
-              onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
-              ready={localPlayer?.ready ?? false}
-              readyCount={players.filter((player) => player.ready).length}
-              onReady={() => {
-                const nextReady = !localPlayer?.ready;
-                roomRef.current?.send("ready", nextReady);
-                if (!nextReady) setShowTopicPopup(true);
-              }}
-              episodeInput={episodeInput}
-              readyBlockedReason={readyBlockedReason}
-              {...(gameState.hostId === roomRef.current?.sessionId
-                ? { onStart: () => roomRef.current?.send("prepare-teams") }
-                : {})}
             />
+          )}
+        {!devMode &&
+          connectionState === "connected" &&
+          gameState?.phase === "lobby" && (
+            <>
+              <LobbyColorButtons
+                color={localPlayer?.practiceColor ?? "#ff4f8b"}
+                onSelect={(color) => roomRef.current?.send("practice-color", color)}
+              />
+              <LobbyActions
+                episodeInput={episodeInput}
+                episodeDone={localPlayer?.hasEpisode ?? false}
+                isReady={localPlayer?.ready ?? false}
+                readyCount={players.filter((player) => player.ready).length}
+                playerCount={Math.max(gameState.replayPlayerCount, players.length)}
+                canStart={canStart}
+                onReady={() => roomRef.current?.send("ready", !localPlayer?.ready)}
+                {...(gameState.hostId === roomRef.current?.sessionId
+                  ? { onStart: () => roomRef.current?.send("prepare-teams") }
+                  : {})}
+              />
+            </>
           )}
         {!devMode &&
           connectionState === "connected" &&

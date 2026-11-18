@@ -80,7 +80,9 @@ export function RoomSummary({
           <li key={index}>{name}</li>
         ))}
       </ul>
-      <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
+      {onPracticeColorSelect && (
+        <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
+      )}
       {episodeInput}
       {requiredPlayerCount > names.length && (
         <p className="room-summary-waiting" role="status">
