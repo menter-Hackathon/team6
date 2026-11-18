@@ -5,6 +5,7 @@ import {
   GAME_ROOM_NAME,
   NEON_COLORS,
   PAINT_GRID_SIZE,
+  countPaintedCells,
   STARTABLE_PLAYER_COUNTS,
   TURN_INTRO_MS,
   type SpecialShape,
@@ -281,13 +282,7 @@ export function App() {
                   onClick={() => {
                     if (scene === "result") {
                       const cells = devPaintCells.current?.slice() ?? new Uint8Array(PAINT_GRID_SIZE ** 2);
-                      let scoreA = 0;
-                      let scoreB = 0;
-                      for (const owner of cells) {
-                        if (owner === 1) scoreA++;
-                        else if (owner === 2) scoreB++;
-                      }
-                      setDevResult({ cells, scoreA, scoreB });
+                      setDevResult({ cells, ...countPaintedCells(cells) });
                     }
                     setPreviewPopup(scene);
                     setPreviewReady(false);
