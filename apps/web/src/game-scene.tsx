@@ -973,7 +973,12 @@ function Player({
   return (
     <group ref={group}>
       {displayName && (
-        <Html center position={[0, 1.55, 0]} style={{ pointerEvents: "none" }}>
+        <Html
+          center
+          position={[0, 1.55, 0]}
+          zIndexRange={[2, 0]}
+          style={{ pointerEvents: "none" }}
+        >
           <span className="player-gamertag" style={{ borderColor: color }}>
             {displayName}
           </span>

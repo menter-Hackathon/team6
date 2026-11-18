@@ -128,3 +128,10 @@ export {
 } from "./special.js";
 
 export { specialOutline } from "./special-outline.js";
+export {
+  PRESENTATION_TOPICS,
+  createTopicDeck,
+  pickRandomTopics,
+  drawNextTopic,
+  type PresentationTopic,
+} from "./topics.js";

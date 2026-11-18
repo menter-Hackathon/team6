@@ -58,6 +58,7 @@ export function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [previewPopup, setPreviewPopup] = useState<PopupScene | null>(null);
   const [previewReady, setPreviewReady] = useState(false);
+  const [showTopicPopup, setShowTopicPopup] = useState(true);
 
   const connect = async (create: boolean) => {
     if (!SERVER_URL) {
@@ -84,6 +85,7 @@ export function App() {
       });
       roomRef.current = joinedRoom;
       setRoomCode(joinedRoom.roomId);
+      setShowTopicPopup(true);
       const url = new URL(location.href);
       url.searchParams.delete("room");
       history.replaceState(null, "", url);
@@ -281,7 +283,9 @@ export function App() {
                   key={scene}
                   onClick={() => {
                     if (scene === "result") {
-                      const cells = devPaintCells.current?.slice() ?? new Uint8Array(PAINT_GRID_SIZE ** 2);
+                      const cells =
+                        devPaintCells.current?.slice() ??
+                        new Uint8Array(PAINT_GRID_SIZE ** 2);
                       setDevResult({ cells, ...countPaintedCells(cells) });
                     }
                     setPreviewPopup(scene);
@@ -401,13 +405,13 @@ export function App() {
               scene={previewPopup}
               preview
               players={[
-                { displayName: "あなた", ready: true },
+                { displayName: "あなた", ready: previewReady },
                 { displayName: "メンターA", ready: true },
                 { displayName: "メンターB", ready: false },
                 { displayName: "メンターC", ready: true },
               ]}
               isHost
-              isReady
+              isReady={previewReady}
               speakerName="メンターA"
               onClose={() => setPreviewPopup(null)}
               onReady={() => setPreviewReady(true)}
@@ -418,14 +422,47 @@ export function App() {
           <RoomSummary
             roomCode="ABCD12"
             names={["あなた", "メンターA", "メンターB", "メンターC"]}
+            ready
+            readyCount={4}
             canStart
+            onReady={() => setPreviewReady(false)}
             onStart={() => setPreviewPopup("countdown")}
             onClose={() => setPreviewPopup(null)}
           />
         )}
         {!devMode &&
           connectionState === "connected" &&
-          gameState?.phase === "lobby" && (
+          gameState?.phase === "lobby" &&
+          showTopicPopup && (
+            <ProgressionPopup
+              scene="lobby"
+              roomCode={roomCode}
+              players={players.map((player) => ({
+                displayName: player.displayName,
+                ready: player.ready,
+              }))}
+              isHost={gameState.hostId === roomRef.current?.sessionId}
+              isReady={localPlayer?.ready ?? false}
+              canStart={canStart}
+              practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
+              onPracticeColorSelect={(color) =>
+                roomRef.current?.send("practice-color", color)
+              }
+              onClose={() => setShowTopicPopup(false)}
+              onReady={() => {
+                const nextReady = !localPlayer?.ready;
+                roomRef.current?.send("ready", nextReady);
+                if (nextReady) setShowTopicPopup(false);
+              }}
+              {...(gameState.hostId === roomRef.current?.sessionId
+                ? { onStart: () => roomRef.current?.send("prepare-teams") }
+                : {})}
+            />
+          )}
+        {!devMode &&
+          connectionState === "connected" &&
+          gameState?.phase === "lobby" &&
+          !showTopicPopup && (
             <RoomSummary
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
@@ -436,9 +473,11 @@ export function App() {
               }
               ready={localPlayer?.ready ?? false}
               readyCount={players.filter((player) => player.ready).length}
-              onReady={() =>
-                roomRef.current?.send("ready", !localPlayer?.ready)
-              }
+              onReady={() => {
+                const nextReady = !localPlayer?.ready;
+                roomRef.current?.send("ready", nextReady);
+                if (!nextReady) setShowTopicPopup(true);
+              }}
               {...(gameState.hostId === roomRef.current?.sessionId
                 ? { onStart: () => roomRef.current?.send("prepare-teams") }
                 : {})}

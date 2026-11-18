@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GAME_START_COUNTDOWN_SECONDS } from "@gaya/shared";
+import { GAME_START_COUNTDOWN_SECONDS, pickRandomTopics } from "@gaya/shared";
 import { PracticeColorPicker } from "./practice-color-picker";
 
 export type PopupScene = "lobby" | "countdown" | "turn" | "result";
@@ -41,8 +41,12 @@ export function ProgressionPopup({
 }: ProgressionPopupProps) {
   const [secondsLeft, setSecondsLeft] = useState(GAME_START_COUNTDOWN_SECONDS);
   const [countdownRun, setCountdownRun] = useState(0);
+  const [topicSuggestions, setTopicSuggestions] = useState<string[]>(() =>
+    pickRandomTopics(3),
+  );
   const [copied, setCopied] = useState(false);
   const [linkCopyMessage, setLinkCopyMessage] = useState("");
+
   useEffect(() => {
     if (scene !== "countdown") return;
     setSecondsLeft(GAME_START_COUNTDOWN_SECONDS);
@@ -67,6 +71,10 @@ export function ProgressionPopup({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [preview, onClose]);
+
+  const shuffleSuggestions = () => {
+    setTopicSuggestions((prev) => pickRandomTopics(3, prev));
+  };
 
   const copyCode = async () => {
     try {
@@ -100,7 +108,7 @@ export function ProgressionPopup({
         aria-labelledby="progression-title"
       >
         {preview && <span className="progression-preview">検証プレビュー</span>}
-        {preview && (
+        {onClose && (
           <button
             className="progression-close"
             onClick={onClose}
@@ -112,6 +120,24 @@ export function ProgressionPopup({
         {scene === "lobby" && (
           <>
             <h2 id="progression-title">入室待ち</h2>
+            <div className="lobby-topic-box" aria-label="話す話題">
+              <div className="lobby-topic-box-header">
+                <span>話題例</span>
+                <button
+                  type="button"
+                  className="lobby-topic-shuffle"
+                  onClick={shuffleSuggestions}
+                  aria-label="別の話題を表示"
+                >
+                  ↻
+                </button>
+              </div>
+              <ul className="lobby-topic-list">
+                {topicSuggestions.map((topic) => (
+                  <li key={topic}>{topic}</li>
+                ))}
+              </ul>
+            </div>
             <PracticeColorPicker
               color={practiceColor}
               onSelect={onPracticeColorSelect}
