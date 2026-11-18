@@ -41,7 +41,10 @@ interface GameSceneProps {
   roomRef: MutableRefObject<Room<GameState> | null>;
   playerIds: string[];
   devMode?: boolean;
+  devComCount?: number;
   devTeam: "A" | "B";
+  devAreaMultiplier?: number;
+  devCanPaint?: boolean;
   devPaintCells: MutableRefObject<Uint8Array | null>;
   specialShape: SpecialShape;
   colorA?: string | undefined;
@@ -64,7 +67,10 @@ export function GameScene({
   roomRef,
   playerIds,
   devMode = false,
+  devComCount = 0,
   devTeam,
+  devAreaMultiplier = 1,
+  devCanPaint = true,
   devPaintCells,
   specialShape,
   colorA = "#ff4f8b",
@@ -73,6 +79,10 @@ export function GameScene({
   const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
   const activeDevTeam = useRef(devTeam);
   activeDevTeam.current = devTeam;
+  const activeDevAreaMultiplier = useRef(devAreaMultiplier);
+  activeDevAreaMultiplier.current = devAreaMultiplier;
+  const activeDevCanPaint = useRef(devCanPaint);
+  activeDevCanPaint.current = devCanPaint;
   const controls = useRef<ControlState>({
     keys: new Set(),
     firing: false,
@@ -88,6 +98,7 @@ export function GameScene({
   useEffect(() => {
     const activateSpecial = () => {
       if (devMode) {
+        if (!activeDevCanPaint.current) return;
         if (controls.current.specialTime < 0) {
           controls.current.specialShape = specialShape;
           controls.current.specialTime = 0;
@@ -158,6 +169,7 @@ export function GameScene({
         )
           return;
         if (devMode && controls.current.specialTime >= 0) return;
+        if (devMode && !activeDevCanPaint.current) return;
         if (devMode) {
           window.dispatchEvent(
             new CustomEvent("dev-paint", {
@@ -167,6 +179,7 @@ export function GameScene({
                 yaw: controls.current.yaw,
                 team: activeDevTeam.current,
                 kind,
+                areaMultiplier: activeDevAreaMultiplier.current,
               },
             }),
           );
@@ -281,6 +294,7 @@ export function GameScene({
     if (button) {
       button.disabled =
         specialActive ||
+        (devMode && !activeDevCanPaint.current) ||
         (!devMode &&
           roomRef.current?.state.phase !== "playing" &&
           roomRef.current?.state.phase !== "lobby");
@@ -296,6 +310,7 @@ export function GameScene({
       shotClock.current > 0
     )
       return;
+    if (devMode && !activeDevCanPaint.current) return;
     shotClock.current = INK_SHOT_INTERVAL;
     if (devMode)
       window.dispatchEvent(
@@ -306,6 +321,7 @@ export function GameScene({
             yaw: control.yaw,
             team: activeDevTeam.current,
             kind: "ink",
+            areaMultiplier: activeDevAreaMultiplier.current,
           } satisfies PaintStroke,
         }),
       );
@@ -349,8 +365,29 @@ export function GameScene({
           ownPaint={devOwnPaint}
           color={devTeam === "A" ? colorA : colorB}
           devTeam={activeDevTeam}
+          areaMultiplier={activeDevAreaMultiplier}
+          canPaint={activeDevCanPaint}
         />
       )}
+      {devMode &&
+        Array.from({ length: devComCount }, (_, index) => {
+          const team = (index + 1) % 2 === 0 ? "A" : "B";
+          const angle = (index / Math.max(devComCount, 1)) * Math.PI * 2;
+          return (
+            <group
+              key={index}
+              position={[Math.cos(angle) * 5, 0, Math.sin(angle) * 5]}
+            >
+              <mesh castShadow position-y={0.6}>
+                <capsuleGeometry args={[0.4, 0.8, 6, 10]} />
+                <meshStandardMaterial color={team === "A" ? colorA : colorB} />
+              </mesh>
+              <Html position={[0, 1.8, 0]} center>
+                <span className="player-gamertag">COM {index + 1}</span>
+              </Html>
+            </group>
+          );
+        })}
       {playerIds.map((playerId) => (
         <Player
           key={playerId}
@@ -414,11 +451,15 @@ function DevPlayer({
   ownPaint,
   color,
   devTeam,
+  areaMultiplier,
+  canPaint,
 }: {
   controls: MutableRefObject<ControlState>;
   ownPaint: MutableRefObject<(x: number, z: number) => boolean>;
   color: string;
   devTeam: MutableRefObject<"A" | "B">;
+  areaMultiplier: MutableRefObject<number>;
+  canPaint: MutableRefObject<boolean>;
 }) {
   const group = useRef<THREE.Group>(null);
   const appearance = useDiveAppearance();
@@ -443,7 +484,7 @@ function DevPlayer({
     );
     controls.current.specialTime = special.time;
     const specialActive = special.time >= 0 || special.landed;
-    if (special.landed)
+    if (special.landed && canPaint.current)
       window.dispatchEvent(
         new CustomEvent("dev-paint", {
           detail: {
@@ -454,6 +495,7 @@ function DevPlayer({
             team: devTeam.current,
             kind: "slam",
             specialShape: controls.current.specialShape,
+            areaMultiplier: areaMultiplier.current,
           } satisfies PaintStroke,
         }),
       );
@@ -511,6 +553,7 @@ function DevPlayer({
     const nowSubmerged = diveState.current.submerged;
     if (
       !dive &&
+      canPaint.current &&
       controls.current.jumpTime < 0 &&
       Math.hypot(object.position.x - oldX, object.position.z - oldZ) > 0.001
     ) {
@@ -525,6 +568,7 @@ function DevPlayer({
             yaw: controls.current.yaw,
             team: devTeam.current,
             kind: "footprint",
+            areaMultiplier: areaMultiplier.current,
           } satisfies PaintStroke,
         }),
       );
@@ -757,7 +801,16 @@ function Field({
     };
     const devPaint = (event: Event) =>
       paint((event as CustomEvent<PaintStroke>).detail);
+    const resetDevPaint = () => {
+      displayQueue.length = 0;
+      effects.clear();
+      cells.fill(0);
+      image.data.fill(0);
+      ctx.clearRect(0, 0, PAINT_GRID_SIZE, PAINT_GRID_SIZE);
+      texture.needsUpdate = true;
+    };
     if (devMode) window.addEventListener("dev-paint", devPaint);
+    if (devMode) window.addEventListener("dev-reset-paint", resetDevPaint);
     const removePaint = room?.onMessage("paint", paint);
     const removeSnapshot = room?.onMessage(
       "paint-snapshot",
@@ -809,6 +862,7 @@ function Field({
       removePaint?.();
       removeSnapshot?.();
       window.removeEventListener("dev-paint", devPaint);
+      window.removeEventListener("dev-reset-paint", resetDevPaint);
     };
   }, [room, devMode, canvas, texture, devOwnPaint, cells, effects]);
   return (

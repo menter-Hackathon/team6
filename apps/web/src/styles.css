@@ -1212,3 +1212,22 @@ kbd {
   outline: 3px solid currentColor;
   outline-offset: 2px;
 }
+.dev-match-toolbar {
+  position: absolute;
+  z-index: 30;
+  top: 1rem;
+  left: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 0.8rem;
+  background: rgba(12, 17, 31, 0.92);
+  color: white;
+}
+.dev-match-toolbar button,
+.dev-match-toolbar select {
+  cursor: pointer;
+}

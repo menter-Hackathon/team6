@@ -172,14 +172,26 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
     }
   }
   const impact = stroke.kind === "ink" ? disks[0] : undefined;
+  const radiusMultiplier = Math.sqrt(stroke.areaMultiplier ?? 1);
+  const anchor =
+    stroke.kind === "footprint"
+      ? undefined
+      : (impact ?? { x: stroke.x, z: stroke.z });
   return disks.map((disk) => ({
     ...disk,
-    x: impact ? impact.x + (disk.x - impact.x) * INK_SPLAT_SCALE : disk.x,
-    z: impact ? impact.z + (disk.z - impact.z) * INK_SPLAT_SCALE : disk.z,
+    x: anchor
+      ? anchor.x +
+        (disk.x - anchor.x) * (impact ? INK_SPLAT_SCALE : 1) * radiusMultiplier
+      : disk.x,
+    z: anchor
+      ? anchor.z +
+        (disk.z - anchor.z) * (impact ? INK_SPLAT_SCALE : 1) * radiusMultiplier
+      : disk.z,
     radius:
       disk.radius *
       (stroke.kind === "footprint" ? 1 : INK_SCALE) *
-      (impact ? INK_SPLAT_SCALE : 1),
+      (impact ? INK_SPLAT_SCALE : 1) *
+      radiusMultiplier,
   }));
 }
 
