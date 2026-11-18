@@ -2,6 +2,8 @@ import * as THREE from "three";
 import {
   reactionInkPattern,
   inkOutlineRadius,
+  inkVariantRadius,
+  INK_VARIANT_COUNT,
   specialOutline,
   type SpecialShape,
   INK_SCALE,
@@ -63,6 +65,20 @@ export class InkEffects {
         return new THREE.Vector2(Math.cos(a) * radius, Math.sin(a) * radius);
       }),
     ),
+  );
+  /** One splat per precomputed ink variant, in its forward-relative frame. */
+  private readonly variantSplats = Array.from(
+    { length: INK_VARIANT_COUNT },
+    (_, variant) =>
+      new THREE.ShapeGeometry(
+        new THREE.Shape(
+          Array.from({ length: 129 }, (_, i) => {
+            const a = (i / 128) * Math.PI * 2,
+              radius = inkVariantRadius(variant, -a);
+            return new THREE.Vector2(Math.cos(a) * radius, Math.sin(a) * radius);
+          }),
+        ),
+      ),
   );
   private readonly shapes: Record<
     Exclude<SpecialShape, "ink">,
@@ -398,12 +414,16 @@ export class InkEffects {
       disk.outlineShape
         ? this.shapes[disk.outlineShape]
         : disk.organic
-          ? this.splat
+          ? disk.variant === undefined
+            ? this.splat
+            : (this.variantSplats[disk.variant] ?? this.splat)
           : this.circle,
       this.materials[team]!,
     );
     mesh.rotation.x = -Math.PI / 2;
-    if (disk.outlineShape) mesh.rotation.z = -(disk.rotation ?? 0);
+    // Local angle a maps to world angle -a, so -rotation aligns the forward axis.
+    if (disk.outlineShape || disk.variant !== undefined)
+      mesh.rotation.z = -(disk.rotation ?? 0);
     mesh.position.set(disk.x, surfaceHeight + 0.027, disk.z);
     mesh.scale.setScalar(0.001);
     this.group.add(mesh);
@@ -603,6 +623,7 @@ export class InkEffects {
     this.waveGeometry.dispose();
     this.circle.dispose();
     this.splat.dispose();
+    for (const splat of this.variantSplats) splat.dispose();
     this.shapes.star.dispose();
     this.shapes.heart.dispose();
     for (const material of this.materials) material.dispose();

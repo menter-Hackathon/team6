@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { INK_VARIANT_COUNT } from "./ink-outline.js";
 
 export const GAME_ROOM_NAME = "game";
 export const NEON_COLORS = [
@@ -31,6 +32,8 @@ export const DIVE_SPEED = PLAYER_SPEED * 1.5;
 export const DISC_SPEED = PLAYER_SPEED;
 export const DIVE_GAP_SECONDS = 0.28;
 export const INK_SHOT_INTERVAL = 0.17;
+/** Auto-fire runs at 60% of the manual rate; still above the server's minimum interval. */
+export const AUTO_INK_SHOT_INTERVAL = INK_SHOT_INTERVAL / 0.6;
 export const REACTION_SHOT_INTERVAL = 0.32;
 // Allow one frame of timing jitter when the server checks client-paced shots.
 export const INK_SHOT_SERVER_TOLERANCE = 0.02;
@@ -123,6 +126,8 @@ export const paintRequestSchema = z.object({
   /** Shooter's voice when the shot left; only affects `ink` size. */
   voice: inkVoiceSchema.optional(),
   pitch: z.number().finite().min(-Math.PI / 3).max(Math.PI / 3).optional(),
+  /** Client-cycled splat shape for `ink`; every variant encloses the same area. */
+  variant: z.number().int().min(0).max(INK_VARIANT_COUNT - 1).optional(),
 });
 export const specialShapeSchema = z.enum(["ink", "star", "heart"]);
 export type SpecialShape = z.infer<typeof specialShapeSchema>;
@@ -149,6 +154,8 @@ export type PaintStroke = {
   kind: z.infer<typeof paintKindSchema>;
   /** Server-set size multiplier for `ink` splats (see inkShotScale). */
   scale?: number;
+  /** Validated splat shape index for `ink` (see INK_VARIANT_COUNT). */
+  inkVariant?: number;
   /** Server-assigned area multiplier for the speaker's team. */
   areaMultiplier?: number;
 };
@@ -162,9 +169,17 @@ export {
   paintDisks,
   inkFlight,
   inkTravelTime,
-  inkOutlineRadius,
   type PaintDisk,
 } from "./paint-raster.js";
+export {
+  INK_VARIANT_COUNT,
+  INK_VARIANT_MAX_SCALE,
+  inkOutlineRadius,
+  inkVariantRadius,
+  isInkVariant,
+  organicOutlineScale,
+  organicOutlineMaxScale,
+} from "./ink-outline.js";
 export { updateDiveState, type DiveState } from "./dive.js";
 
 export {

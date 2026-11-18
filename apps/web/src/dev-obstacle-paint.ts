@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { inkOutlineRadius, specialOutline, type PaintDisk } from "@gaya/shared";
+import { organicOutlineScale, specialOutline, type PaintDisk } from "@gaya/shared";
 import {
   BOX_WIDTH as W,
   BOX_DEPTH as D,
@@ -25,7 +25,8 @@ function diskOutline(disk: PaintDisk): { x: number; z: number }[] {
       })
     : Array.from({ length: 128 }, (_, i) => {
         const angle = (i / 128) * Math.PI * 2,
-          radius = disk.radius * (disk.organic ? inkOutlineRadius(angle) : 1);
+          radius =
+            disk.radius * (disk.organic ? organicOutlineScale(disk, angle) : 1);
         return { x: Math.cos(angle) * radius, z: Math.sin(angle) * radius };
       });
 }
