@@ -122,7 +122,7 @@ export function ProgressionPopup({
             <h2 id="progression-title">入室待ち</h2>
             <div className="lobby-topic-box" aria-label="話す話題">
               <div className="lobby-topic-box-header">
-                <span>話す話題</span>
+                <span>話題例</span>
                 <button
                   type="button"
                   className="lobby-topic-shuffle"
