@@ -22,17 +22,47 @@ const stroke: PaintStroke = {
 };
 
 describe("INK/PLAY paint geometry", () => {
+  it("scales ink area by scaling radii and offsets with the square root", () => {
+    const base = paintDisks(stroke);
+    const boosted = paintDisks({ ...stroke, areaMultiplier: 4 / 3 });
+    const scale = Math.sqrt(4 / 3);
+    expect(boosted[0]!.radius / base[0]!.radius).toBeCloseTo(scale);
+    expect(
+      (boosted[1]!.x - boosted[0]!.x) / (base[1]!.x - base[0]!.x),
+    ).toBeCloseTo(scale);
+  });
+  it("widens a boosted walking trail without moving its path", () => {
+    const base = paintDisks({ ...stroke, kind: "footprint", fromX: 0, x: 1 });
+    const boosted = paintDisks({
+      ...stroke,
+      kind: "footprint",
+      fromX: 0,
+      x: 1,
+      areaMultiplier: 3 / 2,
+    });
+    expect(boosted[0]!.x).toBe(base[0]!.x);
+    expect(boosted[0]!.z).toBe(base[0]!.z);
+    expect(boosted[0]!.radius / base[0]!.radius).toBeCloseTo(Math.sqrt(3 / 2));
+  });
   it("lands ahead of the player, aligned with camera-relative forward", () => {
     expect(paintDisks(stroke)[0]).toEqual({
       x: 0,
-      z: 4.5,
+      z: expect.closeTo(4.45, 2),
       radius: 0.9 * INK_SCALE * INK_SPLAT_SCALE,
       organic: true,
     });
     const turned = paintDisks({ ...stroke, yaw: Math.PI / 2 })[0]!;
-    expect(turned.x).toBeCloseTo(-4.5);
+    expect(turned.x).toBeCloseTo(-4.45, 2);
     expect(turned.z).toBeCloseTo(0);
   });
+  it("moves ink landing distance with vertical aim", () => {
+    const level = paintDisks(stroke)[0]!;
+    const upward = paintDisks({ ...stroke, pitch: Math.PI / 4 })[0]!;
+    const downward = paintDisks({ ...stroke, pitch: -0.5 })[0]!;
+    expect(upward.z).toBeGreaterThan(level.z);
+    expect(downward.z).toBeCloseTo(3.720);
+  });
+
   it("reproduces the same splat and clips writes at arena edges", () => {
     expect(paintDisks(stroke)).toEqual(paintDisks({ ...stroke }));
     let count = 0;

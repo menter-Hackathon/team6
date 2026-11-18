@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { moveInputSchema } from "@gaya/shared";
 import {
   rotateYaw,
+  rotatePitch,
   toModelRotation,
   toWorldDirection,
 } from "./input-direction";
@@ -38,6 +39,14 @@ describe("toWorldDirection", () => {
   it("rotates the view right when the mouse moves right", () => {
     expect(rotateYaw(0, 100)).toBeGreaterThan(0);
     expect(rotateYaw(0, -100)).toBeLessThan(0);
+  });
+
+  it("clamps vertical aim without changing horizontal model rotation", () => {
+    expect(rotatePitch(0, -100)).toBeGreaterThan(0);
+    expect(rotatePitch(0, 100)).toBeLessThan(0);
+    expect(rotatePitch(0, -10000)).toBeCloseTo(Math.PI / 3);
+    expect(rotatePitch(0, 10000)).toBeCloseTo(-Math.PI / 3);
+    expect(toModelRotation(Math.PI / 2)).toBe(-Math.PI / 2);
   });
 
   it("converts game yaw to Three.js model rotation", () => {

@@ -1,11 +1,15 @@
 import { Canvas } from "@react-three/fiber";
 import { Client, type Room } from "@colyseus/sdk";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   GAME_ROOM_NAME,
   NEON_COLORS,
+  PAINT_GRID_SIZE,
+  countPaintedCells,
   STARTABLE_PLAYER_COUNTS,
   TURN_INTRO_MS,
+  type SpecialShape,
+  speakerTeamAreaMultiplier,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
 import { GameScene } from "./game-scene";
@@ -16,6 +20,7 @@ import { RoomSummary } from "./room-summary";
 import { TeamSelection } from "./team-selection";
 import { TranscriptionPanel } from "./speech/transcription-panel";
 import { TeamColorPicker } from "./team-color-picker";
+import { DevMatchFlow, type DevMatchPhase, type DevMatchTurn } from "./dev-match-flow";
 
 type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
 
@@ -30,8 +35,17 @@ const SERVER_URL =
 export function App() {
   const [showDevObstacles, setShowDevObstacles] = useState(true);
   const [autoFire, setAutoFire] = useState(true);
+  // D-086: the star/heart picker stays hidden; the special always lands as ink.
+  const specialShape: SpecialShape = "ink";
   const [devColorA, setDevColorA] = useState<string>(NEON_COLORS[0]!.hex);
   const [devColorB, setDevColorB] = useState<string>(NEON_COLORS[1]!.hex);
+  const [devTeam, setDevTeam] = useState<"A" | "B">("A");
+  const devPaintCells = useRef<Uint8Array | null>(null);
+  const [devResult, setDevResult] = useState<{
+    cells: Uint8Array;
+    scoreA: number;
+    scoreB: number;
+  } | null>(null);
   const [devMode, setDevMode] = useState(() =>
     new URLSearchParams(location.search).has("dev"),
   );
@@ -54,6 +68,17 @@ export function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [previewPopup, setPreviewPopup] = useState<PopupScene | null>(null);
   const [previewReady, setPreviewReady] = useState(false);
+  const [devMatchActive, setDevMatchActive] = useState(false);
+  const [devMatchCount, setDevMatchCount] = useState(4);
+  const [devMatchTurn, setDevMatchTurn] = useState<DevMatchTurn | null>(null);
+  const [devMatchPhase, setDevMatchPhase] = useState<DevMatchPhase>("lobby");
+  const [devTeamOffset, setDevTeamOffset] = useState(0);
+  const [showTopicPopup, setShowTopicPopup] = useState(true);
+  const [controlsCollapsed, setControlsCollapsed] = useState(false);
+  const syncDevTeamOffset = useCallback((offset: number) => {
+    setDevTeamOffset(offset);
+    setDevTeam(offset % 2 === 0 ? "A" : "B");
+  }, []);
 
   const connect = async (create: boolean) => {
     if (!SERVER_URL) {
@@ -80,6 +105,7 @@ export function App() {
       });
       roomRef.current = joinedRoom;
       setRoomCode(joinedRoom.roomId);
+      setShowTopicPopup(true);
       const url = new URL(location.href);
       url.searchParams.delete("room");
       history.replaceState(null, "", url);
@@ -126,6 +152,11 @@ export function App() {
     setDevMode(next);
     setPreviewPopup(null);
     setPreviewReady(false);
+    setDevResult(null);
+    setDevMatchActive(false);
+    setDevMatchTurn(null);
+    setDevMatchPhase("lobby");
+    setDevTeamOffset(0);
   };
 
   const leaveRoom = () => {
@@ -142,13 +173,32 @@ export function App() {
   const canStart =
     gameState?.hostId === roomRef.current?.sessionId &&
     STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) &&
+    (gameState?.replayPlayerCount === 0 || players.length === gameState?.replayPlayerCount) &&
     players.every((player) => player.ready);
+  const canReplay =
+    gameState?.hostId === roomRef.current?.sessionId &&
+    STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) &&
+    players.filter((player) => player.team === "A").length === players.length / 2 &&
+    players.filter((player) => player.team === "B").length === players.length / 2;
+  const devSpeakerBlocked =
+    devMatchActive && devMatchTurn?.isYourTurn === true;
+  const devMatchCanPaint =
+    !devMatchActive ||
+    devMatchPhase === "lobby" ||
+    (devMatchPhase === "playing" && devMatchTurn !== null && !devSpeakerBlocked);
+  const devAreaMultiplier =
+    devMatchActive &&
+    devMatchTurn &&
+    devMatchTurn.speakerTeam === devTeam &&
+    !devSpeakerBlocked
+      ? speakerTeamAreaMultiplier(devMatchTurn.count / 2)
+      : 1;
 
   return (
     <main className="game-shell">
       <header className="hud">
         <div>
-          <p className="eyebrow">STRUCTURE TEST / 3D FOUNDATION</p>
+          <p className="eyebrow">GAYA SPLATOON / PARTY GAME</p>
           <h1>ガヤでスプラトゥーン</h1>
         </div>
         <TranscriptionPanel
@@ -161,7 +211,7 @@ export function App() {
               : [displayName].filter(Boolean)
           }
         />
-        <button onClick={toggleDevMode}>
+        <button className="hud-dev-button" onClick={toggleDevMode}>
           {devMode ? "検証モードを終了" : "操作を検証"}
         </button>
         <div className={`status status--${connectionState}`}>
@@ -177,30 +227,40 @@ export function App() {
       </header>
 
       {!devMode && connectionState !== "connected" ? (
-        <section className="lobby-panel">
+        <section className="lobby-panel lobby-panel--entry" aria-label="ルームに参加">
+          <span className="entry-kicker">MATCH ENTRY ／ 01</span>
           <h2>ルームに参加</h2>
+          <label className="entry-label" htmlFor="entry-name">PLAYER NAME</label>
           <input
+            id="entry-name"
             aria-label="表示名"
             placeholder="表示名"
             maxLength={20}
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
           />
+          <div className="entry-create">
+          <label className="entry-label" htmlFor="entry-order">発表順</label>
           <select
+            id="entry-order"
             aria-label="発表順"
             value={turnOrder}
             onChange={(event) => setTurnOrder(event.target.value)}
           >
-            <option value="alternating">チーム交互</option>
+            <option value="alternating">A・B交互に発表</option>
             <option value="random">完全ランダム</option>
           </select>
           <button
             disabled={!displayName.trim() || connectionState === "connecting"}
             onClick={() => void connect(true)}
           >
-            ルームを作る
+            ルームを作る <span aria-hidden="true">↗</span>
           </button>
+          </div>
+          <div className="entry-divider"><span>OR JOIN</span></div>
+          <label className="entry-label" htmlFor="entry-code">INVITE CODE</label>
           <input
+            id="entry-code"
             aria-label="招待コード"
             placeholder="招待コード"
             value={inviteCode}
@@ -211,8 +271,7 @@ export function App() {
           />
           {fromInviteLink && inviteCode && (
             <p>
-              参加リンクからルーム {inviteCode}{" "}
-              を開きました。表示名を入力して参加してください。
+              招待コード {inviteCode} を入力済み
             </p>
           )}
           <button
@@ -223,7 +282,7 @@ export function App() {
             }
             onClick={() => void connect(false)}
           >
-            {fromInviteLink ? "参加リンクから参加" : "コードで参加"}
+            {fromInviteLink ? "このルームに参加" : "コードで参加"} <span aria-hidden="true">→</span>
           </button>
           {errorMessage && <p role="alert">{errorMessage}</p>}
         </section>
@@ -297,13 +356,49 @@ export function App() {
               else setDevColorB(color);
             }}
           />
+          <div className="dev-team-picker" role="group" aria-label="塗るチーム">
+            <span>試すチーム：</span>
+            <button
+              aria-pressed={devTeam === "A"}
+              onClick={() => setDevTeam("A")}
+            >
+              A
+            </button>
+            <button
+              aria-pressed={devTeam === "B"}
+              onClick={() => setDevTeam("B")}
+            >
+              B
+            </button>
+          </div>
+          {devMatchActive && devMatchTurn && (
+            <p role="status">
+              {devSpeakerBlocked
+                ? "あなたの発表中：塗り停止"
+                : `現在の塗り面積：${devAreaMultiplier === 1 ? "補正なし" : `${devAreaMultiplier.toFixed(2)}倍`}`}
+            </p>
+          )}
           <h3>進行ポップアップを確認</h3>
+          <button
+            onClick={() => {
+              setPreviewPopup(null);
+              setDevMatchActive(true);
+            }}
+          >
+            開始から結果まで通して検証
+          </button>
           <div className="popup-preview-buttons">
             {(["lobby", "countdown", "turn", "result"] as const).map(
               (scene) => (
                 <button
                   key={scene}
                   onClick={() => {
+                    if (scene === "result") {
+                      const cells =
+                        devPaintCells.current?.slice() ??
+                        new Uint8Array(PAINT_GRID_SIZE ** 2);
+                      setDevResult({ cells, ...countPaintedCells(cells) });
+                    }
                     setPreviewPopup(scene);
                     setPreviewReady(false);
                   }}
@@ -327,6 +422,7 @@ export function App() {
         className="viewport"
         onContextMenu={(event) => event.preventDefault()}
       >
+        <div className="game-canvas-layer">
         <Canvas
           shadows
           camera={{ fov: 55, near: 0.1, far: 100, position: [0, 7, 9] }}
@@ -338,13 +434,22 @@ export function App() {
               playerIds={devMode ? [] : playerIds}
               devMode={devMode}
               showDevObstacles={showDevObstacles}
-              specialShape="ink"
               autoFire={autoFire}
+              devComCount={devMatchActive ? devMatchCount - 1 : 0}
+              devMatchPhase={devMatchActive ? devMatchPhase : undefined}
+              devTeamOffset={devTeamOffset}
+              devTeam={devTeam}
+              devAreaMultiplier={devAreaMultiplier}
+              devCanMove={!devMatchActive || devMatchPhase === "lobby" || devMatchPhase === "playing"}
+              devCanPaint={devMatchCanPaint}
+              devPaintCells={devPaintCells}
+              specialShape={specialShape}
               colorA={devMode ? devColorA : gameState?.colorA}
               colorB={devMode ? devColorB : gameState?.colorB}
             />
           </Suspense>
         </Canvas>
+        </div>
         <button
           className="auto-fire-toggle"
           aria-label="通常インクの常時発射"
@@ -369,23 +474,46 @@ export function App() {
             aria-label="検証用座標"
           />
         )}
-        <aside className="controls">
-          <strong>操作</strong>
+        <aside className={`controls${controlsCollapsed ? " controls--collapsed" : ""}`} aria-label="操作ガイド">
+          <button className="controls-toggle" type="button" aria-expanded={!controlsCollapsed} aria-controls="controls-details" onClick={() => setControlsCollapsed((value) => !value)}>
+            <strong>操作ガイド</strong><span aria-hidden="true">{controlsCollapsed ? "＋" : "－"}</span>
+          </button>
+          {!controlsCollapsed && <div id="controls-details" className="controls-details">
           <span>
             <kbd>W</kbd>
             <kbd>A</kbd>
             <kbd>S</kbd>
-            <kbd>D</kbd> / 矢印キー 移動
+            <kbd>D</kbd> <span>移動</span>
           </span>
-          <span>クリック → マウスで視点回転 / 長押しでインク連射</span>
-          <span>Shift: 自チームのインクに潜航（速度1.5倍）</span>
-          <span>Space: ジャンプ / Q: リング / E: 直線で塗る</span>
-          <span>F: 回転ジャンプ → 着地で広範囲を塗る</span>
-          <span>
-            <kbd>Esc</kbd> マウス解除
-          </span>
+          <span><kbd>クリック</kbd> 視点回転・長押しでインク</span>
+          <span><kbd>Shift</kbd> 潜航 <kbd>Space</kbd> ジャンプ</span>
+          <span><kbd>Q</kbd> リング <kbd>E</kbd> 直線</span>
+          <span><kbd>F</kbd> インクスラム</span>
+          <span><kbd>Esc</kbd> マウス解除</span>
+          </div>}
         </aside>
-        {devMode && previewPopup === "turn" && (
+        {devMode && devMatchActive && (
+          <DevMatchFlow
+            cells={devPaintCells}
+            colorA={devColorA}
+            colorB={devColorB}
+            onCountChange={setDevMatchCount}
+            onTurnChange={setDevMatchTurn}
+            onPhaseChange={setDevMatchPhase}
+            onTeamOffsetChange={syncDevTeamOffset}
+            onColorSelect={(team, color) => {
+              if (team === "A") setDevColorA(color);
+              else setDevColorB(color);
+            }}
+            onClose={() => {
+              setDevMatchActive(false);
+              setDevMatchTurn(null);
+              setDevMatchPhase("lobby");
+              setDevTeamOffset(0);
+            }}
+          />
+        )}
+        {devMode && !devMatchActive && previewPopup === "turn" && (
           <TurnFlow
             key="preview-turn"
             speakerName="あなた"
@@ -397,10 +525,11 @@ export function App() {
             onClose={() => setPreviewPopup(null)}
           />
         )}
-        {devMode && previewPopup === "result" && (
+        {devMode && !devMatchActive && previewPopup === "result" && (
           <ResultFlow
-            scoreA={1240}
-            scoreB={980}
+            scoreA={devResult?.scoreA ?? 0}
+            scoreB={devResult?.scoreB ?? 0}
+            {...(devResult ? { cells: devResult.cells } : {})}
             colorA={devColorA}
             colorB={devColorB}
             preview
@@ -408,6 +537,7 @@ export function App() {
           />
         )}
         {devMode &&
+          !devMatchActive &&
           previewPopup &&
           previewPopup !== "turn" &&
           previewPopup !== "result" &&
@@ -416,44 +546,80 @@ export function App() {
               scene={previewPopup}
               preview
               players={[
-                { displayName: "あなた", ready: true },
+                { displayName: "あなた", ready: previewReady },
                 { displayName: "メンターA", ready: true },
                 { displayName: "メンターB", ready: false },
                 { displayName: "メンターC", ready: true },
               ]}
               isHost
-              isReady
+              isReady={previewReady}
               speakerName="メンターA"
               onClose={() => setPreviewPopup(null)}
               onReady={() => setPreviewReady(true)}
               onStart={() => setPreviewPopup("countdown")}
             />
           )}
-        {devMode && previewPopup === "lobby" && previewReady && (
-          <RoomSummary
-            roomCode="ABCD12"
-            names={["あなた", "メンターA", "メンターB", "メンターC"]}
-            canStart
-            onStart={() => setPreviewPopup("countdown")}
-            onClose={() => setPreviewPopup(null)}
-          />
-        )}
+        {devMode &&
+          !devMatchActive &&
+          previewPopup === "lobby" &&
+          previewReady && (
+            <RoomSummary
+              roomCode="ABCD12"
+              names={["あなた", "メンターA", "メンターB", "メンターC"]}
+              ready
+              readyCount={4}
+              canStart
+              onReady={() => setPreviewReady(false)}
+              onStart={() => setPreviewPopup("countdown")}
+              onClose={() => setPreviewPopup(null)}
+            />
+          )}
         {!devMode &&
           connectionState === "connected" &&
-          gameState?.phase === "lobby" && (
+          gameState?.phase === "lobby" &&
+          showTopicPopup && (
+            <ProgressionPopup
+              scene="lobby"
+              roomCode={roomCode}
+              players={players.map((player) => ({
+                displayName: player.displayName,
+                ready: player.ready,
+              }))}
+              isHost={gameState.hostId === roomRef.current?.sessionId}
+              isReady={localPlayer?.ready ?? false}
+              canStart={canStart}
+              requiredPlayerCount={gameState.replayPlayerCount}
+              practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
+              onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
+              onClose={() => setShowTopicPopup(false)}
+              onReady={() => {
+                const nextReady = !localPlayer?.ready;
+                roomRef.current?.send("ready", nextReady);
+                if (nextReady) setShowTopicPopup(false);
+              }}
+              {...(gameState.hostId === roomRef.current?.sessionId
+                ? { onStart: () => roomRef.current?.send("prepare-teams") }
+                : {})}
+            />
+          )}
+        {!devMode &&
+          connectionState === "connected" &&
+          gameState?.phase === "lobby" &&
+          !showTopicPopup && (
             <RoomSummary
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
               canStart={canStart}
+              requiredPlayerCount={gameState.replayPlayerCount}
               practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
-              onPracticeColorSelect={(color) =>
-                roomRef.current?.send("practice-color", color)
-              }
+              onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               ready={localPlayer?.ready ?? false}
               readyCount={players.filter((player) => player.ready).length}
-              onReady={() =>
-                roomRef.current?.send("ready", !localPlayer?.ready)
-              }
+              onReady={() => {
+                const nextReady = !localPlayer?.ready;
+                roomRef.current?.send("ready", nextReady);
+                if (!nextReady) setShowTopicPopup(true);
+              }}
               episodeSaved={localPlayer?.hasEpisode ?? false}
               episodeCount={
                 players.filter((player) => player.hasEpisode).length
@@ -472,16 +638,21 @@ export function App() {
               colorA={gameState.colorA}
               colorB={gameState.colorB}
               isHost={gameState.hostId === roomRef.current?.sessionId}
+              talkDuration={gameState.talkDuration}
+              onTalkDurationSelect={(seconds) => roomRef.current?.send("talk-duration", seconds)}
               onColorSelect={(team, color) =>
                 roomRef.current?.send("team-color", { team, color })
               }
+              onReshuffle={() => roomRef.current?.send("reshuffle-teams")}
+              onReturnToLobby={() => roomRef.current?.send("return-to-lobby")}
+              canStart={players.length === gameState.speakerOrder.length && (gameState.replayPlayerCount === 0 || players.length === gameState.replayPlayerCount)}
               onStart={() => roomRef.current?.send("start")}
             />
           )}
         {!devMode &&
           connectionState === "connected" &&
           gameState?.phase === "countdown" && (
-            <ProgressionPopup scene="countdown" />
+            <ProgressionPopup scene="countdown" countdownEndsAt={gameState.countdownEndsAt} />
           )}
         {!devMode &&
           connectionState === "connected" &&
@@ -502,6 +673,7 @@ export function App() {
               turnNumber={gameState.turnIndex}
               turnCount={gameState.speakerOrder.length}
               endsAt={gameState.turnEndsAt}
+              talkDuration={gameState.talkDuration}
             />
           )}
         {!devMode &&
@@ -513,6 +685,7 @@ export function App() {
               colorA={gameState.colorA}
               colorB={gameState.colorB}
               {...(roomRef.current ? { room: roomRef.current } : {})}
+              {...(canReplay ? { onReplay: () => roomRef.current?.send("replay") } : {})}
               onClose={leaveRoom}
             />
           )}

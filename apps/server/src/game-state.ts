@@ -1,4 +1,5 @@
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
+import { PRESENTATION_SECONDS } from "@gaya/shared";
 
 export class PlayerState extends Schema {
   @type("string") id = "";
@@ -29,5 +30,8 @@ export class GameState extends Schema {
   @type("string") turnOrder = "alternating";
   @type("uint32") turnIndex = 0;
   @type("float64") turnEndsAt = 0;
+  @type("float64") countdownEndsAt = 0;
+  @type("uint8") talkDuration = PRESENTATION_SECONDS;
+  @type("uint8") replayPlayerCount = 0;
   @type(["string"]) speakerOrder = new ArraySchema<string>();
 }

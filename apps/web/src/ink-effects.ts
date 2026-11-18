@@ -9,6 +9,7 @@ import {
   NEON_COLORS,
   practiceColorOwner,
   paintDisks,
+  inkTravelTime,
   type PaintDisk,
   type PaintStroke,
 } from "@gaya/shared";
@@ -250,11 +251,7 @@ export class InkEffects {
     );
     const destination =
       surface?.clone() ?? new THREE.Vector3(impact.x, 0.035, impact.z);
-    const duration = THREE.MathUtils.clamp(
-      origin.distanceTo(destination) / 32,
-      0.12,
-      0.52,
-    );
+    const duration = inkTravelTime(stroke.pitch ?? 0, Math.hypot(destination.x - origin.x, destination.z - origin.z), destination.y - origin.y);
     if (this.drops.length >= MAX_DROPS) return duration;
     const velocity = destination.sub(origin).divideScalar(duration);
     velocity.y += 0.5 * GRAVITY * duration;

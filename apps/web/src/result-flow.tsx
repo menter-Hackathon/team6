@@ -9,8 +9,10 @@ interface ResultFlowProps {
   colorA?: string;
   colorB?: string;
   preview?: boolean;
+  cells?: Uint8Array;
   room?: Room<GameState>;
   onClose?: () => void;
+  onReplay?: () => void;
 }
 
 export function ResultFlow({
@@ -19,8 +21,10 @@ export function ResultFlow({
   colorA = "#ff4f8b",
   colorB = "#37d9ff",
   preview = false,
+  cells,
   room,
   onClose,
+  onReplay,
 }: ResultFlowProps) {
   const [stage, setStage] = useState<
     "finish" | "curtain" | "suspense" | "revealed"
@@ -94,12 +98,17 @@ export function ResultFlow({
           </div>
           <PaintOverview
             room={room}
-            preview={preview}
+            {...(cells ? { cells } : {})}
             revealed={revealed}
             colorA={colorA}
             colorB={colorB}
           />
-          {preview ? (
+          {onReplay ? (
+            <div className="result-screen-actions">
+              <button onClick={onReplay}>もう一度遊ぶ</button>
+              <button onClick={onClose}>{room ? "ルームを退出" : "検証を終了"}</button>
+            </div>
+          ) : preview ? (
             <div className="result-screen-actions">
               <button onClick={() => setRun((value) => value + 1)}>
                 もう一度見る

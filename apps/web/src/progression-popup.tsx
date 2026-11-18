@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GAME_START_COUNTDOWN_SECONDS } from "@gaya/shared";
+import { GAME_START_COUNTDOWN_SECONDS, pickRandomTopics } from "@gaya/shared";
 import { PracticeColorPicker } from "./practice-color-picker";
 
 export type PopupScene = "lobby" | "countdown" | "turn" | "result";
@@ -12,11 +12,13 @@ interface ProgressionPopupProps {
   isHost?: boolean;
   isReady?: boolean;
   canStart?: boolean;
+  requiredPlayerCount?: number;
   practiceColor?: string;
   onPracticeColorSelect?: (color: string) => void;
   speakerName?: string;
   turnNumber?: number;
   turnCount?: number;
+  countdownEndsAt?: number;
   onReady?: () => void;
   onStart?: () => void;
   onClose?: () => void;
@@ -30,34 +32,39 @@ export function ProgressionPopup({
   isHost = false,
   isReady = false,
   canStart = false,
+  requiredPlayerCount = 0,
   practiceColor = "#ff4f8b",
   onPracticeColorSelect,
   speakerName = "プレイヤー",
   turnNumber = 1,
   turnCount = 4,
+  countdownEndsAt,
   onReady,
   onStart,
   onClose,
 }: ProgressionPopupProps) {
   const [secondsLeft, setSecondsLeft] = useState(GAME_START_COUNTDOWN_SECONDS);
   const [countdownRun, setCountdownRun] = useState(0);
+  const [topicSuggestions, setTopicSuggestions] = useState<string[]>(() =>
+    pickRandomTopics(3),
+  );
   const [copied, setCopied] = useState(false);
   const [linkCopyMessage, setLinkCopyMessage] = useState("");
+
   useEffect(() => {
     if (scene !== "countdown") return;
     setSecondsLeft(GAME_START_COUNTDOWN_SECONDS);
-    const startedAt = Date.now();
+    const endsAt = countdownEndsAt ?? Date.now() + GAME_START_COUNTDOWN_SECONDS * 1000;
     const timer = window.setInterval(() => {
       setSecondsLeft(
         Math.max(
           0,
-          GAME_START_COUNTDOWN_SECONDS -
-            Math.floor((Date.now() - startedAt) / 1000),
+          Math.ceil((endsAt - Date.now()) / 1000),
         ),
       );
     }, 50);
     return () => window.clearInterval(timer);
-  }, [scene, countdownRun]);
+  }, [scene, countdownRun, countdownEndsAt]);
 
   useEffect(() => {
     if (!preview || !onClose) return;
@@ -67,6 +74,10 @@ export function ProgressionPopup({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [preview, onClose]);
+
+  const shuffleSuggestions = () => {
+    setTopicSuggestions((prev) => pickRandomTopics(3, prev));
+  };
 
   const copyCode = async () => {
     try {
@@ -92,15 +103,15 @@ export function ProgressionPopup({
   const readyCount = players.filter((player) => player.ready).length;
 
   return (
-    <div className="progression-backdrop">
+    <div className={`progression-backdrop progression-backdrop--${scene}`}>
       <section
         className={`progression-popup${scene === "lobby" ? " progression-popup--lobby" : ""}`}
         role="dialog"
-        aria-modal="true"
+        aria-modal="false"
         aria-labelledby="progression-title"
       >
         {preview && <span className="progression-preview">検証プレビュー</span>}
-        {preview && (
+        {onClose && (
           <button
             className="progression-close"
             onClick={onClose}
@@ -111,14 +122,11 @@ export function ProgressionPopup({
         )}
         {scene === "lobby" && (
           <>
+            <span className="lobby-kicker">MATCH LOBBY ／ 01</span>
             <h2 id="progression-title">入室待ち</h2>
-            <PracticeColorPicker
-              color={practiceColor}
-              onSelect={onPracticeColorSelect}
-            />
             <div className="progression-code">
               <div>
-                <span>招待コード</span>
+                <span>INVITE CODE / 招待コード</span>
                 <strong>{roomCode}</strong>
               </div>
               <button
@@ -129,30 +137,27 @@ export function ProgressionPopup({
               </button>
             </div>
             {!preview && (
-              <>
-                <button
-                  className="invite-link-button"
-                  onClick={() => void copyInviteLink()}
-                >
-                  参加リンクをコピー
-                </button>
-                {linkCopyMessage && <p role="status">{linkCopyMessage}</p>}
-              </>
+              <button className="invite-link-button" onClick={() => void copyInviteLink()}>
+                参加リンクをコピー <span aria-hidden="true">↗</span>
+              </button>
             )}
-            <p className="lobby-ready-count">
-              準備完了{" "}
-              <strong>
-                {readyCount} / {players.length}
-              </strong>
-            </p>
+            {linkCopyMessage && <p className="lobby-copy-status" role="status">{linkCopyMessage}</p>}
+            <div className="lobby-readiness">
+              <p className="lobby-ready-count">準備完了 <strong>{readyCount} / {Math.max(requiredPlayerCount, players.length)}</strong></p>
+            {requiredPlayerCount > players.length && (
+              <p className="lobby-replay-waiting" role="status">
+                再戦にはあと{requiredPlayerCount - players.length}人の入室が必要です
+              </p>
+            )}
             <ul className="lobby-names" aria-label="参加中のプレイヤー">
               {players.map((player, index) => (
                 <li key={index}>{player.displayName}</li>
               ))}
             </ul>
+            </div>
             <div className="progression-actions">
-              <button onClick={onReady}>
-                {isReady ? "準備を取り消す" : "準備OKにする"}
+              <button className="lobby-ready-button" aria-pressed={isReady} onClick={onReady}>
+                {isReady ? "準備を取り消す ✓" : "準備OKにする"}
               </button>
               {isHost && (
                 <button
@@ -160,7 +165,9 @@ export function ProgressionPopup({
                   disabled={!canStart}
                   title={
                     !canStart
-                      ? "4・6・8人で全員が準備すると開始できます"
+                      ? requiredPlayerCount > 0
+                        ? `${requiredPlayerCount}人全員が揃って準備完了すると開始できます`
+                        : "4・6・8人で全員が準備すると開始できます"
                       : undefined
                   }
                   onClick={onStart}
@@ -168,6 +175,18 @@ export function ProgressionPopup({
                   チーム決めへ
                 </button>
               )}
+            </div>
+            <div className="lobby-extras">
+              <div className="lobby-topic-box" aria-label="話す話題">
+                <div className="lobby-topic-box-header">
+                  <span>トークのお題</span>
+                  <button type="button" className="lobby-topic-shuffle" onClick={shuffleSuggestions} aria-label="別の話題を表示">↻</button>
+                </div>
+                <ul className="lobby-topic-list">
+                  {topicSuggestions.map((topic) => <li key={topic}>{topic}</li>)}
+                </ul>
+              </div>
+              <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
             </div>
           </>
         )}
@@ -199,7 +218,7 @@ export function ProgressionPopup({
             <p className="progression-kicker">
               PRESENTATION / {turnNumber} OF {turnCount}
             </p>
-            <h2 id="progression-title">{speakerName}さんの発表</h2>
+            <h2 id="progression-title"><span className="popup-name-phrase"><span className="popup-player-name">{speakerName}</span><span className="popup-name-suffix">さんの発表</span></span></h2>
             <div className="progression-symbol">
               30<span>秒</span>
             </div>

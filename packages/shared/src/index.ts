@@ -36,6 +36,15 @@ export const REACTION_SHOT_INTERVAL = 0.32;
 export const INK_SHOT_SERVER_TOLERANCE = 0.02;
 export const PLAYER_SIZE = 1;
 export const PLAYER_RADIUS = PLAYER_SIZE * 0.45;
+export function teamStartPosition(team: "A" | "B", index: number, count: number) {
+  const sideMargin = 3;
+  const spread = FIELD_HALF_WIDTH - sideMargin;
+  return {
+    x: count === 1 ? 0 : -spread + (2 * spread * index) / (count - 1),
+    z: (team === "A" ? -1 : 1) * (FIELD_HALF_DEPTH - sideMargin),
+    yaw: team === "A" ? 0 : Math.PI,
+  };
+}
 export const JUMP_DURATION = 0.72;
 export const JUMP_HEIGHT = 1.2;
 export function advanceJump(time: number, deltaSeconds: number): number {
@@ -48,6 +57,10 @@ export function jumpHeight(time: number): number {
   return JUMP_HEIGHT * Math.sin((Math.PI * time) / JUMP_DURATION);
 }
 export const PRESENTATION_SECONDS = 30;
+export const TALK_DURATION_OPTIONS = [10, 20, 30, 40, 50, 60] as const;
+export const talkDurationSchema = z.number().int().refine(
+  (seconds) => TALK_DURATION_OPTIONS.some((option) => option === seconds),
+);
 export const GAME_START_COUNTDOWN_SECONDS = 7;
 export const TURN_INTRO_MS = 2650;
 export const STARTABLE_PLAYER_COUNTS = [4, 6, 8] as const;
@@ -109,6 +122,7 @@ export const paintRequestSchema = z.object({
   kind: paintKindSchema.exclude(["footprint", "slam"]),
   /** Shooter's voice when the shot left; only affects `ink` size. */
   voice: inkVoiceSchema.optional(),
+  pitch: z.number().finite().min(-Math.PI / 3).max(Math.PI / 3).optional(),
 });
 export const specialShapeSchema = z.enum(["ink", "star", "heart"]);
 export type SpecialShape = z.infer<typeof specialShapeSchema>;
@@ -127,19 +141,27 @@ export type PaintStroke = {
   x: number;
   z: number;
   yaw: number;
+  /** Vertical aim in radians; omitted by older clients. */
+  pitch?: number;
   team: "A" | "B";
   /** Lobby-only palette color; match strokes use the assigned team. */
   practiceColor?: string;
   kind: z.infer<typeof paintKindSchema>;
   /** Server-set size multiplier for `ink` splats (see inkShotScale). */
   scale?: number;
+  /** Server-assigned area multiplier for the speaker's team. */
+  areaMultiplier?: number;
 };
 
 export { rasterizePaintStroke } from "./paint-raster.js";
+export { speakerTeamAreaMultiplier } from "./paint-balance.js";
+export { countPaintedCells } from "./paint-result.js";
 export { isFootprintOwned } from "./paint-ownership.js";
 
 export {
   paintDisks,
+  inkFlight,
+  inkTravelTime,
   inkOutlineRadius,
   type PaintDisk,
 } from "./paint-raster.js";
@@ -168,3 +190,10 @@ export {
   type ReactionDecision,
   type ReactionSegment,
 } from "./reaction.js";
+export {
+  PRESENTATION_TOPICS,
+  createTopicDeck,
+  pickRandomTopics,
+  drawNextTopic,
+  type PresentationTopic,
+} from "./topics.js";

@@ -25,6 +25,26 @@ export function inkOutlineRadius(angle: number): number {
   return 0.77 + 0.13 * Math.sin(angle * 7) + 0.1 * Math.cos(angle * 11);
 }
 
+function inkLaunchAngle(pitch: number): number {
+  return Math.max(-Math.PI / 36, pitch);
+}
+
+// Solve the ballistic arc for the actual muzzle and impact, including raised surfaces.
+export function inkTravelTime(pitch: number, horizontal: number, rise: number): number {
+  const drop = horizontal * Math.tan(inkLaunchAngle(pitch)) - rise;
+  return Math.max(0.03, Math.sqrt(Math.max(0, 2 * drop) / 16));
+}
+
+/** Horizontal travel before an ink shot returns to floor height. */
+export function inkFlight(pitch: number): { distance: number; duration: number } {
+  const angle = inkLaunchAngle(pitch);
+  const speed = 12;
+  const gravity = 16;
+  const verticalSpeed = speed * Math.sin(angle);
+  const duration = (verticalSpeed + Math.sqrt(verticalSpeed ** 2 + 2 * gravity * 1.1)) / gravity;
+  return { distance: speed * Math.cos(angle) * duration, duration };
+}
+
 /** Shared world-space geometry: render effects and server ownership use the same splat. */
 export function paintDisks(stroke: PaintStroke): PaintDisk[] {
   const disks: PaintDisk[] = [];
@@ -159,11 +179,11 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
     const center = {
       x: Math.max(
         -FIELD_HALF_WIDTH + 0.8,
-        Math.min(FIELD_HALF_WIDTH - 0.8, stroke.x + inkDx * 4.5),
+        Math.min(FIELD_HALF_WIDTH - 0.8, stroke.x + inkDx * inkFlight(stroke.pitch ?? 0).distance),
       ),
       z: Math.max(
         -FIELD_HALF_DEPTH + 0.8,
-        Math.min(FIELD_HALF_DEPTH - 0.8, stroke.z + dz * 4.5),
+        Math.min(FIELD_HALF_DEPTH - 0.8, stroke.z + dz * inkFlight(stroke.pitch ?? 0).distance),
       ),
     };
     disks.push({ ...center, radius: 0.9, organic: true });
@@ -183,16 +203,24 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
     }
   }
   const impact = stroke.kind === "ink" ? disks[0] : undefined;
-  // Bounded so a malformed stroke cannot paint an arbitrarily large area.
-  const scale = Number.isFinite(stroke.scale) ? stroke.scale! : 1;
-  const splat = impact
-    ? INK_SPLAT_SCALE * Math.max(0.5, Math.min(1.5, scale))
-    : 1;
+  // Voice scale (ink only, bounded so a malformed stroke cannot paint an arbitrarily
+  // large area) and the speaker team's area buff both widen the splat around its anchor.
+  const voiceScale =
+    impact && Number.isFinite(stroke.scale)
+      ? Math.max(0.5, Math.min(1.5, stroke.scale!))
+      : 1;
+  const radiusMultiplier = Math.sqrt(stroke.areaMultiplier ?? 1);
+  const anchor =
+    stroke.kind === "footprint"
+      ? undefined
+      : (impact ?? { x: stroke.x, z: stroke.z });
+  const spread = (impact ? INK_SPLAT_SCALE * voiceScale : 1) * radiusMultiplier;
   return disks.map((disk) => ({
     ...disk,
-    x: impact ? impact.x + (disk.x - impact.x) * splat : disk.x,
-    z: impact ? impact.z + (disk.z - impact.z) * splat : disk.z,
-    radius: disk.radius * (stroke.kind === "footprint" ? 1 : INK_SCALE) * splat,
+    x: anchor ? anchor.x + (disk.x - anchor.x) * spread : disk.x,
+    z: anchor ? anchor.z + (disk.z - anchor.z) * spread : disk.z,
+    radius:
+      disk.radius * (stroke.kind === "footprint" ? 1 : INK_SCALE) * spread,
   }));
 }
 

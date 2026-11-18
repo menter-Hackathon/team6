@@ -38,6 +38,7 @@ import {
   type SpecialShape,
   NEON_COLORS,
   practiceColorOwner,
+  teamStartPosition,
 } from "@gaya/shared";
 import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -65,6 +66,7 @@ import type { GameState } from "./game-types";
 
 import {
   rotateYaw,
+  rotatePitch,
   toModelRotation,
   toWorldDirection,
 } from "./input-direction";
@@ -74,6 +76,14 @@ interface GameSceneProps {
   playerIds: string[];
   devMode?: boolean;
   showDevObstacles?: boolean;
+  devComCount?: number;
+  devMatchPhase?: string | undefined;
+  devTeamOffset?: number;
+  devTeam: "A" | "B";
+  devAreaMultiplier?: number;
+  devCanPaint?: boolean;
+  devCanMove?: boolean;
+  devPaintCells: MutableRefObject<Uint8Array | null>;
   specialShape: SpecialShape;
   autoFire?: boolean;
   colorA?: string | undefined;
@@ -88,6 +98,7 @@ interface ControlState {
   jumpTime: number;
   specialShape: SpecialShape;
   yaw: number;
+  pitch: number;
   height: number;
   position: { x: number; z: number };
   sequence: number;
@@ -99,6 +110,14 @@ export function GameScene({
   playerIds,
   devMode = false,
   showDevObstacles = true,
+  devComCount = 0,
+  devMatchPhase,
+  devTeamOffset = 0,
+  devTeam,
+  devAreaMultiplier = 1,
+  devCanPaint = true,
+  devCanMove = true,
+  devPaintCells,
   specialShape,
   autoFire = false,
   colorA = "#ff4f8b",
@@ -108,9 +127,17 @@ export function GameScene({
   const reactionInputs = useRef<
     { level: ReactionLevel; at: number; traceKey?: string }[]
   >([]);
-  const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
   const devColor = useRef(colorA);
-  devColor.current = colorA;
+  devColor.current = devTeam === "A" ? colorA : colorB;
+  const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
+  const activeDevTeam = useRef(devTeam);
+  activeDevTeam.current = devTeam;
+  const activeDevAreaMultiplier = useRef(devAreaMultiplier);
+  activeDevAreaMultiplier.current = devAreaMultiplier;
+  const activeDevCanPaint = useRef(devCanPaint);
+  activeDevCanPaint.current = devCanPaint;
+  const activeDevCanMove = useRef(devCanMove);
+  activeDevCanMove.current = devCanMove;
   const controls = useRef<ControlState>({
     keys: new Set(),
     firing: false,
@@ -119,6 +146,7 @@ export function GameScene({
     jumpTime: -1,
     specialShape: "ink",
     yaw: 0,
+    pitch: -0.45,
     height: 0,
     position: { x: 0, z: 0 },
     sequence: 0,
@@ -128,6 +156,7 @@ export function GameScene({
   useEffect(() => {
     const activateSpecial = () => {
       if (devMode) {
+        if (!activeDevCanPaint.current) return;
         if (controls.current.specialTime < 0) {
           controls.current.specialShape = specialShape;
           controls.current.specialTime = 0;
@@ -176,7 +205,9 @@ export function GameScene({
         !document.pointerLockElement &&
         event.target instanceof HTMLElement &&
         (event.target.isContentEditable ||
-          /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(event.target.tagName))
+          /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) ||
+          (event.target.tagName === "BUTTON" &&
+            (event.code === "Space" || event.code === "Enter")))
       )
         return;
       const level = reactionForKey(event.code);
@@ -207,10 +238,7 @@ export function GameScene({
         )
           return;
         if (devMode) controls.current.jumpTime = 0;
-        else if (
-          roomRef.current?.state.phase === "lobby" ||
-          roomRef.current?.state.phase === "playing"
-        ) {
+        else if (roomRef.current?.state.phase === "playing" || roomRef.current?.state.phase === "lobby") {
           controls.current.jumpTime = 0;
           roomRef.current.send("jump");
         }
@@ -240,6 +268,7 @@ export function GameScene({
         )
           return;
         if (devMode && controls.current.specialTime >= 0) return;
+        if (devMode && !activeDevCanPaint.current) return;
         if (devMode) {
           window.dispatchEvent(
             new CustomEvent("dev-paint", {
@@ -248,9 +277,9 @@ export function GameScene({
                 ...{ height: controls.current.height },
                 ...controls.current.position,
                 yaw: controls.current.yaw,
-                team: "A",
-                practiceColor: devColor.current,
+                team: activeDevTeam.current,
                 kind,
+                areaMultiplier: activeDevAreaMultiplier.current,
               },
             }),
           );
@@ -286,14 +315,13 @@ export function GameScene({
     const onMouseMove = (event: MouseEvent) => {
       if (document.pointerLockElement || controls.current.firing) {
         controls.current.yaw = rotateYaw(controls.current.yaw, event.movementX);
+        controls.current.pitch = rotatePitch(controls.current.pitch, event.movementY);
       }
     };
     const onClick = (event: MouseEvent) => {
       if (
         event.target instanceof HTMLCanvasElement &&
-        (devMode ||
-          roomRef.current?.state.phase === "playing" ||
-          roomRef.current?.state.phase === "lobby")
+        (devMode || roomRef.current?.state.phase === "playing" || roomRef.current?.state.phase === "lobby")
       ) {
         if (document.activeElement instanceof HTMLElement)
           document.activeElement.blur();
@@ -335,7 +363,7 @@ export function GameScene({
   useEffect(() => {
     const interval = window.setInterval(() => {
       const room = roomRef.current;
-      if (!room) return;
+      if (!room || (room.state.phase !== "playing" && room.state.phase !== "lobby")) return;
       const keys = controls.current.keys;
       const forward =
         Number(keys.has("KeyW") || keys.has("ArrowUp")) -
@@ -383,9 +411,8 @@ export function GameScene({
     if (button) {
       button.disabled =
         specialActive ||
-        (!devMode &&
-          roomRef.current?.state.phase !== "playing" &&
-          roomRef.current?.state.phase !== "lobby");
+        (devMode && !activeDevCanPaint.current) ||
+        (!devMode && roomRef.current?.state.phase !== "playing" && roomRef.current?.state.phase !== "lobby");
       button.textContent = specialActive
         ? "回転ジャンプ中…"
         : `F  必殺技 · ${specialShape === "ink" ? "● インク" : specialShape === "heart" ? "♥ ハート" : "★ スター"}スラム`;
@@ -439,6 +466,7 @@ export function GameScene({
       (!reactionKind && shotClock.current > 0)
     )
       return;
+    if (devMode && !activeDevCanPaint.current) return;
     const kind = reactionKind ?? "ink";
     if (kind === "reaction-fan") reactionClock.current = REACTION_SHOT_INTERVAL;
     else {
@@ -459,9 +487,10 @@ export function GameScene({
             ...{ height: controls.current.height },
             ...control.position,
             yaw: control.yaw,
-            team: "A",
-            practiceColor: devColor.current,
+            team: activeDevTeam.current,
             kind,
+            pitch: control.pitch,
+            areaMultiplier: activeDevAreaMultiplier.current,
             ...(kind === "ink" ? { scale: inkShotScale(voice) } : {}),
           } satisfies PaintStroke,
         }),
@@ -472,7 +501,11 @@ export function GameScene({
         roomRef.current?.state.phase === "lobby")
     ) {
       const room = roomRef.current;
-      room.send("paint", voice ? { kind, voice } : { kind });
+      room.send("paint", {
+        kind,
+        pitch: control.pitch,
+        ...(voice ? { voice } : {}),
+      });
       // Draw our own shot now; the server's echo then only bakes ownership.
       const practice = room.state.phase === "lobby";
       window.dispatchEvent(
@@ -484,6 +517,7 @@ export function GameScene({
               height: control.height,
               ...control.position,
               yaw: control.yaw,
+              pitch: control.pitch,
               team: networkPlayer.team === "B" ? "B" : "A",
               ...(practice
                 ? { practiceColor: networkPlayer.practiceColor }
@@ -519,11 +553,15 @@ export function GameScene({
         shadow-normalBias={0.03}
       />
 
-      {devMode && showDevObstacles && <DevObstacles />}
+      {devMode && showDevObstacles && (
+        <DevObstacles colorA={colorA} colorB={colorB} canPaint={devCanPaint} />
+      )}
       <Field
         room={roomRef.current}
         devMode={devMode}
         devOwnPaint={devOwnPaint}
+        devPaintCells={devPaintCells}
+        devCanPaint={activeDevCanPaint}
         colorA={colorA}
         colorB={colorB}
       />
@@ -531,11 +569,41 @@ export function GameScene({
         <DevPlayer
           controls={controls}
           ownPaint={devOwnPaint}
-          color={colorA}
-          devColor={devColor}
           obstacles={showDevObstacles}
+          devColor={devColor}
+          color={devTeam === "A" ? colorA : colorB}
+          devTeam={activeDevTeam}
+          areaMultiplier={activeDevAreaMultiplier}
+          canPaint={activeDevCanPaint}
+          canMove={activeDevCanMove}
+          startPosition={devMatchPhase ? teamStartPosition(devTeamOffset % 2 === 0 ? "A" : "B", 0, (devComCount + 1) / 2) : undefined}
+          phase={devMatchPhase}
         />
       )}
+      {devMode &&
+        Array.from({ length: devComCount }, (_, index) => {
+          const rosterIndex = index + 1;
+          const team = (rosterIndex + devTeamOffset) % 2 === 0 ? "A" : "B";
+          const angle = (index / Math.max(devComCount, 1)) * Math.PI * 2;
+          const lineup = devMatchPhase === "countdown" || devMatchPhase === "playing" || devMatchPhase === "result";
+          const slot = Array.from({ length: rosterIndex + 1 }, (_, playerIndex) => playerIndex)
+            .filter((playerIndex) => (playerIndex + devTeamOffset) % 2 === (rosterIndex + devTeamOffset) % 2).length - 1;
+          const start = teamStartPosition(team, slot, (devComCount + 1) / 2);
+          return (
+            <group
+              key={index}
+              position={lineup ? [start.x, 0, start.z] : [Math.cos(angle) * 5, 0, Math.sin(angle) * 5]}
+            >
+              <mesh castShadow receiveShadow position-y={0.5}>
+                <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
+                <meshStandardMaterial color={team === "A" ? colorA : colorB} roughness={0.45} metalness={0.1} />
+              </mesh>
+              <Html position={[0, 1.55, 0]} center zIndexRange={[2, 0]} style={{ pointerEvents: "none" }}>
+                <span className="player-gamertag" style={{ borderColor: team === "A" ? colorA : colorB }}>COM {index + 1}</span>
+              </Html>
+            </group>
+          );
+        })}
       {playerIds.map((playerId) => (
         <Player
           key={playerId}
@@ -594,20 +662,45 @@ function useDiveAppearance() {
   return { body, ripple, update };
 }
 
+function orbitPlayer(camera: THREE.Camera, position: THREE.Vector3, yaw: number, pitch: number) {
+  const centerY = position.y + PLAYER_SIZE / 2;
+  const radius = 6.5;
+  const horizontal = Math.cos(pitch) * radius;
+  camera.position.set(
+    position.x + Math.sin(yaw) * horizontal,
+    centerY - Math.sin(pitch) * radius,
+    position.z - Math.cos(yaw) * horizontal,
+  );
+  camera.lookAt(position.x, centerY, position.z);
+}
+
 function DevPlayer({
   controls,
   ownPaint,
   color,
   devColor,
   obstacles,
+  devTeam,
+  areaMultiplier,
+  canPaint,
+  canMove,
+  startPosition,
+  phase,
 }: {
   controls: MutableRefObject<ControlState>;
   ownPaint: MutableRefObject<(x: number, z: number) => boolean>;
   color: string;
   devColor: MutableRefObject<string>;
   obstacles: boolean;
+  devTeam: MutableRefObject<"A" | "B">;
+  areaMultiplier: MutableRefObject<number>;
+  canPaint: MutableRefObject<boolean>;
+  canMove: MutableRefObject<boolean>;
+  startPosition: { x: number; z: number; yaw: number } | undefined;
+  phase: string | undefined;
 }) {
   const group = useRef<THREE.Group>(null);
+  const previousPhase = useRef<string | undefined>(undefined);
   const appearance = useDiveAppearance();
   const specialAppearance = useSpecialAppearance();
   const aizuchiAppearance = useAizuchiAppearance("dev");
@@ -624,6 +717,7 @@ function DevPlayer({
       controls.current.position = { x: 4, z: 6.5 };
       controls.current.height = 0;
       controls.current.yaw = 0;
+      controls.current.pitch = -0.45;
       controls.current.keys.clear();
       controls.current.firing = false;
       controls.current.jumpTime = -1;
@@ -643,6 +737,28 @@ function DevPlayer({
   useFrame((_, delta) => {
     const object = group.current;
     if (!object) return;
+    if (phase === "countdown" && previousPhase.current !== "countdown" && startPosition) {
+      object.position.set(startPosition.x, 0, startPosition.z);
+      controls.current.position = { x: startPosition.x, z: startPosition.z };
+      controls.current.yaw = startPosition.yaw;
+      object.rotation.y = toModelRotation(startPosition.yaw);
+    }
+    if (phase !== previousPhase.current) {
+      controls.current.height = 0;
+      wasJumping.current = false;
+      fallSpeed.current = 0;
+      climbingWall.current = null;
+    }
+    previousPhase.current = phase;
+    if (!canMove.current) {
+      controls.current.jumpTime = -1;
+      controls.current.specialTime = -1;
+      object.position.y = 0;
+      controls.current.position = { x: object.position.x, z: object.position.z };
+      const yaw = controls.current.yaw;
+      orbitPlayer(camera, object.position, yaw, controls.current.pitch);
+      return;
+    }
     const previousY = object.position.y;
     if (controls.current.jumpTime >= 0 && !wasJumping.current)
       jumpBase.current = previousY;
@@ -660,7 +776,7 @@ function DevPlayer({
     );
     controls.current.specialTime = special.time;
     const specialActive = special.time >= 0 || special.landed;
-    if (special.landed)
+    if (special.landed && canPaint.current)
       window.dispatchEvent(
         new CustomEvent("dev-paint", {
           detail: {
@@ -669,8 +785,8 @@ function DevPlayer({
             x: object.position.x,
             z: object.position.z,
             yaw: controls.current.yaw,
-            team: "A",
-            practiceColor: devColor.current,
+            team: devTeam.current,
+            areaMultiplier: areaMultiplier.current,
             kind: "slam",
             specialShape: controls.current.specialShape,
           } satisfies PaintStroke,
@@ -714,7 +830,7 @@ function DevPlayer({
           )
         : ownPaint.current(object.position.x, object.position.z),
       0,
-      1,
+      devTeam.current === "A" ? 1 : 2,
     );
     const submerged = before.submerged;
     const oldX = object.position.x,
@@ -811,7 +927,7 @@ function DevPlayer({
           )
         : ownPaint.current(object.position.x, object.position.z),
       Math.min(delta, 0.1),
-      1,
+      devTeam.current === "A" ? 1 : 2,
     );
     const nowSubmerged = diveState.current.submerged;
     const onObstacleTop =
@@ -820,6 +936,7 @@ function DevPlayer({
       obstacleFloor(object.position.x, object.position.z) === BOX_HEIGHT;
     if (
       (!dive || onObstacleTop) &&
+      canPaint.current &&
       !specialActive &&
       !climbingWall.current &&
       controls.current.jumpTime < 0 &&
@@ -835,8 +952,8 @@ function DevPlayer({
             x: object.position.x,
             z: object.position.z,
             yaw: controls.current.yaw,
-            team: "A",
-            practiceColor: devColor.current,
+            team: devTeam.current,
+            areaMultiplier: areaMultiplier.current,
             kind: "footprint",
           } satisfies PaintStroke,
         }),
@@ -881,19 +998,7 @@ function DevPlayer({
     }
     controls.current.position = { x: object.position.x, z: object.position.z };
     const yaw = controls.current.yaw;
-    camera.position.lerp(
-      new THREE.Vector3(
-        object.position.x + Math.sin(yaw) * 6,
-        3.7 + object.position.y,
-        object.position.z - Math.cos(yaw) * 6,
-      ),
-      1 - Math.exp(-delta * 8),
-    );
-    camera.lookAt(
-      object.position.x,
-      1.1 + object.position.y,
-      object.position.z,
-    );
+    orbitPlayer(camera, object.position, yaw, controls.current.pitch);
     const readout = document.getElementById("dev-readout");
     if (readout)
       readout.textContent = `状態 ${climbingWall.current ? "壁面潜航 ↑" : nowSubmerged ? "潜航 ×1.5" : "通常"} / 高さ ${object.position.y.toFixed(1)} / X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
@@ -939,12 +1044,16 @@ function Field({
   room,
   devMode,
   devOwnPaint,
+  devPaintCells,
+  devCanPaint,
   colorA,
   colorB,
 }: {
   room: Room<GameState> | null;
   devMode: boolean;
   devOwnPaint: MutableRefObject<(x: number, z: number) => boolean>;
+  devPaintCells: MutableRefObject<Uint8Array | null>;
+  devCanPaint: MutableRefObject<boolean>;
   colorA: string;
   colorB: string;
 }) {
@@ -973,6 +1082,7 @@ function Field({
     [effects, texture],
   );
   const cells = useMemo(() => new Uint8Array(PAINT_GRID_SIZE ** 2), []);
+  devPaintCells.current = devMode ? cells : null;
   const colors = useRef({ colorA, colorB });
   colors.current = { colorA, colorB };
   useEffect(() => {
@@ -1000,7 +1110,7 @@ function Field({
         parseInt(colors.current.colorB.slice(index, index + 2), 16),
       );
       const rgb =
-        practice && practiceRgb[team - 1]
+        practice && !devMode && practiceRgb[team - 1]
           ? practiceRgb[team - 1]!
           : team === 1
             ? currentA
@@ -1171,9 +1281,19 @@ function Field({
       });
     };
     window.addEventListener("predicted-paint", predicted);
-    const devPaint = (event: Event) =>
-      paint((event as CustomEvent<PaintStroke>).detail);
+    const devPaint = (event: Event) => {
+      if (devCanPaint.current) paint((event as CustomEvent<PaintStroke>).detail);
+    };
+    const resetDevPaint = () => {
+      displayQueue.length = 0;
+      effects.clear();
+      cells.fill(0);
+      image.data.fill(0);
+      ctx.clearRect(0, 0, PAINT_GRID_SIZE, PAINT_GRID_SIZE);
+      texture.needsUpdate = true;
+    };
     if (devMode) window.addEventListener("dev-paint", devPaint);
+    if (devMode) window.addEventListener("dev-reset-paint", resetDevPaint);
     const removePaint = room?.onMessage("paint", paint);
     const removeSnapshot = room?.onMessage(
       "paint-snapshot",
@@ -1227,6 +1347,7 @@ function Field({
       window.removeEventListener("dev-paint", devPaint);
       window.removeEventListener("predicted-paint", predicted);
       predictions.length = 0;
+      window.removeEventListener("dev-reset-paint", resetDevPaint);
     };
   }, [room, devMode, canvas, texture, devOwnPaint, cells, effects]);
   return (
@@ -1249,6 +1370,19 @@ function Field({
           roughness={0.22}
           metalness={0.05}
         />
+      </mesh>
+      {/* The underside is visible only to a camera below the floor. */}
+      <mesh rotation-x={-Math.PI / 2} position-y={-0.25}>
+        <planeGeometry args={[200, 200]} />
+        <meshBasicMaterial color="#e0e3da" side={THREE.BackSide} transparent opacity={0.12} depthWrite={false} />
+      </mesh>
+      <mesh rotation-x={-Math.PI / 2}>
+        <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
+        <meshBasicMaterial color="#f7f8ee" side={THREE.BackSide} transparent opacity={0.2} depthWrite={false} />
+      </mesh>
+      <mesh rotation-x={-Math.PI / 2} position-y={0.018}>
+        <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
+        <meshBasicMaterial map={texture} side={THREE.BackSide} transparent opacity={0.3} depthWrite={false} />
       </mesh>
       <Grid
         position={[0, 0.012, 0]}
@@ -1306,14 +1440,22 @@ function Player({
   const specialAppearance = useSpecialAppearance();
   const aizuchiAppearance = useAizuchiAppearance(playerId);
   const initialized = useRef(false);
+  const previousPhase = useRef<string | undefined>(undefined);
   const { camera } = useThree();
-  const cameraOffset = useMemo(() => new THREE.Vector3(), []);
   const cameraTarget = useMemo(() => new THREE.Vector3(), []);
 
   useFrame((_, delta) => {
     const player = roomRef.current?.state.players.get(playerId);
     const object = group.current;
     if (!player || !object) return;
+    const phase = roomRef.current?.state.phase;
+    if (phase === "countdown" && previousPhase.current !== "countdown") {
+      predicted.current.set(player.x, 0, player.z);
+      object.position.set(player.x, 0, player.z);
+      object.rotation.y = toModelRotation(player.yaw);
+      if (local) controls.current.yaw = player.yaw;
+    }
+    previousPhase.current = phase;
     const specialActive = player.specialTime >= 0;
     if (local && specialActive) controls.current.jumpTime = -1;
     if (local)
@@ -1347,8 +1489,7 @@ function Player({
           ? DIVE_SPEED
           : DISC_SPEED
         : PLAYER_SPEED;
-      const phase = roomRef.current?.state.phase;
-      if (!specialActive && (phase === "lobby" || phase === "playing")) {
+      if (!specialActive && (phase === "playing" || phase === "lobby")) {
         predicted.current.x += input.x * scale * speed * delta;
         predicted.current.z += input.z * scale * speed * delta;
       } else {
@@ -1368,16 +1509,7 @@ function Player({
         z: object.position.z,
       };
       const yaw = controls.current.yaw;
-      cameraOffset.set(Math.sin(yaw) * 6, 3.7, -Math.cos(yaw) * 6);
-      camera.position.lerp(
-        cameraTarget.copy(object.position).add(cameraOffset),
-        1 - Math.exp(-delta * 8),
-      );
-      camera.lookAt(
-        object.position.x,
-        1.1 + object.position.y,
-        object.position.z,
-      );
+      orbitPlayer(camera, object.position, yaw, controls.current.pitch);
     } else {
       cameraTarget.set(player.x, 0, player.z);
       object.position.lerp(cameraTarget, 1 - Math.exp(-delta * 10));
@@ -1393,7 +1525,12 @@ function Player({
   return (
     <group ref={group}>
       {displayName && (
-        <Html center position={[0, 1.55, 0]} style={{ pointerEvents: "none" }}>
+        <Html
+          center
+          position={[0, 1.55, 0]}
+          zIndexRange={[2, 0]}
+          style={{ pointerEvents: "none" }}
+        >
           <span className="player-gamertag" style={{ borderColor: color }}>
             {displayName}
           </span>

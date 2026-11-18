@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { inkOutlineRadius, paintDisks, type PaintStroke } from "@gaya/shared";
+import { inkTravelTime, inkOutlineRadius, paintDisks, type PaintStroke } from "@gaya/shared";
 import {
   sweptInkContact,
   wallContours,
@@ -49,7 +49,17 @@ function makeSurfaces() {
     }),
   );
 }
-export function DevObstacles() {
+export function DevObstacles({
+  colorA,
+  colorB,
+  canPaint,
+}: {
+  colorA: string;
+  colorB: string;
+  canPaint: boolean;
+}) {
+  const options = useRef({ colorA, colorB, canPaint });
+  options.current = { colorA, colorB, canPaint };
   const surfaces = useMemo(makeSurfaces, []);
   const effects = useMemo(() => new InkEffects(), []);
   const pending = useMemo(
@@ -162,10 +172,12 @@ export function DevObstacles() {
       );
     };
     const paint = (event: Event) => {
+      if (!options.current.canPaint) return;
       const stroke = (event as CustomEvent<PaintStroke & { height?: number }>)
         .detail;
       const color =
-        stroke.practiceColor ?? (stroke.team === "A" ? "#ff4f8b" : "#37d9ff");
+        stroke.practiceColor ??
+        (stroke.team === "A" ? options.current.colorA : options.current.colorB);
       const disks = paintDisks(stroke);
       if (stroke.kind !== "ink" && Math.abs((stroke.height ?? 0) - H) < 0.1) {
         const contacts = topContours(disks, stroke.height ?? 0);
@@ -204,11 +216,7 @@ export function DevObstacles() {
         stroke.z + Math.cos(stroke.yaw) * 0.32,
       );
       const target = new THREE.Vector3(destination.x, 0.035, destination.z);
-      const duration = THREE.MathUtils.clamp(
-        origin.distanceTo(target) / 32,
-        0.12,
-        0.52,
-      );
+      const duration = inkTravelTime(stroke.pitch ?? 0, Math.hypot(target.x - origin.x, target.z - origin.z), target.y - origin.y);
       let last = origin.clone();
       for (let step = 1; step <= 24; step++) {
         const t = step / 24,
@@ -276,8 +284,19 @@ export function DevObstacles() {
       }
       queueEdges(duration + 0.22);
     };
+    const reset = () => {
+      pending.length = 0;
+      pendingContours.length = 0;
+      effects.clear();
+      surfaces.flat().forEach((surface) => {
+        surface.canvas.getContext("2d")!.clearRect(0, 0, 256, 256);
+        surface.texture.needsUpdate = true;
+      });
+    };
+    window.addEventListener("dev-reset-paint", reset);
     window.addEventListener("dev-paint", paint, true);
     return () => {
+      window.removeEventListener("dev-reset-paint", reset);
       window.removeEventListener("dev-paint", paint, true);
       obstacleInk.sample = () => false;
       effects.dispose();
