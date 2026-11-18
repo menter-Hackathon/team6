@@ -26,6 +26,8 @@ import {
   DIVE_SPEED,
   DISC_SPEED,
   INK_SHOT_INTERVAL,
+  AUTO_INK_SHOT_INTERVAL,
+  INK_VARIANT_COUNT,
   inkShotScale,
   REACTION_SHOT_INTERVAL,
   updateDiveState,
@@ -59,6 +61,9 @@ import {
 /** Unconfirmed after this long means the server rejected the shot. */
 const PREDICTION_TIMEOUT_MS = 1500;
 /** A local shot drawn before the server confirms it (visual only). */
+/** Next precomputed ink splat shape for this client's shots. */
+let inkVariantCounter = 0;
+
 interface PredictedPaint {
   stroke: PaintStroke & { height?: number };
   traceKey?: string;
@@ -471,7 +476,9 @@ export function GameScene({
     const kind = reactionKind ?? "ink";
     if (kind === "reaction-fan") reactionClock.current = REACTION_SHOT_INTERVAL;
     else {
-      shotClock.current = INK_SHOT_INTERVAL;
+      // Only the always-on stream is slowed; held or tapped shots keep the manual rate.
+      const manual = control.firing || control.tapPending || reactionKind;
+      shotClock.current = manual ? INK_SHOT_INTERVAL : AUTO_INK_SHOT_INTERVAL;
       control.tapPending = false;
     }
     if (devMode && kind === "reaction-fan")
@@ -480,6 +487,13 @@ export function GameScene({
       );
     // D-085: ink is 0.9x silent, 1.2x while voiced, 1.5x mid long sentence.
     const voice = kind === "ink" ? currentInkVoice() : undefined;
+    // Cycle the precomputed splat shapes; the predicted and confirmed strokes share it.
+    const variant =
+      kind === "ink" ? (inkVariantCounter++ % INK_VARIANT_COUNT) : undefined;
+    const inkFields =
+      variant === undefined
+        ? {}
+        : { scale: inkShotScale(voice), inkVariant: variant };
     if (devMode)
       window.dispatchEvent(
         new CustomEvent("dev-paint", {
@@ -492,7 +506,7 @@ export function GameScene({
             kind,
             pitch: control.pitch,
             areaMultiplier: activeDevAreaMultiplier.current,
-            ...(kind === "ink" ? { scale: inkShotScale(voice) } : {}),
+            ...inkFields,
           } satisfies PaintStroke,
         }),
       );
@@ -506,6 +520,7 @@ export function GameScene({
         kind,
         pitch: control.pitch,
         ...(voice ? { voice } : {}),
+        ...(variant === undefined ? {} : { variant }),
       });
       // Draw our own shot now; the server's echo then only bakes ownership.
       const practice = room.state.phase === "lobby";
@@ -524,7 +539,7 @@ export function GameScene({
                 ? { practiceColor: networkPlayer.practiceColor }
                 : {}),
               kind,
-              ...(kind === "ink" ? { scale: inkShotScale(voice) } : {}),
+              ...inkFields,
             },
             ...(traceKey ? { traceKey } : {}),
           },

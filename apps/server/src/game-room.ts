@@ -116,6 +116,9 @@ export class GameRoom extends Room<{ state: GameState }> {
         ...(parsed.data.kind === "ink"
           ? { scale: inkShotScale(parsed.data.voice) }
           : {}),
+        ...(parsed.data.kind === "ink" && parsed.data.variant !== undefined
+          ? { inkVariant: parsed.data.variant }
+          : {}),
         areaMultiplier: this.paintAreaMultiplier(player),
       };
       this.paint.apply(stroke);
