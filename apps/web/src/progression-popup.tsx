@@ -122,29 +122,11 @@ export function ProgressionPopup({
         )}
         {scene === "lobby" && (
           <>
+            <span className="lobby-kicker">MATCH LOBBY ／ 01</span>
             <h2 id="progression-title">入室待ち</h2>
-            <div className="lobby-topic-box" aria-label="話す話題">
-              <div className="lobby-topic-box-header">
-                <span>話題例</span>
-                <button
-                  type="button"
-                  className="lobby-topic-shuffle"
-                  onClick={shuffleSuggestions}
-                  aria-label="別の話題を表示"
-                >
-                  ↻
-                </button>
-              </div>
-              <ul className="lobby-topic-list">
-                {topicSuggestions.map((topic) => (
-                  <li key={topic}>{topic}</li>
-                ))}
-              </ul>
-            </div>
-            <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
             <div className="progression-code">
               <div>
-                <span>招待コード</span>
+                <span>INVITE CODE / 招待コード</span>
                 <strong>{roomCode}</strong>
               </div>
               <button
@@ -155,22 +137,13 @@ export function ProgressionPopup({
               </button>
             </div>
             {!preview && (
-              <>
-                <button
-                  className="invite-link-button"
-                  onClick={() => void copyInviteLink()}
-                >
-                  参加リンクをコピー
-                </button>
-                {linkCopyMessage && <p role="status">{linkCopyMessage}</p>}
-              </>
+              <button className="invite-link-button" onClick={() => void copyInviteLink()}>
+                参加リンクをコピー <span aria-hidden="true">↗</span>
+              </button>
             )}
-            <p className="lobby-ready-count">
-              準備完了{" "}
-              <strong>
-                {readyCount} / {Math.max(requiredPlayerCount, players.length)}
-              </strong>
-            </p>
+            {linkCopyMessage && <p className="lobby-copy-status" role="status">{linkCopyMessage}</p>}
+            <div className="lobby-readiness">
+              <p className="lobby-ready-count">準備完了 <strong>{readyCount} / {Math.max(requiredPlayerCount, players.length)}</strong></p>
             {requiredPlayerCount > players.length && (
               <p className="lobby-replay-waiting" role="status">
                 再戦にはあと{requiredPlayerCount - players.length}人の入室が必要です
@@ -181,9 +154,10 @@ export function ProgressionPopup({
                 <li key={index}>{player.displayName}</li>
               ))}
             </ul>
+            </div>
             <div className="progression-actions">
-              <button onClick={onReady}>
-                {isReady ? "準備を取り消す" : "準備OKにする"}
+              <button className="lobby-ready-button" aria-pressed={isReady} onClick={onReady}>
+                {isReady ? "準備を取り消す ✓" : "準備OKにする"}
               </button>
               {isHost && (
                 <button
@@ -201,6 +175,18 @@ export function ProgressionPopup({
                   チーム決めへ
                 </button>
               )}
+            </div>
+            <div className="lobby-extras">
+              <div className="lobby-topic-box" aria-label="話す話題">
+                <div className="lobby-topic-box-header">
+                  <span>トークのお題</span>
+                  <button type="button" className="lobby-topic-shuffle" onClick={shuffleSuggestions} aria-label="別の話題を表示">↻</button>
+                </div>
+                <ul className="lobby-topic-list">
+                  {topicSuggestions.map((topic) => <li key={topic}>{topic}</li>)}
+                </ul>
+              </div>
+              <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
             </div>
           </>
         )}

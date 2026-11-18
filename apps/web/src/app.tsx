@@ -71,6 +71,7 @@ export function App() {
   const [devMatchPhase, setDevMatchPhase] = useState<DevMatchPhase>("lobby");
   const [devTeamOffset, setDevTeamOffset] = useState(0);
   const [showTopicPopup, setShowTopicPopup] = useState(true);
+  const [controlsCollapsed, setControlsCollapsed] = useState(false);
   const syncDevTeamOffset = useCallback((offset: number) => {
     setDevTeamOffset(offset);
     setDevTeam(offset % 2 === 0 ? "A" : "B");
@@ -194,10 +195,10 @@ export function App() {
     <main className="game-shell">
       <header className="hud">
         <div>
-          <p className="eyebrow">STRUCTURE TEST / 3D FOUNDATION</p>
+          <p className="eyebrow">GAYA SPLATOON / PARTY GAME</p>
           <h1>ガヤでスプラトゥーン</h1>
         </div>
-        <button onClick={toggleDevMode}>
+        <button className="hud-dev-button" onClick={toggleDevMode}>
           {devMode ? "検証モードを終了" : "操作を検証"}
         </button>
         <div className={`status status--${connectionState}`}>
@@ -213,30 +214,40 @@ export function App() {
       </header>
 
       {!devMode && connectionState !== "connected" ? (
-        <section className="lobby-panel">
+        <section className="lobby-panel lobby-panel--entry" aria-label="ルームに参加">
+          <span className="entry-kicker">MATCH ENTRY ／ 01</span>
           <h2>ルームに参加</h2>
+          <label className="entry-label" htmlFor="entry-name">PLAYER NAME</label>
           <input
+            id="entry-name"
             aria-label="表示名"
             placeholder="表示名"
             maxLength={20}
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
           />
+          <div className="entry-create">
+          <label className="entry-label" htmlFor="entry-order">発表順</label>
           <select
+            id="entry-order"
             aria-label="発表順"
             value={turnOrder}
             onChange={(event) => setTurnOrder(event.target.value)}
           >
-            <option value="alternating">チーム交互</option>
+            <option value="alternating">A・B交互に発表</option>
             <option value="random">完全ランダム</option>
           </select>
           <button
             disabled={!displayName.trim() || connectionState === "connecting"}
             onClick={() => void connect(true)}
           >
-            ルームを作る
+            ルームを作る <span aria-hidden="true">↗</span>
           </button>
+          </div>
+          <div className="entry-divider"><span>OR JOIN</span></div>
+          <label className="entry-label" htmlFor="entry-code">INVITE CODE</label>
           <input
+            id="entry-code"
             aria-label="招待コード"
             placeholder="招待コード"
             value={inviteCode}
@@ -247,8 +258,7 @@ export function App() {
           />
           {fromInviteLink && inviteCode && (
             <p>
-              参加リンクからルーム {inviteCode}{" "}
-              を開きました。表示名を入力して参加してください。
+              招待コード {inviteCode} を入力済み
             </p>
           )}
           <button
@@ -259,7 +269,7 @@ export function App() {
             }
             onClick={() => void connect(false)}
           >
-            {fromInviteLink ? "参加リンクから参加" : "コードで参加"}
+            {fromInviteLink ? "このルームに参加" : "コードで参加"} <span aria-hidden="true">→</span>
           </button>
           {errorMessage && <p role="alert">{errorMessage}</p>}
         </section>
@@ -451,21 +461,23 @@ export function App() {
             aria-label="検証用座標"
           />
         )}
-        <aside className="controls">
-          <strong>操作</strong>
+        <aside className={`controls${controlsCollapsed ? " controls--collapsed" : ""}`} aria-label="操作ガイド">
+          <button className="controls-toggle" type="button" aria-expanded={!controlsCollapsed} aria-controls="controls-details" onClick={() => setControlsCollapsed((value) => !value)}>
+            <strong>操作ガイド</strong><span aria-hidden="true">{controlsCollapsed ? "＋" : "－"}</span>
+          </button>
+          {!controlsCollapsed && <div id="controls-details" className="controls-details">
           <span>
             <kbd>W</kbd>
             <kbd>A</kbd>
             <kbd>S</kbd>
-            <kbd>D</kbd> / 矢印キー 移動
+            <kbd>D</kbd> <span>移動</span>
           </span>
-          <span>クリック → マウスで視点回転 / 長押しでインク連射</span>
-          <span>Shift: 自チームのインクに潜航（速度1.5倍）</span>
-          <span>Space: ジャンプ / Q: リング / E: 直線で塗る</span>
-          <span>F: 回転ジャンプ → 着地で広範囲を塗る</span>
-          <span>
-            <kbd>Esc</kbd> マウス解除
-          </span>
+          <span><kbd>クリック</kbd> 視点回転・長押しでインク</span>
+          <span><kbd>Shift</kbd> 潜航 <kbd>Space</kbd> ジャンプ</span>
+          <span><kbd>Q</kbd> リング <kbd>E</kbd> 直線</span>
+          <span><kbd>F</kbd> インクスラム</span>
+          <span><kbd>Esc</kbd> マウス解除</span>
+          </div>}
         </aside>
         {devMode && devMatchActive && (
           <DevMatchFlow
