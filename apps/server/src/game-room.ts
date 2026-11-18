@@ -25,6 +25,7 @@ import {
   createTopicDeck,
   drawNextTopic,
   type MoveInput,
+  countPaintedCells,
 } from "@gaya/shared";
 import { GameState, PlayerState } from "./game-state.js";
 import { PaintField } from "./paint.js";
@@ -292,6 +293,9 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.state.turnIndex += 1;
     }
     if (this.state.turnIndex >= this.state.speakerOrder.length) {
+      const { scoreA, scoreB } = countPaintedCells(this.paint.cells);
+      this.state.scoreA = scoreA;
+      this.state.scoreB = scoreB;
       this.state.phase = "result";
       this.state.turnEndsAt = 0;
       this.state.currentTopic = "";

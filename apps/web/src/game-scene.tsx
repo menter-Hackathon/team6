@@ -41,6 +41,8 @@ interface GameSceneProps {
   roomRef: MutableRefObject<Room<GameState> | null>;
   playerIds: string[];
   devMode?: boolean;
+  devTeam: "A" | "B";
+  devPaintCells: MutableRefObject<Uint8Array | null>;
   specialShape: SpecialShape;
   colorA?: string | undefined;
   colorB?: string | undefined;
@@ -62,13 +64,15 @@ export function GameScene({
   roomRef,
   playerIds,
   devMode = false,
+  devTeam,
+  devPaintCells,
   specialShape,
   colorA = "#ff4f8b",
   colorB = "#37d9ff",
 }: GameSceneProps) {
   const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
-  const devColor = useRef(colorA);
-  devColor.current = colorA;
+  const activeDevTeam = useRef(devTeam);
+  activeDevTeam.current = devTeam;
   const controls = useRef<ControlState>({
     keys: new Set(),
     firing: false,
@@ -161,8 +165,7 @@ export function GameScene({
                 revision: 0,
                 ...controls.current.position,
                 yaw: controls.current.yaw,
-                team: "A",
-                practiceColor: devColor.current,
+                team: activeDevTeam.current,
                 kind,
               },
             }),
@@ -301,8 +304,7 @@ export function GameScene({
             revision: 0,
             ...control.position,
             yaw: control.yaw,
-            team: "A",
-            practiceColor: devColor.current,
+            team: activeDevTeam.current,
             kind: "ink",
           } satisfies PaintStroke,
         }),
@@ -337,6 +339,7 @@ export function GameScene({
         room={roomRef.current}
         devMode={devMode}
         devOwnPaint={devOwnPaint}
+        devPaintCells={devPaintCells}
         colorA={colorA}
         colorB={colorB}
       />
@@ -344,8 +347,8 @@ export function GameScene({
         <DevPlayer
           controls={controls}
           ownPaint={devOwnPaint}
-          color={colorA}
-          devColor={devColor}
+          color={devTeam === "A" ? colorA : colorB}
+          devTeam={activeDevTeam}
         />
       )}
       {playerIds.map((playerId) => (
@@ -410,12 +413,12 @@ function DevPlayer({
   controls,
   ownPaint,
   color,
-  devColor,
+  devTeam,
 }: {
   controls: MutableRefObject<ControlState>;
   ownPaint: MutableRefObject<(x: number, z: number) => boolean>;
   color: string;
-  devColor: MutableRefObject<string>;
+  devTeam: MutableRefObject<"A" | "B">;
 }) {
   const group = useRef<THREE.Group>(null);
   const appearance = useDiveAppearance();
@@ -448,8 +451,7 @@ function DevPlayer({
             x: object.position.x,
             z: object.position.z,
             yaw: controls.current.yaw,
-            team: "A",
-            practiceColor: devColor.current,
+            team: devTeam.current,
             kind: "slam",
             specialShape: controls.current.specialShape,
           } satisfies PaintStroke,
@@ -483,7 +485,7 @@ function DevPlayer({
       dive,
       ownPaint.current(object.position.x, object.position.z),
       0,
-      1,
+      devTeam.current === "A" ? 1 : 2,
     );
     const submerged = before.submerged;
     const oldX = object.position.x,
@@ -504,7 +506,7 @@ function DevPlayer({
       dive,
       ownPaint.current(object.position.x, object.position.z),
       Math.min(delta, 0.1),
-      1,
+      devTeam.current === "A" ? 1 : 2,
     );
     const nowSubmerged = diveState.current.submerged;
     if (
@@ -521,8 +523,7 @@ function DevPlayer({
             x: object.position.x,
             z: object.position.z,
             yaw: controls.current.yaw,
-            team: "A",
-            practiceColor: devColor.current,
+            team: devTeam.current,
             kind: "footprint",
           } satisfies PaintStroke,
         }),
@@ -586,12 +587,14 @@ function Field({
   room,
   devMode,
   devOwnPaint,
+  devPaintCells,
   colorA,
   colorB,
 }: {
   room: Room<GameState> | null;
   devMode: boolean;
   devOwnPaint: MutableRefObject<(x: number, z: number) => boolean>;
+  devPaintCells: MutableRefObject<Uint8Array | null>;
   colorA: string;
   colorB: string;
 }) {
@@ -620,6 +623,7 @@ function Field({
     [effects, texture],
   );
   const cells = useMemo(() => new Uint8Array(PAINT_GRID_SIZE ** 2), []);
+  devPaintCells.current = devMode ? cells : null;
   const colors = useRef({ colorA, colorB });
   colors.current = { colorA, colorB };
   useEffect(() => {
@@ -647,7 +651,7 @@ function Field({
         parseInt(colors.current.colorB.slice(index, index + 2), 16),
       );
       const rgb =
-        practice && practiceRgb[team - 1]
+        practice && !devMode && practiceRgb[team - 1]
           ? practiceRgb[team - 1]!
           : team === 1
             ? currentA
