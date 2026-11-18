@@ -25,7 +25,7 @@ export function useSpecialAppearance() {
       recovery.current = 0;
     } else if (previous.current >= 0 || recovery.current < 0.16) {
       recovery.current += delta;
-      const compression = 0.3 * Math.exp(-recovery.current * 22),
+      const compression = 0.18 * Math.exp(-recovery.current * 22),
         width = 1 / Math.sqrt(1 - compression);
       body.visible = true;
       body.scale.set(width, 1 - compression, width);

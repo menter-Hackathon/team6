@@ -1,7 +1,20 @@
+import {
+  obstacleMove,
+  obstacleFloor,
+  paintedWall,
+  surfacePaintOwned,
+  BOX_HEIGHT,
+  type PaintedWall,
+} from "./dev-obstacle-layout";
+import { DevObstacles } from "./dev-obstacles";
 import { Grid, Html } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { Room } from "@colyseus/sdk";
 import {
+  reactionEffect,
+  reactionForKey,
+  reactionResponseSchema,
+  type ReactionLevel,
   FIELD_HALF_WIDTH,
   FIELD_HALF_DEPTH,
   advanceSpecial,
@@ -13,6 +26,7 @@ import {
   DIVE_SPEED,
   DISC_SPEED,
   INK_SHOT_INTERVAL,
+  REACTION_SHOT_INTERVAL,
   updateDiveState,
   type DiveState,
   PAINT_GRID_SIZE,
@@ -27,6 +41,8 @@ import {
 import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { bleedSpecialPaint } from "./paint-bleed";
+import { AIZUCHI_MOTION_SECONDS, AIZUCHI_LAND_TIME } from "./aizuchi-motion";
+import { useAizuchiAppearance } from "./use-aizuchi-appearance";
 import { useSpecialAppearance } from "./special-appearance";
 import { InkEffects, INK_SETTLE_SECONDS } from "./ink-effects";
 import type { GameState } from "./game-types";
@@ -41,7 +57,9 @@ interface GameSceneProps {
   roomRef: MutableRefObject<Room<GameState> | null>;
   playerIds: string[];
   devMode?: boolean;
+  showDevObstacles?: boolean;
   specialShape: SpecialShape;
+  autoFire?: boolean;
   colorA?: string | undefined;
   colorB?: string | undefined;
 }
@@ -49,10 +67,12 @@ interface GameSceneProps {
 interface ControlState {
   keys: Set<string>;
   firing: boolean;
+  tapPending: boolean;
   specialTime: number;
   jumpTime: number;
   specialShape: SpecialShape;
   yaw: number;
+  height: number;
   position: { x: number; z: number };
   sequence: number;
   latestInput: MoveInput;
@@ -62,20 +82,26 @@ export function GameScene({
   roomRef,
   playerIds,
   devMode = false,
+  showDevObstacles = true,
   specialShape,
+  autoFire = false,
   colorA = "#ff4f8b",
   colorB = "#37d9ff",
 }: GameSceneProps) {
+  const aizuchiTime = useRef(AIZUCHI_MOTION_SECONDS);
+  const reactionInputs = useRef<{ level: ReactionLevel; at: number }[]>([]);
   const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
   const devColor = useRef(colorA);
   devColor.current = colorA;
   const controls = useRef<ControlState>({
     keys: new Set(),
     firing: false,
+    tapPending: false,
     specialTime: -1,
     jumpTime: -1,
-    specialShape: "star",
+    specialShape: "ink",
     yaw: 0,
+    height: 0,
     position: { x: 0, z: 0 },
     sequence: 0,
     latestInput: { sequence: 0, x: 0, z: 0, yaw: 0, dive: false },
@@ -97,6 +123,27 @@ export function GameScene({
       }
     };
     window.addEventListener("activate-special", activateSpecial);
+    const enqueueReaction = (level: ReactionLevel) => {
+      if (reactionEffect(level) && reactionInputs.current.length < 32)
+        reactionInputs.current.push({ level, at: performance.now() });
+    };
+    const classified = (event: Event) => {
+      const parsed = reactionResponseSchema.safeParse(
+        (event as CustomEvent).detail,
+      );
+      if (parsed.success) enqueueReaction(parsed.data.level);
+    };
+    const responseMotion = (event: Event) => {
+      const actorId: unknown = (event as CustomEvent).detail?.actorId;
+      if (actorId === (devMode ? "dev" : roomRef.current?.sessionId))
+        aizuchiTime.current = 0;
+    };
+    window.addEventListener("aizuchi-motion", responseMotion);
+    const resetReactions = () => {
+      reactionInputs.current.length = 0;
+    };
+    window.addEventListener("classified-reaction", classified);
+    window.addEventListener("reset-reaction-input", resetReactions);
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         !document.pointerLockElement &&
@@ -105,6 +152,18 @@ export function GameScene({
           /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(event.target.tagName))
       )
         return;
+      const level = reactionForKey(event.code);
+      if (
+        level &&
+        !event.repeat &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        enqueueReaction(level);
+        return;
+      }
       if (event.code === "KeyF" && !event.repeat) {
         event.preventDefault();
         activateSpecial();
@@ -159,6 +218,7 @@ export function GameScene({
             new CustomEvent("dev-paint", {
               detail: {
                 revision: 0,
+                ...{ height: controls.current.height },
                 ...controls.current.position,
                 yaw: controls.current.yaw,
                 team: "A",
@@ -178,12 +238,19 @@ export function GameScene({
     const onBlur = () => {
       controls.current.keys.clear();
       controls.current.firing = false;
+      controls.current.tapPending = false;
     };
-    const onMouseDown = (event: MouseEvent) => {
-      if (event.button === 0 && event.target instanceof HTMLCanvasElement)
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        event.button === 0 &&
+        event.isPrimary &&
+        event.target instanceof HTMLCanvasElement
+      ) {
         controls.current.firing = true;
+        controls.current.tapPending = true;
+      }
     };
-    const onMouseUp = () => {
+    const onPointerUp = () => {
       controls.current.firing = false;
     };
     const onLockChange = () => {
@@ -203,14 +270,16 @@ export function GameScene({
       ) {
         if (document.activeElement instanceof HTMLElement)
           document.activeElement.blur();
+        if ("pointerType" in event && event.pointerType === "touch") return;
         void event.target.requestPointerLock().catch(() => {
           /* Drag-to-aim remains available if pointer lock is unavailable. */
         });
       }
     };
 
-    window.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointercancel", onBlur);
+    window.addEventListener("pointerup", onPointerUp);
     document.addEventListener("pointerlockchange", onLockChange);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -218,9 +287,15 @@ export function GameScene({
     window.addEventListener("mousemove", onMouseMove);
     document.body.addEventListener("click", onClick);
     return () => {
+      reactionInputs.current.length = 0;
+      aizuchiTime.current = AIZUCHI_MOTION_SECONDS;
+      window.removeEventListener("aizuchi-motion", responseMotion);
+      window.removeEventListener("classified-reaction", classified);
+      window.removeEventListener("reset-reaction-input", resetReactions);
       window.removeEventListener("activate-special", activateSpecial);
-      window.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointercancel", onBlur);
+      window.removeEventListener("pointerup", onPointerUp);
       document.removeEventListener("pointerlockchange", onLockChange);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
@@ -260,9 +335,16 @@ export function GameScene({
   }, [roomRef]);
 
   const shotClock = useRef(0);
+  const reactionClock = useRef(0);
   useFrame((_, delta) => {
     shotClock.current = Math.max(0, shotClock.current - delta);
+    reactionClock.current = Math.max(0, reactionClock.current - delta);
     const control = controls.current;
+    const responseAirborne = aizuchiTime.current < AIZUCHI_LAND_TIME;
+    aizuchiTime.current = Math.min(
+      AIZUCHI_MOTION_SECONDS,
+      aizuchiTime.current + Math.min(delta, 0.05),
+    );
     const networkPlayer = roomRef.current?.state.players.get(
       roomRef.current.sessionId,
     );
@@ -271,10 +353,6 @@ export function GameScene({
     const button = document.getElementById(
       "special-button",
     ) as HTMLButtonElement | null;
-    const picker = document.getElementById(
-      "special-shape",
-    ) as HTMLSelectElement | null;
-    if (picker) picker.disabled = specialActive;
     if (button) {
       button.disabled =
         specialActive ||
@@ -287,23 +365,69 @@ export function GameScene({
     }
     if (
       specialActive ||
-      !control.firing ||
+      responseAirborne ||
       control.keys.has("ShiftLeft") ||
       control.keys.has("ShiftRight") ||
-      shotClock.current > 0
+      networkPlayer?.dive
+    )
+      control.tapPending = false;
+    const queue = reactionInputs.current;
+    while (queue.length && performance.now() - queue[0]!.at > 15000)
+      queue.shift();
+    const canReact =
+      !specialActive &&
+      !responseAirborne &&
+      !control.keys.has("ShiftLeft") &&
+      !control.keys.has("ShiftRight") &&
+      !networkPlayer?.dive &&
+      (devMode ||
+        roomRef.current?.state.phase === "lobby" ||
+        roomRef.current?.state.phase === "playing");
+    let reactionKind: "reaction-fan" | "ink" | undefined;
+    if (
+      queue.length &&
+      canReact &&
+      (reactionEffect(queue[0]!.level) === "reaction-fan"
+        ? reactionClock.current <= 0
+        : shotClock.current <= 0)
+    ) {
+      const action = reactionEffect(queue.shift()!.level);
+      if (action === "slam") {
+        window.dispatchEvent(new Event("activate-special"));
+        return;
+      }
+      if (action) reactionKind = action;
+    }
+    if (
+      specialActive ||
+      responseAirborne ||
+      (!autoFire && !control.firing && !control.tapPending && !reactionKind) ||
+      control.keys.has("ShiftLeft") ||
+      control.keys.has("ShiftRight") ||
+      (!reactionKind && shotClock.current > 0)
     )
       return;
-    shotClock.current = INK_SHOT_INTERVAL;
+    const kind = reactionKind ?? "ink";
+    if (kind === "reaction-fan") reactionClock.current = REACTION_SHOT_INTERVAL;
+    else {
+      shotClock.current = INK_SHOT_INTERVAL;
+      control.tapPending = false;
+    }
+    if (devMode && kind === "reaction-fan")
+      window.dispatchEvent(
+        new CustomEvent("aizuchi-motion", { detail: { actorId: "dev" } }),
+      );
     if (devMode)
       window.dispatchEvent(
         new CustomEvent("dev-paint", {
           detail: {
             revision: 0,
+            ...{ height: controls.current.height },
             ...control.position,
             yaw: control.yaw,
             team: "A",
             practiceColor: devColor.current,
-            kind: "ink",
+            kind,
           } satisfies PaintStroke,
         }),
       );
@@ -311,7 +435,7 @@ export function GameScene({
       roomRef.current?.state.phase === "playing" ||
       roomRef.current?.state.phase === "lobby"
     )
-      roomRef.current.send("paint", { kind: "ink" });
+      roomRef.current.send("paint", { kind });
   });
 
   const localId = roomRef.current?.sessionId;
@@ -333,6 +457,7 @@ export function GameScene({
         shadow-normalBias={0.03}
       />
 
+      {devMode && showDevObstacles && <DevObstacles />}
       <Field
         room={roomRef.current}
         devMode={devMode}
@@ -346,6 +471,7 @@ export function GameScene({
           ownPaint={devOwnPaint}
           color={colorA}
           devColor={devColor}
+          obstacles={showDevObstacles}
         />
       )}
       {playerIds.map((playerId) => (
@@ -411,16 +537,42 @@ function DevPlayer({
   ownPaint,
   color,
   devColor,
+  obstacles,
 }: {
   controls: MutableRefObject<ControlState>;
   ownPaint: MutableRefObject<(x: number, z: number) => boolean>;
   color: string;
   devColor: MutableRefObject<string>;
+  obstacles: boolean;
 }) {
   const group = useRef<THREE.Group>(null);
   const appearance = useDiveAppearance();
   const specialAppearance = useSpecialAppearance();
+  const aizuchiAppearance = useAizuchiAppearance("dev");
   const { camera } = useThree();
+  const jumpBase = useRef(0),
+    wasJumping = useRef(false),
+    fallSpeed = useRef(0);
+  const climbingWall = useRef<PaintedWall | null>(null);
+  const wallRipple = useRef<THREE.Mesh>(null);
+  useEffect(() => {
+    const reset = () => {
+      if (!group.current) return;
+      group.current.position.set(4, 0, 6.5);
+      controls.current.position = { x: 4, z: 6.5 };
+      controls.current.height = 0;
+      controls.current.yaw = 0;
+      controls.current.keys.clear();
+      controls.current.firing = false;
+      controls.current.jumpTime = -1;
+      controls.current.specialTime = -1;
+      wasJumping.current = false;
+      fallSpeed.current = 0;
+      climbingWall.current = null;
+    };
+    window.addEventListener("dev-obstacle-start", reset);
+    return () => window.removeEventListener("dev-obstacle-start", reset);
+  }, [controls]);
   const diveState = useRef<DiveState>({
     submerged: false,
     gapSeconds: 0,
@@ -429,11 +581,17 @@ function DevPlayer({
   useFrame((_, delta) => {
     const object = group.current;
     if (!object) return;
+    const previousY = object.position.y;
+    if (controls.current.jumpTime >= 0 && !wasJumping.current)
+      jumpBase.current = previousY;
     controls.current.jumpTime = advanceJump(
       controls.current.jumpTime,
       Math.min(delta, 0.1),
     );
-    object.position.y = jumpHeight(controls.current.jumpTime);
+    object.position.y =
+      controls.current.jumpTime >= 0
+        ? jumpBase.current + jumpHeight(controls.current.jumpTime)
+        : previousY;
     const special = advanceSpecial(
       controls.current.specialTime,
       Math.min(delta, 0.1),
@@ -445,6 +603,7 @@ function DevPlayer({
         new CustomEvent("dev-paint", {
           detail: {
             revision: 0,
+            ...{ height: controls.current.height },
             x: object.position.x,
             z: object.position.z,
             yaw: controls.current.yaw,
@@ -467,7 +626,9 @@ function DevPlayer({
       direction.x = 0;
       direction.z = 0;
       controls.current.jumpTime = -1;
-      object.position.y = 0;
+      object.position.y = obstacles
+        ? obstacleFloor(object.position.x, object.position.z)
+        : 0;
     }
     const length = Math.hypot(direction.x, direction.z);
     if (length > 1) {
@@ -481,7 +642,15 @@ function DevPlayer({
     const before = updateDiveState(
       diveState.current,
       dive,
-      ownPaint.current(object.position.x, object.position.z),
+      obstacles
+        ? surfacePaintOwned(
+            object.position.x,
+            object.position.z,
+            object.position.y,
+            devColor.current,
+            ownPaint.current,
+          )
+        : ownPaint.current(object.position.x, object.position.z),
       0,
       1,
     );
@@ -490,25 +659,107 @@ function DevPlayer({
       oldZ = object.position.z;
     const speed = dive ? (submerged ? DIVE_SPEED : DISC_SPEED) : PLAYER_SPEED;
     object.position.x = THREE.MathUtils.clamp(
-      object.position.x + direction.x * speed * delta,
+      object.position.x + direction.x * speed * Math.min(delta, 0.05),
       -FIELD_HALF_WIDTH + 0.5,
       FIELD_HALF_WIDTH - 0.5,
     );
     object.position.z = THREE.MathUtils.clamp(
-      object.position.z + direction.z * speed * delta,
+      object.position.z + direction.z * speed * Math.min(delta, 0.05),
       -FIELD_HALF_DEPTH + 0.5,
       FIELD_HALF_DEPTH - 0.5,
     );
+    if (obstacles) {
+      const resolved = obstacleMove(
+        oldX,
+        oldZ,
+        object.position.x,
+        object.position.z,
+        object.position.y,
+      );
+      object.position.x = resolved.x;
+      object.position.z = resolved.z;
+    }
+    const wall =
+      obstacles && dive
+        ? paintedWall(
+            object.position.x,
+            object.position.z,
+            previousY,
+            devColor.current,
+          )
+        : null;
+    const climbing =
+      wall && direction.x * wall.nx + direction.z * wall.nz < -0.1;
+    let mantled = false;
+    if (climbing && wall) {
+      object.position.x = wall.x + wall.nx * 0.035;
+      object.position.z = wall.z + wall.nz * 0.035;
+      object.position.y = previousY + 2.6 * Math.min(delta, 0.05);
+      controls.current.jumpTime = -1;
+      fallSpeed.current = 0;
+      if (object.position.y >= BOX_HEIGHT - 1.1) {
+        object.position.y = BOX_HEIGHT;
+        object.position.x = wall.x - wall.nx * 0.65;
+        object.position.z = wall.z - wall.nz * 0.65;
+        mantled = true;
+      }
+    } else if (climbingWall.current) {
+      const previous = climbingWall.current;
+      object.position.x = previous.x + previous.nx * 0.53;
+      object.position.z = previous.z + previous.nz * 0.53;
+    }
+    const candidateFloor = obstacles
+      ? obstacleFloor(object.position.x, object.position.z)
+      : 0;
+    const floor =
+      previousY >= candidateFloor - 0.02 || object.position.y >= candidateFloor
+        ? candidateFloor
+        : 0;
+    if (!specialActive && !climbing && !mantled) {
+      if (controls.current.jumpTime >= 0) {
+        if (object.position.y <= floor && object.position.y < previousY) {
+          object.position.y = floor;
+          controls.current.jumpTime = -1;
+          fallSpeed.current = 0;
+        }
+      } else {
+        fallSpeed.current =
+          previousY > floor
+            ? fallSpeed.current + 18 * Math.min(delta, 0.05)
+            : 0;
+        object.position.y = Math.max(
+          floor,
+          previousY - fallSpeed.current * Math.min(delta, 0.05),
+        );
+      }
+    }
+    climbingWall.current = climbing && !mantled ? wall : null;
+    wasJumping.current = controls.current.jumpTime >= 0;
+    controls.current.height = object.position.y;
     diveState.current = updateDiveState(
       before,
       dive,
-      ownPaint.current(object.position.x, object.position.z),
+      obstacles
+        ? surfacePaintOwned(
+            object.position.x,
+            object.position.z,
+            object.position.y,
+            devColor.current,
+            ownPaint.current,
+          )
+        : ownPaint.current(object.position.x, object.position.z),
       Math.min(delta, 0.1),
       1,
     );
     const nowSubmerged = diveState.current.submerged;
+    const onObstacleTop =
+      obstacles &&
+      Math.abs(object.position.y - BOX_HEIGHT) < 0.02 &&
+      obstacleFloor(object.position.x, object.position.z) === BOX_HEIGHT;
     if (
-      !dive &&
+      (!dive || onObstacleTop) &&
+      !specialActive &&
+      !climbingWall.current &&
       controls.current.jumpTime < 0 &&
       Math.hypot(object.position.x - oldX, object.position.z - oldZ) > 0.001
     ) {
@@ -516,6 +767,7 @@ function DevPlayer({
         new CustomEvent("dev-paint", {
           detail: {
             revision: 0,
+            ...{ height: controls.current.height },
             fromX: oldX,
             fromZ: oldZ,
             x: object.position.x,
@@ -529,12 +781,42 @@ function DevPlayer({
       );
     }
     appearance.update(dive, nowSubmerged, delta);
+    if (climbingWall.current) {
+      if (appearance.body.current) appearance.body.current.visible = false;
+      if (appearance.ripple.current) appearance.ripple.current.visible = false;
+    }
     specialAppearance(
       appearance.body.current,
       controls.current.specialTime,
       delta,
     );
+    aizuchiAppearance(
+      appearance.body.current,
+      delta,
+      specialActive || dive || Boolean(climbingWall.current),
+    );
     object.rotation.y = toModelRotation(controls.current.yaw);
+    if (wallRipple.current) {
+      const current = climbingWall.current;
+      wallRipple.current.visible = Boolean(current);
+      if (current) {
+        const localNormal = new THREE.Vector3(
+          current.nx,
+          0,
+          current.nz,
+        ).applyAxisAngle(new THREE.Vector3(0, 1, 0), -object.rotation.y);
+        wallRipple.current.position.set(
+          localNormal.x * 0.025,
+          0.45,
+          localNormal.z * 0.025,
+        );
+        wallRipple.current.rotation.set(
+          0,
+          Math.atan2(localNormal.x, localNormal.z),
+          0,
+        );
+      }
+    }
     controls.current.position = { x: object.position.x, z: object.position.z };
     const yaw = controls.current.yaw;
     camera.position.lerp(
@@ -552,10 +834,19 @@ function DevPlayer({
     );
     const readout = document.getElementById("dev-readout");
     if (readout)
-      readout.textContent = `状態 ${nowSubmerged ? "潜航 ×1.5" : "通常"} / X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
+      readout.textContent = `状態 ${climbingWall.current ? "壁面潜航 ↑" : nowSubmerged ? "潜航 ×1.5" : "通常"} / 高さ ${object.position.y.toFixed(1)} / X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
   });
   return (
     <group ref={group}>
+      <mesh ref={wallRipple} visible={false} scale={[1, 1.35, 1]}>
+        <ringGeometry args={[0.23, 0.29, 36]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.85}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
       <mesh ref={appearance.body} castShadow receiveShadow position-y={0.5}>
         <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
         <meshStandardMaterial color={color} />
@@ -736,6 +1027,12 @@ function Field({
         return;
       }
       if (!devMode) revision.current = stroke.revision;
+      if (!devMode && stroke.kind === "reaction-fan" && stroke.actorId)
+        window.dispatchEvent(
+          new CustomEvent("aizuchi-motion", {
+            detail: { actorId: stroke.actorId },
+          }),
+        );
       const flightSeconds = effects.emit(stroke);
       const team = stroke.practiceColor
         ? practiceColorOwner(stroke.practiceColor)
@@ -882,6 +1179,7 @@ function Player({
   const predicted = useRef(new THREE.Vector3());
   const appearance = useDiveAppearance();
   const specialAppearance = useSpecialAppearance();
+  const aizuchiAppearance = useAizuchiAppearance(playerId);
   const initialized = useRef(false);
   const { camera } = useThree();
   const cameraOffset = useMemo(() => new THREE.Vector3(), []);
@@ -908,6 +1206,7 @@ function Player({
         : player.dive);
     appearance.update(diving, diving && player.submerged, delta);
     specialAppearance(appearance.body.current, player.specialTime, delta);
+    aizuchiAppearance(appearance.body.current, delta, specialActive || diving);
 
     if (!initialized.current) {
       predicted.current.set(player.x, 0, player.z);

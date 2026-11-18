@@ -4,10 +4,12 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { GAME_ROOM_NAME } from "@gaya/shared";
 import cors from "cors";
 import express from "express";
+import { createReactionRouter } from "./reaction-api.js";
 import { GameRoom } from "./game-room.js";
 
 const app = express();
 app.use(cors());
+app.use("/api/reaction", createReactionRouter());
 app.get("/health", (_request, response) => {
   response.json({ status: "ok" });
 });

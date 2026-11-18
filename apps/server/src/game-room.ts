@@ -14,6 +14,7 @@ import {
   paintRequestSchema,
   type PaintStroke,
   INK_SHOT_INTERVAL,
+  REACTION_SHOT_INTERVAL,
   INK_SHOT_SERVER_TOLERANCE,
   updateDiveState,
   type DiveState,
@@ -36,6 +37,7 @@ export class GameRoom extends Room<{ state: GameState }> {
   private readonly movementInputs = new Map<string, MoveInput>();
   private readonly paint = new PaintField();
   private readonly lastPaint = new Map<string, number>();
+  private readonly lastReactionPaint = new Map<string, number>();
   private readonly specialShapes = new Map<string, SpecialShape>();
   private readonly dives = new Map<string, DiveState>();
   private turnTimer: ReturnType<typeof setInterval> | undefined;
@@ -75,16 +77,23 @@ export class GameRoom extends Room<{ state: GameState }> {
       )
         return;
       const now = Date.now();
+      const clock =
+        parsed.data.kind === "reaction-fan"
+          ? this.lastReactionPaint
+          : this.lastPaint;
       if (
-        now - (this.lastPaint.get(client.sessionId) ?? 0) <
-        (parsed.data.kind === "ink"
-          ? (INK_SHOT_INTERVAL - INK_SHOT_SERVER_TOLERANCE) * 1000
-          : 500)
+        now - (clock.get(client.sessionId) ?? 0) <
+        (parsed.data.kind === "reaction-fan"
+          ? REACTION_SHOT_INTERVAL * 1000
+          : parsed.data.kind === "ink"
+            ? (INK_SHOT_INTERVAL - INK_SHOT_SERVER_TOLERANCE) * 1000
+            : 500)
       )
         return;
-      this.lastPaint.set(client.sessionId, now);
+      clock.set(client.sessionId, now);
       const stroke: PaintStroke = {
         revision: this.paint.revision + 1,
+        actorId: client.sessionId,
         x: player.x,
         z: player.z,
         yaw: player.yaw,
@@ -231,6 +240,7 @@ export class GameRoom extends Room<{ state: GameState }> {
   override onLeave(client: Client): void {
     this.movementInputs.delete(client.sessionId);
     this.lastPaint.delete(client.sessionId);
+    this.lastReactionPaint.delete(client.sessionId);
     this.dives.delete(client.sessionId);
     this.specialShapes.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
@@ -323,7 +333,7 @@ export class GameRoom extends Room<{ state: GameState }> {
             team: player.team === "B" ? "B" : "A",
             ...(practice ? { practiceColor: player.practiceColor } : {}),
             kind: "slam",
-            specialShape: this.specialShapes.get(sessionId) ?? "star",
+            specialShape: this.specialShapes.get(sessionId) ?? "ink",
           };
           this.paint.apply(stroke);
           if (!practice) {

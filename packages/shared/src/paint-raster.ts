@@ -1,3 +1,4 @@
+import { reactionInkPattern } from "./reaction-ink.js";
 import {
   FIELD_HALF_WIDTH,
   FIELD_HALF_DEPTH,
@@ -35,7 +36,17 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
       z: stroke.z + dz * forward - dx * side,
       radius,
     });
-  if (stroke.kind === "slam" && stroke.specialShape === "ink") {
+  if (stroke.kind === "reaction-fan" || stroke.kind === "reaction-pair") {
+    for (const drop of reactionInkPattern(stroke.kind)) {
+      const angle = stroke.yaw + drop.angle;
+      disks.push({
+        x: stroke.x - Math.sin(angle) * drop.reach,
+        z: stroke.z + Math.cos(angle) * drop.reach,
+        radius: drop.spreadRadius,
+        organic: true,
+      });
+    }
+  } else if (stroke.kind === "slam" && stroke.specialShape === "ink") {
     disks.push({
       x: stroke.x,
       z: stroke.z,
