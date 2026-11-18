@@ -54,8 +54,7 @@ export class GameRoom extends Room<{ state: GameState }> {
     );
 
     this.onMessage("move", (client, payload: unknown) => {
-      if (this.state.phase !== "playing" && this.state.phase !== "lobby")
-        return;
+      if (this.state.phase !== "playing" && this.state.phase !== "lobby") return;
       const result = moveInputSchema.safeParse(payload);
       if (!result.success) return;
 
@@ -124,8 +123,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.dives.delete(client.sessionId);
     });
     this.onMessage("jump", (client) => {
-      if (this.state.phase !== "lobby" && this.state.phase !== "playing")
-        return;
+      if (this.state.phase !== "lobby" && this.state.phase !== "playing") return;
       const player = this.state.players.get(client.sessionId);
       if (!player || player.jumpTime >= 0 || player.specialTime >= 0) return;
       player.jumpTime = 0;
@@ -179,6 +177,11 @@ export class GameRoom extends Room<{ state: GameState }> {
         players.some((player) => !player.ready)
       )
         return;
+      this.paint.reset();
+      this.broadcast("paint-snapshot", {
+        revision: this.paint.revision,
+        data: deflateSync(this.paint.cells).toString("base64"),
+      });
       this.assignTeams(players);
       players.forEach((player) => {
         player.specialTime = -1;
@@ -206,6 +209,19 @@ export class GameRoom extends Room<{ state: GameState }> {
       )
         return;
       this.paint.reset();
+      this.lastPaint.clear();
+      this.state.players.forEach((player, sessionId) => {
+        const index = Array.from(this.state.players.keys()).indexOf(sessionId);
+        player.x = (index % 4) * 2 - 3;
+        player.z = Math.floor(index / 4) * 2 - 1;
+        player.yaw = 0;
+        player.jumpTime = -1;
+        player.specialTime = -1;
+        player.dive = false;
+        player.submerged = false;
+        this.movementInputs.set(sessionId, { ...IDLE_INPUT });
+      });
+      this.dives.clear();
       this.state.scoreA = 0;
       this.state.scoreB = 0;
       this.broadcast("paint-snapshot", {
@@ -213,6 +229,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         data: deflateSync(this.paint.cells).toString("base64"),
       });
       this.state.phase = "countdown";
+      this.state.countdownEndsAt = Date.now() + GAME_START_COUNTDOWN_SECONDS * 1000;
       setTimeout(() => {
         if (this.state.phase !== "countdown") return;
         this.state.phase = "playing";

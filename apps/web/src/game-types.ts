@@ -27,6 +27,7 @@ export interface GameState {
   turnOrder: string;
   turnIndex: number;
   turnEndsAt: number;
+  countdownEndsAt: number;
   talkDuration: number;
   speakerOrder: string[];
 }

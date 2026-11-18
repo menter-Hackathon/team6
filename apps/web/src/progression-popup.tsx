@@ -17,6 +17,7 @@ interface ProgressionPopupProps {
   speakerName?: string;
   turnNumber?: number;
   turnCount?: number;
+  countdownEndsAt?: number;
   onReady?: () => void;
   onStart?: () => void;
   onClose?: () => void;
@@ -35,6 +36,7 @@ export function ProgressionPopup({
   speakerName = "プレイヤー",
   turnNumber = 1,
   turnCount = 4,
+  countdownEndsAt,
   onReady,
   onStart,
   onClose,
@@ -50,18 +52,17 @@ export function ProgressionPopup({
   useEffect(() => {
     if (scene !== "countdown") return;
     setSecondsLeft(GAME_START_COUNTDOWN_SECONDS);
-    const startedAt = Date.now();
+    const endsAt = countdownEndsAt ?? Date.now() + GAME_START_COUNTDOWN_SECONDS * 1000;
     const timer = window.setInterval(() => {
       setSecondsLeft(
         Math.max(
           0,
-          GAME_START_COUNTDOWN_SECONDS -
-            Math.floor((Date.now() - startedAt) / 1000),
+          Math.ceil((endsAt - Date.now()) / 1000),
         ),
       );
     }, 50);
     return () => window.clearInterval(timer);
-  }, [scene, countdownRun]);
+  }, [scene, countdownRun, countdownEndsAt]);
 
   useEffect(() => {
     if (!preview || !onClose) return;
@@ -100,11 +101,11 @@ export function ProgressionPopup({
   const readyCount = players.filter((player) => player.ready).length;
 
   return (
-    <div className="progression-backdrop">
+    <div className={`progression-backdrop progression-backdrop--${scene}`}>
       <section
         className={`progression-popup${scene === "lobby" ? " progression-popup--lobby" : ""}`}
         role="dialog"
-        aria-modal="true"
+        aria-modal="false"
         aria-labelledby="progression-title"
       >
         {preview && <span className="progression-preview">検証プレビュー</span>}
@@ -138,10 +139,7 @@ export function ProgressionPopup({
                 ))}
               </ul>
             </div>
-            <PracticeColorPicker
-              color={practiceColor}
-              onSelect={onPracticeColorSelect}
-            />
+            <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
             <div className="progression-code">
               <div>
                 <span>招待コード</span>
@@ -225,7 +223,7 @@ export function ProgressionPopup({
             <p className="progression-kicker">
               PRESENTATION / {turnNumber} OF {turnCount}
             </p>
-            <h2 id="progression-title">{speakerName}さんの発表</h2>
+            <h2 id="progression-title"><span className="popup-name-phrase"><span className="popup-player-name">{speakerName}</span><span className="popup-name-suffix">さんの発表</span></span></h2>
             <div className="progression-symbol">
               30<span>秒</span>
             </div>

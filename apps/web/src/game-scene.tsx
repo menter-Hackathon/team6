@@ -45,6 +45,7 @@ interface GameSceneProps {
   devTeam: "A" | "B";
   devAreaMultiplier?: number;
   devCanPaint?: boolean;
+  devCanMove?: boolean;
   devPaintCells: MutableRefObject<Uint8Array | null>;
   specialShape: SpecialShape;
   colorA?: string | undefined;
@@ -71,6 +72,7 @@ export function GameScene({
   devTeam,
   devAreaMultiplier = 1,
   devCanPaint = true,
+  devCanMove = true,
   devPaintCells,
   specialShape,
   colorA = "#ff4f8b",
@@ -83,6 +85,8 @@ export function GameScene({
   activeDevAreaMultiplier.current = devAreaMultiplier;
   const activeDevCanPaint = useRef(devCanPaint);
   activeDevCanPaint.current = devCanPaint;
+  const activeDevCanMove = useRef(devCanMove);
+  activeDevCanMove.current = devCanMove;
   const controls = useRef<ControlState>({
     keys: new Set(),
     firing: false,
@@ -117,7 +121,9 @@ export function GameScene({
         !document.pointerLockElement &&
         event.target instanceof HTMLElement &&
         (event.target.isContentEditable ||
-          /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(event.target.tagName))
+          /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) ||
+          (event.target.tagName === "BUTTON" &&
+            (event.code === "Space" || event.code === "Enter")))
       )
         return;
       if (event.code === "KeyF" && !event.repeat) {
@@ -136,10 +142,7 @@ export function GameScene({
         )
           return;
         if (devMode) controls.current.jumpTime = 0;
-        else if (
-          roomRef.current?.state.phase === "lobby" ||
-          roomRef.current?.state.phase === "playing"
-        ) {
+        else if (roomRef.current?.state.phase === "playing" || roomRef.current?.state.phase === "lobby") {
           controls.current.jumpTime = 0;
           roomRef.current.send("jump");
         }
@@ -213,9 +216,7 @@ export function GameScene({
     const onClick = (event: MouseEvent) => {
       if (
         event.target instanceof HTMLCanvasElement &&
-        (devMode ||
-          roomRef.current?.state.phase === "playing" ||
-          roomRef.current?.state.phase === "lobby")
+        (devMode || roomRef.current?.state.phase === "playing" || roomRef.current?.state.phase === "lobby")
       ) {
         if (document.activeElement instanceof HTMLElement)
           document.activeElement.blur();
@@ -249,7 +250,7 @@ export function GameScene({
   useEffect(() => {
     const interval = window.setInterval(() => {
       const room = roomRef.current;
-      if (!room) return;
+      if (!room || (room.state.phase !== "playing" && room.state.phase !== "lobby")) return;
       const keys = controls.current.keys;
       const forward =
         Number(keys.has("KeyW") || keys.has("ArrowUp")) -
@@ -295,9 +296,7 @@ export function GameScene({
       button.disabled =
         specialActive ||
         (devMode && !activeDevCanPaint.current) ||
-        (!devMode &&
-          roomRef.current?.state.phase !== "playing" &&
-          roomRef.current?.state.phase !== "lobby");
+        (!devMode && roomRef.current?.state.phase !== "playing" && roomRef.current?.state.phase !== "lobby");
       button.textContent = specialActive
         ? "回転ジャンプ中…"
         : `F  必殺技 · ${specialShape === "ink" ? "● インク" : specialShape === "heart" ? "♥ ハート" : "★ スター"}スラム`;
@@ -325,10 +324,7 @@ export function GameScene({
           } satisfies PaintStroke,
         }),
       );
-    else if (
-      roomRef.current?.state.phase === "playing" ||
-      roomRef.current?.state.phase === "lobby"
-    )
+    else if (roomRef.current?.state.phase === "playing" || roomRef.current?.state.phase === "lobby")
       roomRef.current.send("paint", { kind: "ink" });
   });
 
@@ -367,6 +363,7 @@ export function GameScene({
           devTeam={activeDevTeam}
           areaMultiplier={activeDevAreaMultiplier}
           canPaint={activeDevCanPaint}
+          canMove={activeDevCanMove}
         />
       )}
       {devMode &&
@@ -382,7 +379,7 @@ export function GameScene({
                 <capsuleGeometry args={[0.4, 0.8, 6, 10]} />
                 <meshStandardMaterial color={team === "A" ? colorA : colorB} />
               </mesh>
-              <Html position={[0, 1.8, 0]} center>
+              <Html position={[0, 1.8, 0]} center zIndexRange={[2, 0]} style={{ pointerEvents: "none" }}>
                 <span className="player-gamertag">COM {index + 1}</span>
               </Html>
             </group>
@@ -453,6 +450,7 @@ function DevPlayer({
   devTeam,
   areaMultiplier,
   canPaint,
+  canMove,
 }: {
   controls: MutableRefObject<ControlState>;
   ownPaint: MutableRefObject<(x: number, z: number) => boolean>;
@@ -460,6 +458,7 @@ function DevPlayer({
   devTeam: MutableRefObject<"A" | "B">;
   areaMultiplier: MutableRefObject<number>;
   canPaint: MutableRefObject<boolean>;
+  canMove: MutableRefObject<boolean>;
 }) {
   const group = useRef<THREE.Group>(null);
   const appearance = useDiveAppearance();
@@ -473,6 +472,13 @@ function DevPlayer({
   useFrame((_, delta) => {
     const object = group.current;
     if (!object) return;
+    if (!canMove.current) {
+      controls.current.jumpTime = -1;
+      controls.current.specialTime = -1;
+      object.position.y = 0;
+      controls.current.position = { x: object.position.x, z: object.position.z };
+      return;
+    }
     controls.current.jumpTime = advanceJump(
       controls.current.jumpTime,
       Math.min(delta, 0.1),
@@ -982,7 +988,7 @@ function Player({
           : DISC_SPEED
         : PLAYER_SPEED;
       const phase = roomRef.current?.state.phase;
-      if (!specialActive && (phase === "lobby" || phase === "playing")) {
+      if (!specialActive && (phase === "playing" || phase === "lobby")) {
         predicted.current.x += input.x * scale * speed * delta;
         predicted.current.z += input.z * scale * speed * delta;
       } else {

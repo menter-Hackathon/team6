@@ -356,6 +356,7 @@ export function App() {
         className="viewport"
         onContextMenu={(event) => event.preventDefault()}
       >
+        <div className="game-canvas-layer">
         <Canvas
           shadows
           camera={{ fov: 55, near: 0.1, far: 100, position: [0, 7, 9] }}
@@ -369,7 +370,8 @@ export function App() {
               devComCount={devMatchActive ? devMatchCount - 1 : 0}
               devTeam={devTeam}
               devAreaMultiplier={devAreaMultiplier}
-              devCanPaint={!devSpeakerBlocked}
+              devCanMove={!devMatchActive || devMatchTurn !== null}
+              devCanPaint={(!devMatchActive || devMatchTurn !== null) && !devSpeakerBlocked}
               devPaintCells={devPaintCells}
               specialShape={specialShape}
               colorA={devMode ? devColorA : gameState?.colorA}
@@ -377,6 +379,7 @@ export function App() {
             />
           </Suspense>
         </Canvas>
+        </div>
         <label className="special-shape-picker">
           着地のインク
           <select
@@ -514,9 +517,7 @@ export function App() {
               isReady={localPlayer?.ready ?? false}
               canStart={canStart}
               practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
-              onPracticeColorSelect={(color) =>
-                roomRef.current?.send("practice-color", color)
-              }
+              onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               onClose={() => setShowTopicPopup(false)}
               onReady={() => {
                 const nextReady = !localPlayer?.ready;
@@ -537,9 +538,7 @@ export function App() {
               names={players.map((player) => player.displayName)}
               canStart={canStart}
               practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
-              onPracticeColorSelect={(color) =>
-                roomRef.current?.send("practice-color", color)
-              }
+              onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               ready={localPlayer?.ready ?? false}
               readyCount={players.filter((player) => player.ready).length}
               onReady={() => {
@@ -572,7 +571,7 @@ export function App() {
         {!devMode &&
           connectionState === "connected" &&
           gameState?.phase === "countdown" && (
-            <ProgressionPopup scene="countdown" />
+            <ProgressionPopup scene="countdown" countdownEndsAt={gameState.countdownEndsAt} />
           )}
         {!devMode &&
           connectionState === "connected" &&

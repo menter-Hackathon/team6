@@ -71,10 +71,7 @@ export function RoomSummary({
           <li key={index}>{name}</li>
         ))}
       </ul>
-      <PracticeColorPicker
-        color={practiceColor}
-        onSelect={onPracticeColorSelect}
-      />
+      <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
       {onReady && (
         <button
           className="room-summary-ready"

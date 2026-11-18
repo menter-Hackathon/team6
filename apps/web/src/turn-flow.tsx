@@ -62,7 +62,7 @@ export function TurnFlow({
           <section
             className={`progression-popup progression-turn-popup progression-turn-popup--${stage}`}
             role="dialog"
-            aria-modal="true"
+            aria-modal="false"
             aria-labelledby="turn-title"
           >
             {preview && (
@@ -81,9 +81,10 @@ export function TurnFlow({
               PRESENTATION / {turnNumber} OF {turnCount}
             </p>
             <h2 id="turn-title">
-              {isYourTurn
-                ? "次はあなたのターン"
-                : `次は${speakerName}さんのターン`}
+              {isYourTurn ? "次はあなたのターン" : <>
+                <span className="popup-title-lead">次は</span>
+                <span className="popup-name-phrase"><span className="popup-player-name">{speakerName}</span><span className="popup-name-suffix">さんのターン</span></span>
+              </>}
             </h2>
             <div
               className={`turn-intro-time${stage === "presentation" ? " turn-presentation-enter" : ""}`}
@@ -109,8 +110,8 @@ export function TurnFlow({
           role="timer"
           aria-label={`発表の残り時間 ${remaining}秒`}
         >
-          <span>
-            {isYourTurn ? "あなたの発表" : `${speakerName}さんの発表`}
+          <span title={isYourTurn ? "あなたの発表" : `${speakerName}さんの発表`}>
+            {isYourTurn ? "あなたの発表" : <><span className="popup-player-name">{speakerName}</span><span className="popup-name-suffix">さんの発表</span></>}
           </span>
           <strong>
             {remaining}
