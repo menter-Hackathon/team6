@@ -34,13 +34,11 @@ interface LobbyActionsProps {
   readyCount: number;
   playerCount: number;
   onReady: () => void;
-  /** Host only: move on to team selection. */
-  onStart?: (() => void) | undefined;
-  canStart: boolean;
 }
 
 /**
- * Bottom-right waiting-room controls: episode status (opens the input), ready, and start.
+ * Bottom-right waiting-room controls: an "episode missing" banner, episode status (opens the
+ * input), and ready.
  * Ready stays disabled until an episode is saved; the server enforces the same rule.
  */
 export function LobbyActions({
@@ -50,14 +48,23 @@ export function LobbyActions({
   readyCount,
   playerCount,
   onReady,
-  onStart,
-  canStart,
 }: LobbyActionsProps) {
-  const [open, setOpen] = useState(!episodeDone);
+  const [open, setOpen] = useState(false);
   const [topics, setTopics] = useState<string[]>(() => pickRandomTopics(3));
   return (
     <>
       <div className="lobby-hud-actions">
+        {!episodeDone && (
+          <button
+            type="button"
+            className="lobby-hud-banner"
+            role="status"
+            onClick={() => setOpen(true)}
+          >
+            エピソードが未入力です
+            <small>入力すると準備OKにできます</small>
+          </button>
+        )}
         <button
           type="button"
           className={`lobby-hud-episode${episodeDone ? " is-done" : ""}`}
@@ -80,17 +87,6 @@ export function LobbyActions({
             {readyCount}/{playerCount}人
           </small>
         </button>
-        {onStart && (
-          <button
-            type="button"
-            className="lobby-hud-start"
-            disabled={!canStart}
-            title={!canStart ? "4・6・8人で全員が準備すると開始できます" : undefined}
-            onClick={onStart}
-          >
-            チーム決めへ
-          </button>
-        )}
       </div>
       {open && (
         <div className="lobby-hud-dialog-backdrop" onClick={() => setOpen(false)}>

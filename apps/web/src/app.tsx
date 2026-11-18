@@ -597,6 +597,10 @@ export function App() {
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
               requiredPlayerCount={gameState.replayPlayerCount}
+              canStart={canStart}
+              {...(gameState.hostId === roomRef.current?.sessionId
+                ? { onStart: () => roomRef.current?.send("prepare-teams") }
+                : {})}
             />
           )}
         {!devMode &&
@@ -613,11 +617,7 @@ export function App() {
                 isReady={localPlayer?.ready ?? false}
                 readyCount={players.filter((player) => player.ready).length}
                 playerCount={Math.max(gameState.replayPlayerCount, players.length)}
-                canStart={canStart}
                 onReady={() => roomRef.current?.send("ready", !localPlayer?.ready)}
-                {...(gameState.hostId === roomRef.current?.sessionId
-                  ? { onStart: () => roomRef.current?.send("prepare-teams") }
-                  : {})}
               />
             </>
           )}

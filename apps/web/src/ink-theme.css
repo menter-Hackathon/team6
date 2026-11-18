@@ -404,7 +404,37 @@
 }
 .lobby-hud-ready { background: var(--ink-pink); }
 .lobby-hud-ready[aria-pressed="true"] { background: var(--ink-lime); }
-.lobby-hud-start { justify-content: center; background: var(--ink-yellow); }
+.lobby-hud-actions .lobby-hud-banner {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  background: var(--ink-night);
+  color: var(--ink-yellow);
+  border-radius: 999px 999px 999px 10px;
+  animation: ink-pulse 1.6s ease-in-out infinite;
+}
+.lobby-hud-banner small { color: #fff; opacity: 0.85; }
+@keyframes ink-pulse {
+  50% { transform: translateY(-2px) rotate(-1deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lobby-hud-banner { animation: none; }
+}
+.lobby-start-button {
+  width: 100%;
+  margin-top: 12px;
+  border: 3px solid var(--ink-shadow);
+  border-radius: 26px 20px 30px 18px / 20px 30px 18px 26px;
+  background: var(--ink-yellow);
+  color: var(--ink-shadow);
+  font-weight: 1000;
+  box-shadow: 4px 5px 0 var(--ink-shadow);
+}
+.lobby-start-button:disabled {
+  filter: grayscale(0.6);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 .lobby-hud-dialog-backdrop {
   position: absolute;

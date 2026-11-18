@@ -143,6 +143,22 @@ export function ProgressionPopup({
               ))}
             </ul>
             </div>
+            {!preview && isHost && onStart && (
+              <button
+                className="progression-primary lobby-start-button"
+                disabled={!canStart}
+                title={
+                  !canStart
+                    ? requiredPlayerCount > 0
+                      ? `${requiredPlayerCount}人全員が揃って準備完了すると開始できます`
+                      : "4・6・8人で全員が準備すると開始できます"
+                    : undefined
+                }
+                onClick={onStart}
+              >
+                チーム決めへ
+              </button>
+            )}
             {preview && (
             <div className="progression-actions">
               <button
