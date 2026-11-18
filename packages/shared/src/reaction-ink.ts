@@ -11,11 +11,11 @@ export function reactionInkPattern(
 ): ReactionInkDrop[] {
   return kind === "reaction-fan"
     ? [-2, -1, 0, 1, 2].map((i) => ({
-        delay: Math.abs(i) * 0.025,
+        delay: Math.abs(i) * 0.018,
         angle: i * 0.27,
         reach: (3.8 - Math.abs(i) * 0.25) * 1.5,
-        radius: 0.2,
-        duration: 0.32,
+        radius: 0.26,
+        duration: 0.23,
         spreadRadius: 0.65 * 1.5,
       }))
     : [0].map((i) => ({

@@ -6,7 +6,6 @@ import {
   NEON_COLORS,
   STARTABLE_PLAYER_COUNTS,
   TURN_INTRO_MS,
-  type SpecialShape,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
 import { GameScene } from "./game-scene";
@@ -15,7 +14,6 @@ import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
 import { TeamSelection } from "./team-selection";
-import { InkExperimentButton } from "./speech/ink-experiment-button";
 import { TranscriptionPanel } from "./speech/transcription-panel";
 import { TeamColorPicker } from "./team-color-picker";
 
@@ -30,7 +28,8 @@ const SERVER_URL =
       : "");
 
 export function App() {
-  const [specialShape, setSpecialShape] = useState<SpecialShape>("star");
+  const [showDevObstacles, setShowDevObstacles] = useState(true);
+  const [autoFire, setAutoFire] = useState(true);
   const [devColorA, setDevColorA] = useState<string>(NEON_COLORS[0]!.hex);
   const [devColorB, setDevColorB] = useState<string>(NEON_COLORS[1]!.hex);
   const [devMode, setDevMode] = useState(() =>
@@ -152,7 +151,13 @@ export function App() {
           <p className="eyebrow">STRUCTURE TEST / 3D FOUNDATION</p>
           <h1>ガヤでスプラトゥーン</h1>
         </div>
-        <TranscriptionPanel />
+        <TranscriptionPanel
+          userNames={
+            players.length
+              ? players.map((player) => player.displayName)
+              : [displayName].filter(Boolean)
+          }
+        />
         <button onClick={toggleDevMode}>
           {devMode ? "検証モードを終了" : "操作を検証"}
         </button>
@@ -251,11 +256,33 @@ export function App() {
             <h2>開発者用 検証モード</h2>
           </summary>
           <p>サーバーに接続せずに操作を確認できます。</p>
+          <label className="dev-obstacle-toggle">
+            <input
+              type="checkbox"
+              checked={showDevObstacles}
+              onChange={(event) => setShowDevObstacles(event.target.checked)}
+            />
+            障害物を表示（4つの箱）
+          </label>
+          <button
+            onClick={(event) => {
+              window.dispatchEvent(new Event("dev-obstacle-start"));
+              event.currentTarget.blur();
+            }}
+          >
+            箱の前へ移動
+          </button>
+          <p className="dev-obstacle-note">
+            壁を通常インクで塗り、Shift＋壁方向への移動で上に登れます。側面・上面にも塗りが残ります（検証モード限定）。
+          </p>
           <ul className="dev-controls-list">
             <li>WASD・矢印キー：移動</li>
             <li>クリック：視点回転／長押しでインク発射</li>
             <li>Shift：潜航 / Space：ジャンプ</li>
-            <li>Q・E：塗り分け / Esc：視点回転を解除</li>
+            <li>
+              1・F：回転ジャンプ / 2：扇状 / 3：通常 / 4：除外（塗らない） /
+              Esc：視点回転を解除
+            </li>
           </ul>
           <p>座標と向きは画面左下に表示します。</p>
           <TeamColorPicker
@@ -307,26 +334,23 @@ export function App() {
               roomRef={roomRef}
               playerIds={devMode ? [] : playerIds}
               devMode={devMode}
-              specialShape={specialShape}
+              showDevObstacles={showDevObstacles}
+              specialShape="ink"
+              autoFire={autoFire}
               colorA={devMode ? devColorA : gameState?.colorA}
               colorB={devMode ? devColorB : gameState?.colorB}
             />
           </Suspense>
         </Canvas>
-        <InkExperimentButton />
-        <label className="special-shape-picker">
-          着地のインク
-          <select
-            id="special-shape"
-            aria-label="必殺技の塗り形"
-            value={specialShape}
-            onChange={(e) => setSpecialShape(e.target.value as SpecialShape)}
-          >
-            <option value="ink">● 通常インク</option>
-            <option value="star">★ 星＋インク</option>
-            <option value="heart">♥ ハート＋インク</option>
-          </select>
-        </label>
+        <button
+          className="auto-fire-toggle"
+          aria-label="通常インクの常時発射"
+          aria-pressed={autoFire}
+          onClick={() => setAutoFire((active) => !active)}
+        >
+          <span aria-hidden="true">{autoFire ? "●" : "○"}</span>{" "}
+          通常インク常時発射：{autoFire ? "ON" : "OFF"}
+        </button>
         <button
           id="special-button"
           className="special-button"

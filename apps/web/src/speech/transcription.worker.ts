@@ -1,7 +1,10 @@
 /// <reference lib="webworker" />
+import { prepareRecognitionAudio } from "./audio";
+import { speechTextStreamer } from "./text-streamer";
 import {
   env,
   pipeline,
+  type WhisperTokenizer,
   type AutomaticSpeechRecognitionPipeline,
 } from "@huggingface/transformers";
 import {
@@ -73,7 +76,13 @@ scope.addEventListener(
       try {
         const transcribe = await load(),
           started = performance.now();
+        prepareRecognitionAudio(request.audio);
+        const streamer = speechTextStreamer(
+          transcribe.tokenizer as WhisperTokenizer,
+          (text) => post({ type: "partial", id: request.id, text }),
+        );
         const output = await transcribe(request.audio, {
+          streamer,
           language: "japanese",
           task: "transcribe",
           return_timestamps: false,
@@ -88,6 +97,7 @@ scope.addEventListener(
           processingMs: performance.now() - started,
         });
       } finally {
+        request.audio.fill(0);
         busy = false;
       }
     } catch {

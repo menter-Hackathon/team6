@@ -9,13 +9,15 @@ export type SpeechRequest =
 export type SpeechResponse =
   | { type: "progress"; progress: number }
   | { type: "ready" }
+  | { type: "partial"; id: string; text: string }
   | { type: "result"; id: string; text: string; processingMs: number }
   | { type: "error"; id?: string; message: string };
 export interface Transcript {
   id: string;
   text: string;
-  source: "microphone" | "file";
-  durationMs: number;
-  processingMs: number;
+  source: "microphone";
+  engine?: "whisper" | "web-speech";
+  durationMs: number | null;
+  processingMs: number | null;
   createdAt: number;
 }

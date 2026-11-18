@@ -1,26 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { MicrophoneCapture } from "./capture";
-import { monoAudio, resampleAudio, SPEECH_SAMPLE_RATE } from "./audio";
+import { SPEECH_SAMPLE_RATE } from "./audio";
+import { RecognitionQueue, type RecognitionJob } from "./recognition-queue";
 import type {
   SpeechRequest,
   SpeechResponse,
   Transcript,
   SpeechModelChoice,
 } from "./protocol";
-
-import { reportVoiceInput } from "./voice-feedback";
-
+import { clearVoiced, reportMicRms } from "./voice-feedback";
 type Phase = "idle" | "loading" | "ready" | "error";
-interface Job {
-  id: string;
-  audio: Float32Array;
-  source: Transcript["source"];
-  durationMs: number;
-}
-const MAX_PENDING = 3;
-
 export function useTranscription() {
-  const [model, setModel] = useState<SpeechModelChoice>("fast");
+  const [deviceId, setDeviceId] = useState("");
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [model, setModel] = useState<SpeechModelChoice>("balanced");
   const [phase, setPhase] = useState<Phase>("idle"),
     [progress, setProgress] = useState(0);
   const [listening, setListening] = useState(false),
@@ -29,72 +22,110 @@ export function useTranscription() {
   const [pending, setPending] = useState(0),
     [error, setError] = useState("");
   const [transcripts, setTranscripts] = useState<Transcript[]>([]),
-    [decoding, setDecoding] = useState(false);
+    [liveText, setLiveText] = useState("");
   const worker = useRef<Worker | null>(null),
     capture = useRef<MicrophoneCapture | null>(null);
-  const queue = useRef<Job[]>([]),
-    active = useRef<Job | null>(null);
+  const queue = useRef(new RecognitionQueue());
   const alive = useRef(true),
     ready = useRef(false),
-    generation = useRef(0);
-  const fileContext = useRef<AudioContext | null>(null);
-  const lastMeter = useRef(0);
-
+    generation = useRef(0),
+    lastMeter = useRef(0);
+  const currentUtterance = useRef(""),
+    sealedUtterance = useRef("");
+  async function refreshDevices() {
+    try {
+      const all = await navigator.mediaDevices?.enumerateDevices();
+      if (alive.current && all)
+        setDevices(
+          all.filter(
+            (device) =>
+              device.kind === "audioinput" && device.deviceId !== "default",
+          ),
+        );
+    } catch {
+      /* Device selection stays at browser default. */
+    }
+  }
   function updatePending() {
-    setPending(queue.current.length + Number(active.current !== null));
+    setPending(queue.current.size);
   }
   function pump() {
-    if (active.current || !worker.current || !ready.current) return;
-    const job = queue.current.shift();
+    if (!worker.current || !ready.current) return;
+    const job = queue.current.next();
     if (!job) return;
-    active.current = job;
     updatePending();
-    const message: SpeechRequest = {
-      type: "transcribe",
-      id: job.id,
-      audio: job.audio,
-    };
-    worker.current.postMessage(message, [job.audio.buffer]);
+    worker.current.postMessage(
+      {
+        type: "transcribe",
+        id: job.id,
+        audio: job.audio,
+      } satisfies SpeechRequest,
+      [job.audio.buffer],
+    );
   }
   function stop(flush = true) {
     const current = capture.current;
     capture.current = null;
     generation.current++;
     current?.stop(flush);
-    reportVoiceInput(0, false);
+    clearVoiced();
+    queue.current.discardDrafts();
+    if (!flush) {
+      currentUtterance.current = "";
+      setLiveText("");
+    }
     setListening(false);
     setStarting(false);
     setActivity({ level: 0, speaking: false });
+    updatePending();
   }
-  function submit(audio: Float32Array, source: Transcript["source"]) {
-    if (!alive.current || !ready.current) return;
-    if (queue.current.length + Number(active.current !== null) >= MAX_PENDING) {
-      setError(
-        "文字起こしが追いつかないため、この発話の認識をスキップしました。インク演出は続きます。",
-      );
+  function submit(audio: Float32Array, utteranceId: string, final: boolean) {
+    if (!alive.current || !ready.current) {
+      audio.fill(0);
       return;
     }
-    queue.current.push({
+    if (!final && sealedUtterance.current === utteranceId) {
+      audio.fill(0);
+      return;
+    }
+    if (currentUtterance.current !== utteranceId) {
+      currentUtterance.current = utteranceId;
+      setLiveText("");
+    }
+    if (final) sealedUtterance.current = utteranceId;
+    const job: RecognitionJob = {
       id: crypto.randomUUID(),
+      utteranceId,
       audio,
-      source,
+      final,
       durationMs: (audio.length / SPEECH_SAMPLE_RATE) * 1000,
-    });
-    setError("");
+    };
+    if (!queue.current.add(job) && final)
+      setError(
+        "認識が追いつかず、この発話を確定できませんでした。少し待ってから話してください。",
+      );
     updatePending();
     pump();
   }
-  function resetWorker(nextPhase: Phase) {
+  function resetWorker(next: Phase) {
     worker.current?.terminate();
     worker.current = null;
     ready.current = false;
-    queue.current = [];
-    active.current = null;
+    queue.current.clear();
+    currentUtterance.current = "";
+    sealedUtterance.current = "";
+    setLiveText("");
     setPending(0);
-    setPhase(nextPhase);
+    setPhase(next);
+  }
+  function acceptsPartial(job: RecognitionJob) {
+    return (
+      currentUtterance.current === job.utteranceId &&
+      (job.final || sealedUtterance.current !== job.utteranceId)
+    );
   }
   function prepare() {
-    if (worker.current || phase === "loading") return;
+    if (worker.current) return;
     setPhase("loading");
     setProgress(0);
     setError("");
@@ -118,49 +149,71 @@ export function useTranscription() {
           return;
         }
         if (message.type === "error" && !message.id) {
+          stop(false);
           resetWorker("error");
           setError(message.message);
           return;
         }
-        if (
-          (message.type === "result" || message.type === "error") &&
-          message.id === active.current?.id
-        ) {
-          const job = active.current;
-          if (!job) return;
-          active.current = null;
-          if (message.type === "error") setError(message.message);
-          else if (message.text) {
-            const transcript: Transcript = {
-              id: job.id,
-              text: message.text,
-              source: job.source,
-              durationMs: job.durationMs,
-              processingMs: message.processingMs,
-              createdAt: Date.now(),
-            };
-            setTranscripts((previous) =>
-              [transcript, ...previous].slice(0, 10),
-            );
+        const active = queue.current.active;
+        if (!active || !("id" in message) || message.id !== active.id) return;
+        if (message.type === "partial") {
+          if (acceptsPartial(active)) {
+            setLiveText(message.text);
             window.dispatchEvent(
-              new CustomEvent<Transcript>("local-transcript", {
-                detail: transcript,
+              new CustomEvent("interim-transcript", {
+                detail: { text: message.text, id: active.utteranceId },
               }),
             );
-          } else
-            setError(
-              "言葉を認識できませんでした。少しはっきり話してみてください。",
-            );
-          updatePending();
-          pump();
+          }
+          return;
         }
+        const job = queue.current.finish(message.id);
+        if (!job) return;
+        if (message.type === "error") {
+          if (job.final) setError(message.message);
+        } else if (message.type === "result") {
+          if (!job.final) {
+            if (acceptsPartial(job)) {
+              setLiveText(message.text);
+              window.dispatchEvent(
+                new CustomEvent("interim-transcript", {
+                  detail: { text: message.text, id: job.utteranceId },
+                }),
+              );
+            }
+          } else {
+            if (currentUtterance.current === job.utteranceId) setLiveText("");
+            if (message.text) {
+              const transcript: Transcript = {
+                id: job.utteranceId,
+                text: message.text,
+                source: "microphone",
+                durationMs: job.durationMs,
+                processingMs: message.processingMs,
+                createdAt: Date.now(),
+              };
+              setTranscripts((previous) =>
+                [transcript, ...previous].slice(0, 10),
+              );
+              window.dispatchEvent(
+                new CustomEvent<Transcript>("local-transcript", {
+                  detail: transcript,
+                }),
+              );
+            } else
+              setError("言葉を認識できませんでした。もう一度話してください。");
+          }
+        }
+        updatePending();
+        pump();
       };
       instance.onerror = (event) => {
         event.preventDefault();
-        if (!alive.current || worker.current !== instance) return;
+        if (worker.current !== instance || !alive.current) return;
+        stop(false);
         resetWorker("error");
         setError(
-          "音声認識を起動できませんでした。ページを再読み込みして、もう一度準備してください。",
+          "音声認識を起動できませんでした。再度モデルを準備してください。",
         );
       };
       instance.postMessage({ type: "load", model } satisfies SpeechRequest);
@@ -170,23 +223,33 @@ export function useTranscription() {
     }
   }
   async function start() {
-    if (capture.current) return;
+    if (!ready.current || capture.current) return;
     setError("");
     setStarting(true);
+    setLiveText("");
+    currentUtterance.current = "";
     const current = new MicrophoneCapture(),
-      version = ++generation.current;
+      version = ++generation.current,
+      session = crypto.randomUUID();
     capture.current = current;
     try {
       await current.start(
-        (audio) => submit(audio, "microphone"),
-        (level, speaking, sounding) => {
+        (audio, id) => submit(audio, `${session}:${id}`, true),
+        (level, speaking, rms) => {
           if (!alive.current || capture.current !== current) return;
-          reportVoiceInput(level, speaking, sounding);
+          reportMicRms(rms);
           if (performance.now() - lastMeter.current < 90) return;
           lastMeter.current = performance.now();
           setActivity({ level, speaking });
         },
+        (audio, id) => {
+          if (capture.current === current)
+            submit(audio, `${session}:${id}`, false);
+          else audio.fill(0);
+        },
+        deviceId || undefined,
       );
+      void refreshDevices();
       if (!alive.current || version !== generation.current) {
         current.stop(false);
         return;
@@ -204,75 +267,49 @@ export function useTranscription() {
           ? "マイクが許可されていません。ブラウザのマイク設定を確認してください。"
           : name === "NotFoundError"
             ? "マイクが見つかりません。接続を確認してください。"
-            : "マイクを開始できませんでした。HTTPSまたはlocalhostで開き、マイクの接続・権限を確認してください。",
+            : "マイクを開始できませんでした。HTTPSまたはlocalhostで開き、接続と権限を確認してください。",
       );
     }
   }
-  async function transcribeFile(file: File) {
-    if (!ready.current || decoding) return;
-    if (file.size > 20 * 1024 * 1024) {
-      setError("20MB以下の音声ファイルを選んでください。");
-      return;
-    }
-    const version = generation.current;
-    setDecoding(true);
-    setError("");
-    let context: AudioContext | null = null;
-    try {
-      context = new AudioContext();
-      fileContext.current = context;
-      const decoded = await context.decodeAudioData(await file.arrayBuffer());
-      if (!alive.current || version !== generation.current) return;
-      if (decoded.duration > 30) {
-        setError("30秒以内の音声ファイルを選んでください。");
-        return;
-      }
-      submit(resampleAudio(monoAudio(decoded), decoded.sampleRate), "file");
-    } catch {
-      if (alive.current)
-        setError(
-          "音声ファイルを読み込めませんでした。WAVやMP3などで試してください。",
-        );
-    } finally {
-      if (context && context.state !== "closed")
-        await context.close().catch(() => {});
-      if (fileContext.current === context) fileContext.current = null;
-      if (alive.current) setDecoding(false);
-    }
-  }
-
   useEffect(() => {
     alive.current = true;
-    const pageHide = () => {
-      capture.current?.stop(false);
+    void refreshDevices();
+    const changed = () => void refreshDevices();
+    navigator.mediaDevices?.addEventListener("devicechange", changed);
+    const hide = () => {
+      const current = capture.current;
       capture.current = null;
-      reportVoiceInput(0, false);
+      generation.current++;
+      current?.stop(false);
+      queue.current.discardDrafts();
+      currentUtterance.current = "";
+      if (alive.current) {
+        setListening(false);
+        setStarting(false);
+        setLiveText("");
+        setActivity({ level: 0, speaking: false });
+      }
     };
-    window.addEventListener("pagehide", pageHide);
+    window.addEventListener("pagehide", hide);
     return () => {
       alive.current = false;
-      generation.current++;
-      pageHide();
+      hide();
       worker.current?.terminate();
       worker.current = null;
-      if (fileContext.current?.state !== "closed")
-        void fileContext.current?.close().catch(() => {});
-      window.removeEventListener("pagehide", pageHide);
+      ready.current = false;
+      queue.current.clear();
+      window.removeEventListener("pagehide", hide);
+      navigator.mediaDevices?.removeEventListener("devicechange", changed);
     };
   }, []);
-
   return {
     phase,
-    model,
-    changeModel: (next: SpeechModelChoice) => {
-      if (starting || listening || decoding || pending || phase === "loading")
-        return;
-      stop(false);
-      resetWorker("idle");
-      setModel(next);
-      setProgress(0);
-      setError("");
+    deviceId,
+    devices,
+    changeDevice: (next: string) => {
+      if (!listening && !starting) setDeviceId(next);
     },
+    model,
     progress,
     listening,
     starting,
@@ -280,12 +317,22 @@ export function useTranscription() {
     pending,
     error,
     transcripts,
-    decoding,
+    liveText,
     prepare,
     start,
     stop,
-    transcribeFile,
-    clear: () => setTranscripts([]),
+    changeModel: (next: SpeechModelChoice) => {
+      if (starting || listening || pending || phase === "loading") return;
+      stop(false);
+      resetWorker("idle");
+      setModel(next);
+      setProgress(0);
+      setError("");
+    },
+    clear: () => {
+      setTranscripts([]);
+      setLiveText("");
+    },
     cancel: () => {
       resetWorker("idle");
       setError("");

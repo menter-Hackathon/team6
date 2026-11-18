@@ -1,20 +1,6 @@
 import { joinAudio, resampleAudio } from "./audio";
 
-const SPEECH_RMS = 0.012;
-const ONSET_SECONDS = 0.12;
-const END_SILENCE_SECONDS = 0.35;
-const PRE_ROLL_SECONDS = 0.25;
-const MAX_SECONDS = 6;
-const MIN_VOICED_SECONDS = 0.3;
-/**
- * Aizuchi such as 「うん、うん、うん」: a short voiced burst followed by a brief dip
- * is emitted on its own so the first one can be judged without waiting for the rest.
- * Longer speech keeps the normal 350ms end-of-utterance rule.
- */
-const SHORT_BURST_MAX_VOICED_SECONDS = 0.35;
-const SHORT_BURST_GAP_SECONDS = 0.15;
-
-/** Short utterances: 120ms onset, 350ms silence (150ms after a short burst), 250ms pre-roll, 6s maximum. */
+/** Preserve soft/short Japanese reactions: 60ms onset, 650ms silence, 500ms pre-roll. */
 export class SpeechSegmenter {
   private pre: Float32Array[] = [];
   private chunks: Float32Array[] = [];
@@ -22,14 +8,23 @@ export class SpeechSegmenter {
   private voiced = 0;
   private silence = 0;
   private duration = 0;
+  private utterance = 0;
+  private previewAt = 0;
   speaking = false;
-  /** Whether the latest chunk itself is above the speech threshold. */
-  sounding = false;
   level = 0;
+  /** Latest chunk RMS; kept across flushes so callers can read it after push. */
+  rms = 0;
 
   constructor(
     private readonly sampleRate: number,
-    private readonly onSegment: (audio: Float32Array) => void,
+    private readonly onSegment: (
+      audio: Float32Array,
+      utterance: number,
+    ) => void,
+    private readonly onPreview?: (
+      audio: Float32Array,
+      utterance: number,
+    ) => void,
   ) {}
 
   push(samples: Float32Array): void {
@@ -37,20 +32,24 @@ export class SpeechSegmenter {
     let sum = 0;
     for (const sample of samples) sum += sample * sample;
     const rms = Math.sqrt(sum / Math.max(1, samples.length));
-    this.level = Math.min(1, rms * 12);
-    const speech = rms >= SPEECH_RMS;
-    this.sounding = speech;
+    this.rms = rms;
+    this.level = Math.max(
+      0,
+      Math.min(1, (20 * Math.log10(rms + 1e-8) + 65) / 55),
+    );
+    const speech = rms >= 0.003;
     if (!this.speaking) {
       this.pre.push(samples);
       let size = this.pre.reduce((n, c) => n + c.length, 0);
       while (
         this.pre.length > 1 &&
-        size - this.pre[0]!.length >= this.sampleRate * PRE_ROLL_SECONDS
+        size - this.pre[0]!.length >= this.sampleRate * 0.5
       )
         size -= this.pre.shift()!.length;
       this.onset = speech ? this.onset + seconds : 0;
-      if (this.onset < ONSET_SECONDS) return;
+      if (this.onset < 0.06) return;
       this.speaking = true;
+      this.utterance++;
       this.chunks = this.pre;
       this.pre = [];
       this.duration = size / this.sampleRate;
@@ -64,39 +63,48 @@ export class SpeechSegmenter {
         this.silence = 0;
       } else this.silence += seconds;
     }
-    const shortBurst =
-      this.voiced <= SHORT_BURST_MAX_VOICED_SECONDS &&
-      this.silence >= SHORT_BURST_GAP_SECONDS;
-    if (shortBurst) this.flush(ONSET_SECONDS);
-    else if (
-      this.silence >= END_SILENCE_SECONDS ||
-      this.duration >= MAX_SECONDS
-    )
+    if (this.silence >= 0.65 || this.duration >= 10) {
       this.flush();
+      return;
+    }
+    if (
+      this.onPreview &&
+      this.voiced >= 0.1 &&
+      this.duration >= 1.0 &&
+      (this.previewAt === 0 || this.duration - this.previewAt >= 1.2)
+    ) {
+      this.previewAt = this.duration;
+      this.onPreview(
+        resampleAudio(joinAudio(this.chunks), this.sampleRate),
+        this.utterance,
+      );
+    }
   }
 
-  flush(minVoiced = MIN_VOICED_SECONDS): void {
+  flush(): void {
     const chunks = this.chunks,
       voiced = this.voiced;
-    const trim = Math.max(0, this.silence - 0.12);
+    const trim = Math.max(0, this.silence - 0.2);
     this.reset();
-    // Tolerate float accumulation of chunk durations at the threshold.
-    if (voiced < minVoiced - 1e-6 || !chunks.length) return;
+    if (voiced < 0.1 || !chunks.length) return;
     const audio = joinAudio(chunks);
     const length = Math.min(
       audio.length,
       Math.max(0, Math.floor(audio.length - trim * this.sampleRate)),
     );
     if (length)
-      this.onSegment(resampleAudio(audio.subarray(0, length), this.sampleRate));
+      this.onSegment(
+        resampleAudio(audio.subarray(0, length), this.sampleRate),
+        this.utterance,
+      );
   }
 
   reset(): void {
     this.pre = [];
     this.chunks = [];
     this.onset = this.voiced = this.silence = this.duration = 0;
+    this.previewAt = 0;
     this.speaking = false;
-    this.sounding = false;
     this.level = 0;
   }
 }

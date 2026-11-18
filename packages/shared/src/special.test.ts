@@ -11,8 +11,10 @@ import {
 describe("spin jump slam", () => {
   it("takes off, spins in the air, and returns to the ground", () => {
     expect(specialPose(0).height).toBe(0);
-    expect(specialPose(0.5).height).toBeGreaterThan(3);
-    expect(specialPose(0.5).spin).toBeGreaterThan(Math.PI * 2);
+    expect(specialPose(0.5).height).toBeGreaterThan(2);
+    expect(specialPose(0.5).height).toBeLessThan(2.2);
+    expect(specialPose(0.5).spin).toBeGreaterThan(Math.PI);
+    expect(specialPose(0.5).spin).toBeLessThan(Math.PI * 2);
     expect(specialPose(SPECIAL_DURATION).height).toBeCloseTo(0);
     expect(specialPose(SPECIAL_DURATION).spin % (Math.PI * 2)).toBeCloseTo(0);
   });
@@ -54,10 +56,10 @@ describe("spin jump slam", () => {
 it("smoothly stretches at takeoff and fall, then squashes on landing", () => {
   const at = (flight: number) =>
     specialPose(0.12 + flight * (SPECIAL_DURATION - 0.12)).scaleY;
-  expect(at(0.12)).toBeGreaterThan(1.3);
+  expect(at(0.12)).toBeGreaterThan(1.2);
   expect(at(0.42)).toBeLessThan(1);
-  expect(at(0.86)).toBeGreaterThan(1.4);
-  expect(at(1)).toBeCloseTo(0.7);
+  expect(at(0.86)).toBeGreaterThan(1.2);
+  expect(at(1)).toBeCloseTo(0.84);
   for (const boundary of [0.12, 0.42, 0.58, 0.86])
     expect(
       Math.abs(at(boundary - 0.0001) - at(boundary + 0.0001)),

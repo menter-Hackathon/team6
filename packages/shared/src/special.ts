@@ -26,17 +26,17 @@ export function specialPose(time: number): {
       height: 0,
       spin: 0,
       flip: 0,
-      scaleY: 1 - 0.3 * Math.sin((t / charge) * Math.PI),
+      scaleY: 1 - 0.18 * Math.sin((t / charge) * Math.PI),
     };
   const flight = (t - charge) / (SPECIAL_DURATION - charge);
   // Volume-preserving squash/stretch follows each phase of the jump.
   const shapes = [
     [0, 1],
-    [0.12, 1.45],
-    [0.42, 0.88],
-    [0.58, 0.94],
-    [0.86, 1.5],
-    [1, 0.7],
+    [0.12, 1.22],
+    [0.42, 0.94],
+    [0.58, 0.97],
+    [0.86, 1.25],
+    [1, 0.84],
   ] as const;
   let scaleY = 1;
   for (let i = 1; i < shapes.length; i++) {
@@ -53,8 +53,8 @@ export function specialPose(time: number): {
     }
   }
   return {
-    height: 3.1 * 4 * flight * (1 - flight),
-    spin: flight * Math.PI * 6,
+    height: 2.15 * 4 * flight * (1 - flight),
+    spin: flight * Math.PI * 4,
     flip: flight * Math.PI * 2,
     scaleY,
   };

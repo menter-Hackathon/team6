@@ -41,3 +41,19 @@ export function monoAudio(buffer: AudioBuffer): Float32Array {
   }
   return result;
 }
+
+/** Bounded gain for quiet input; retain relative dynamics and never clip a peak. */
+export function prepareRecognitionAudio(audio: Float32Array): void {
+  if (!audio.length) return;
+  let mean = 0;
+  for (const sample of audio) mean += sample;
+  mean /= audio.length;
+  let peak = 0;
+  for (let i = 0; i < audio.length; i++) {
+    audio[i] = audio[i]! - mean;
+    peak = Math.max(peak, Math.abs(audio[i]!));
+  }
+  if (peak < 1e-6) return;
+  const gain = Math.min(4, 0.85 / peak);
+  for (let i = 0; i < audio.length; i++) audio[i] = audio[i]! * gain;
+}

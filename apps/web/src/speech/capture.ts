@@ -9,8 +9,10 @@ export class MicrophoneCapture {
   private stopped = false;
 
   async start(
-    onSegment: (audio: Float32Array) => void,
-    onActivity: (level: number, speaking: boolean, sounding: boolean) => void,
+    onSegment: (audio: Float32Array, utterance: number) => void,
+    onActivity: (level: number, speaking: boolean, rms: number) => void,
+    onPreview?: (audio: Float32Array, utterance: number) => void,
+    deviceId?: string,
   ): Promise<void> {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
       throw new Error("secure-context");
@@ -22,6 +24,8 @@ export class MicrophoneCapture {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
+          autoGainControl: true,
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
           echoCancellation: true,
           noiseSuppression: true,
         },
@@ -34,14 +38,18 @@ export class MicrophoneCapture {
       this.stream = stream;
       await context.audioWorklet.addModule(workletUrl);
       if (this.stopped) return;
-      const segmenter = new SpeechSegmenter(context.sampleRate, onSegment);
+      const segmenter = new SpeechSegmenter(
+        context.sampleRate,
+        onSegment,
+        onPreview,
+      );
       this.segmenter = segmenter;
       const node = new AudioWorkletNode(context, "speech-capture");
       this.node = node;
       node.port.onmessage = (event: MessageEvent<Float32Array>) => {
         if (this.stopped) return;
         segmenter.push(event.data);
-        onActivity(segmenter.level, segmenter.speaking, segmenter.sounding);
+        onActivity(segmenter.level, segmenter.speaking, segmenter.rms);
       };
       const mute = context.createGain();
       mute.gain.value = 0;

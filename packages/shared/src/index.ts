@@ -31,6 +31,7 @@ export const DIVE_SPEED = PLAYER_SPEED * 1.5;
 export const DISC_SPEED = PLAYER_SPEED;
 export const DIVE_GAP_SECONDS = 0.28;
 export const INK_SHOT_INTERVAL = 0.17;
+export const REACTION_SHOT_INTERVAL = 0.32;
 // Allow one frame of timing jitter when the server checks client-paced shots.
 export const INK_SHOT_SERVER_TOLERANCE = 0.02;
 export const PLAYER_SIZE = 1;
@@ -85,11 +86,11 @@ export function inkShotScale(voiced: boolean | undefined): number {
   return voiced ? INK_VOICED_SCALE : INK_QUIET_SCALE;
 }
 export const paintKindSchema = z.enum([
+  "reaction-fan",
+  "reaction-pair",
   "ring",
   "line",
   "fan",
-  "reaction-fan",
-  "reaction-pair",
   "ink",
   "footprint",
   "slam",
@@ -102,11 +103,14 @@ export const paintRequestSchema = z.object({
 export const specialShapeSchema = z.enum(["ink", "star", "heart"]);
 export type SpecialShape = z.infer<typeof specialShapeSchema>;
 export const specialRequestSchema = z.object({
-  shape: specialShapeSchema.default("star"),
+  // Accept legacy requests, while keeping all current landing paint organic.
+  shape: specialShapeSchema.default("ink").transform(() => "ink" as const),
 });
 export type PaintStroke = {
   specialShape?: SpecialShape;
   revision: number;
+  /** Server-generated actor for cosmetic response motion. */
+  actorId?: string;
   /** Server-generated start of a continuous walking segment. */
   fromX?: number;
   fromZ?: number;
@@ -141,3 +145,14 @@ export {
 export { specialOutline } from "./special-outline.js";
 
 export { reactionInkPattern, type ReactionInkDrop } from "./reaction-ink.js";
+export {
+  reactionLevelSchema,
+  reactionRequestSchema,
+  reactionResponseSchema,
+  reactionEffect,
+  reactionForKey,
+  REACTION_KEYS,
+  type ReactionLevel,
+  type ReactionDecision,
+  type ReactionSegment,
+} from "./reaction.js";
