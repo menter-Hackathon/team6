@@ -7,6 +7,7 @@ import {
 import { AizuchiStream, immediateAizuchiText } from "./aizuchi-stream";
 import { forkTrace, traceStage } from "../latency-trace";
 import { markLongSpeech } from "./voice-feedback";
+import { splitUtterance } from "./split-utterance";
 import { createReactionClient } from "./reaction-client";
 import type { Transcript } from "./protocol";
 
@@ -293,8 +294,13 @@ export function useReactionClassification(
         typeof item.text === "string" &&
         typeof item.id === "string"
       ) {
-        traceStage(item.id, "final", { text: item.text });
-        submitRef.current(item.text, item.id);
+        // D-096: judge each sentence / pause-separated piece on its own. The first piece keeps
+        // the result id so aizuchi already fired from interim text are not fired twice.
+        splitUtterance(item.text).forEach((piece, index) => {
+          const id = index === 0 ? item.id : `${item.id}~${index}`;
+          traceStage(id, "final", { text: piece });
+          submitRef.current(piece, id);
+        });
       }
     };
     const interim = (event: Event) => {
