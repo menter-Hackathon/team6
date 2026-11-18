@@ -76,6 +76,7 @@ export function App() {
   const [turnOrder, setTurnOrder] = useState("alternating");
   const [talkDuration, setTalkDuration] = useState(PRESENTATION_SECONDS);
   const [devMatch, setDevMatch] = useState(false);
+  const [speakerPreview, setSpeakerPreview] = useState(false);
   const [roomCode, setRoomCode] = useState("");
   // A story belongs to one room; start fresh when the room changes.
   useEffect(() => setEpisodeDraft(EMPTY_EPISODE_DRAFT), [roomCode]);
@@ -307,6 +308,51 @@ export function App() {
             <h2>開発者用 検証モード</h2>
           </summary>
           <p>サーバーに接続せずに操作を確認できます。</p>
+          <div className="dev-speaker-preview">
+            <strong>発表中の演出</strong>
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !speakerPreview;
+                  setSpeakerPreview(next);
+                  window.dispatchEvent(new CustomEvent("speaker-preview", { detail: next }));
+                }}
+              >
+                {speakerPreview ? "プレビューを止める" : "自分を発表者にする"}
+              </button>
+              <button
+                type="button"
+                disabled={!speakerPreview}
+                onClick={() => window.dispatchEvent(new CustomEvent("speaker-preview-gaya", { detail: "fan" }))}
+              >
+                相槌のガヤ
+              </button>
+              <button
+                type="button"
+                disabled={!speakerPreview}
+                onClick={() => window.dispatchEvent(new CustomEvent("speaker-preview-gaya", { detail: "slam" }))}
+              >
+                長い文章のガヤ
+              </button>
+              <button
+                type="button"
+                disabled={!speakerPreview}
+                onClick={() => {
+                  for (let i = 0; i < 14; i++)
+                    window.setTimeout(
+                      () =>
+                        window.dispatchEvent(
+                          new CustomEvent("speaker-preview-gaya", { detail: i % 4 === 3 ? "slam" : "fan" }),
+                        ),
+                      i * 350,
+                    );
+                }}
+              >
+                ガヤ連打（5秒）
+              </button>
+            </div>
+          </div>
           <label className="dev-obstacle-toggle">
             <input
               type="checkbox"

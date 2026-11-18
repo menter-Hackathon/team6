@@ -49,6 +49,7 @@ import { AIZUCHI_MOTION_SECONDS, AIZUCHI_LAND_TIME } from "./aizuchi-motion";
 import { useAizuchiAppearance } from "./use-aizuchi-appearance";
 import { INK_GLOSS, makeInkRelief, useInkEnvironment } from "./ink-material";
 import { useSpecialAppearance } from "./special-appearance";
+import { SpeakerSpotlight } from "./speaker-spotlight";
 import { InkEffects, INK_SETTLE_SECONDS } from "./ink-effects";
 import { currentInkVoice } from "./speech/voice-feedback";
 import {
@@ -158,6 +159,17 @@ export function GameScene({
     sequence: 0,
     latestInput: { sequence: 0, x: 0, z: 0, yaw: 0, dive: false },
   });
+  // The dev character, as an anchor for the presenter-effect preview.
+  const devAnchor = useMemo(
+    () => ({
+      get current() {
+        const c = controls.current;
+        return { x: c.position.x, z: c.position.z, height: c.height };
+      },
+      set current(_value) {},
+    }),
+    [],
+  );
 
   useEffect(() => {
     const activateSpecial = () => {
@@ -569,6 +581,13 @@ export function GameScene({
         shadow-normalBias={0.03}
       />
 
+      <SpeakerSpotlight
+        room={roomRef.current}
+        devMode={devMode}
+        devAnchor={devAnchor}
+        colorA={colorA}
+        colorB={colorB}
+      />
       {devMode && showDevObstacles && (
         <DevObstacles colorA={colorA} colorB={colorB} canPaint={devCanPaint} />
       )}
