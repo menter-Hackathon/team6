@@ -1,3 +1,4 @@
+import { tableInkHit, wallInkHit } from "@gaya/shared";
 import * as THREE from "three";
 import {
   reactionInkPattern,
@@ -237,6 +238,7 @@ export class InkEffects {
       return Math.max(...pattern.map((part) => part.delay + part.duration));
     }
     if (stroke.kind !== "ink") {
+      surfaceHeight = stroke.height ?? surfaceHeight;
       this.spread(stroke, team, surfaceHeight);
       if (stroke.kind === "slam") {
         for (
@@ -265,6 +267,10 @@ export class InkEffects {
         }
       }
       return 0;
+    }
+    if (!surface) {
+      const hit = tableInkHit(stroke) ?? wallInkHit(stroke);
+      if (hit) surface = new THREE.Vector3(hit.point.x, hit.point.y, hit.point.z);
     }
     const impact = paintDisks(stroke)[0]!;
     const origin = new THREE.Vector3(

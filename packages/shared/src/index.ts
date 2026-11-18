@@ -25,8 +25,8 @@ export function practiceColorOwner(color: string): number {
 }
 export const SERVER_TICK_RATE = 30;
 export const INPUT_SEND_RATE = 30;
-export const FIELD_HALF_WIDTH = 12;
-export const FIELD_HALF_DEPTH = 24;
+export const FIELD_HALF_WIDTH = 21;
+export const FIELD_HALF_DEPTH = 40;
 export const PLAYER_SPEED = 5;
 export const DIVE_SPEED = PLAYER_SPEED * 1.5;
 export const DISC_SPEED = PLAYER_SPEED;
@@ -152,6 +152,7 @@ export type PaintStroke = {
   revision: number;
   /** Server-generated actor for cosmetic response motion. */
   actorId?: string;
+  height?: number;
   /** Server-generated start of a continuous walking segment. */
   fromX?: number;
   fromZ?: number;
@@ -224,3 +225,12 @@ export {
   drawNextTopic,
   type PresentationTopic,
 } from "./topics.js";
+
+export { CLASSROOM_TABLES, TABLE_WIDTH, TABLE_DEPTH, TABLE_HEIGHT, TABLE_RADIUS, moveAroundTables } from "./classroom-tables.js";
+
+export { tableInkHit, tableInkMarks, type TableInkMark } from "./table-ink.js";
+
+export { tableFloorHeight, moveOnTables } from "./classroom-tables.js";
+export { TableInkState } from "./table-ink.js";
+
+export { CLASSROOM_HEIGHT, wallInkHit, wallInkMarks } from "./classroom-walls.js";

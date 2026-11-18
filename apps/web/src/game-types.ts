@@ -8,6 +8,8 @@ export interface PlayerState {
   practiceColor: string;
   x: number;
   z: number;
+  height: number;
+  climbing: boolean;
   yaw: number;
   specialTime: number;
   jumpTime: number;

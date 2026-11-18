@@ -9,6 +9,8 @@ export class PlayerState extends Schema {
   @type("string") practiceColor = "#ff4f8b";
   @type("float32") x = 0;
   @type("float32") z = 0;
+  @type("float32") height = 0;
+  @type("boolean") climbing = false;
   @type("float32") yaw = 0;
   @type("float32") specialTime = -1;
   @type("float32") jumpTime = -1;

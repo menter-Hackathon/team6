@@ -377,7 +377,7 @@ export function App() {
               checked={showDevObstacles}
               onChange={(event) => setShowDevObstacles(event.target.checked)}
             />
-            障害物を表示（4つの箱）
+            追加の検証用の箱を表示（4つ）
           </label>
           <button
             onClick={(event) => {
@@ -387,8 +387,12 @@ export function App() {
           >
             箱の前へ移動
           </button>
+          <button onClick={(event)=>{
+            window.dispatchEvent(new Event("dev-table-start"));
+            event.currentTarget.blur();
+          }}>テーブルの前へ移動</button>
           <p className="dev-obstacle-note">
-            壁を通常インクで塗り、Shift＋壁方向への移動で上に登れます。側面・上面にも塗りが残ります（検証モード限定）。
+            布を通常インクで塗り、Shift＋テーブル方向への移動で天板に登れます。布・天板にも塗りが残ります。
           </p>
           <ul className="dev-controls-list">
             <li>WASD・矢印キー：移動</li>

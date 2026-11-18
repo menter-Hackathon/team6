@@ -1,3 +1,4 @@
+import { TABLE_RADIUS } from "@gaya/shared";
 import { describe, expect, it } from "vitest";
 import {
   FIELD_HALF_WIDTH,
@@ -25,4 +26,16 @@ describe("movePlayer", () => {
     expect(moved.x).toBe(FIELD_HALF_WIDTH - PLAYER_RADIUS);
     expect(moved.z).toBe(FIELD_HALF_DEPTH - PLAYER_RADIUS);
   });
+});
+
+it("blocks running and diving through a classroom table", () => {
+  for (const dive of [false, true]) {
+    const result = movePlayer(
+      { x: -8, z: -29 },
+      { sequence: 1, x: 0, z: 1, yaw: 0, dive },
+      1,
+      7.5,
+    );
+    expect(result.z).toBeCloseTo(-24 - TABLE_RADIUS - PLAYER_RADIUS);
+  }
 });
