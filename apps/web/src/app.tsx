@@ -215,7 +215,7 @@ export function App() {
       {!devMode && connectionState !== "connected" ? (
         <section className="lobby-panel lobby-panel--entry" aria-label="ルームに参加">
           <span className="entry-kicker">MATCH ENTRY ／ 01</span>
-          <h2>さあ、<span>ガヤろう。</span></h2>
+          <h2>ルームに参加</h2>
           <label className="entry-label" htmlFor="entry-name">PLAYER NAME</label>
           <input
             id="entry-name"
