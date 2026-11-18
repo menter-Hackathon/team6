@@ -21,6 +21,28 @@ const stroke: PaintStroke = {
 };
 
 describe("INK/PLAY paint geometry", () => {
+  it("scales ink area by scaling radii and offsets with the square root", () => {
+    const base = paintDisks(stroke);
+    const boosted = paintDisks({ ...stroke, areaMultiplier: 4 / 3 });
+    const scale = Math.sqrt(4 / 3);
+    expect(boosted[0]!.radius / base[0]!.radius).toBeCloseTo(scale);
+    expect(
+      (boosted[1]!.x - boosted[0]!.x) / (base[1]!.x - base[0]!.x),
+    ).toBeCloseTo(scale);
+  });
+  it("widens a boosted walking trail without moving its path", () => {
+    const base = paintDisks({ ...stroke, kind: "footprint", fromX: 0, x: 1 });
+    const boosted = paintDisks({
+      ...stroke,
+      kind: "footprint",
+      fromX: 0,
+      x: 1,
+      areaMultiplier: 3 / 2,
+    });
+    expect(boosted[0]!.x).toBe(base[0]!.x);
+    expect(boosted[0]!.z).toBe(base[0]!.z);
+    expect(boosted[0]!.radius / base[0]!.radius).toBeCloseTo(Math.sqrt(3 / 2));
+  });
   it("lands ahead of the player, aligned with camera-relative forward", () => {
     expect(paintDisks(stroke)[0]).toEqual({
       x: 0,

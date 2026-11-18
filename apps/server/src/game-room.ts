@@ -24,6 +24,7 @@ import {
   advanceJump,
   type MoveInput,
   countPaintedCells,
+  speakerTeamAreaMultiplier,
 } from "@gaya/shared";
 import { GameState, PlayerState } from "./game-state.js";
 import { PaintField } from "./paint.js";
@@ -70,6 +71,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (
         !parsed.success ||
         !player ||
+        (!practice && this.isSpeaker(client.sessionId)) ||
         player.dive ||
         player.specialTime >= 0 ||
         (!practice && player.team !== "A" && player.team !== "B")
@@ -92,6 +94,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         team: player.team === "B" ? "B" : "A",
         ...(practice ? { practiceColor: player.practiceColor } : {}),
         kind: parsed.data.kind,
+        areaMultiplier: this.paintAreaMultiplier(player),
       };
       this.paint.apply(stroke);
       if (!practice) {
@@ -108,6 +111,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (!practice && this.state.phase !== "playing") return;
       if (
         !player ||
+        (!practice && this.isSpeaker(client.sessionId)) ||
         player.specialTime >= 0 ||
         (!practice && player.team !== "A" && player.team !== "B")
       )
@@ -271,6 +275,23 @@ export class GameRoom extends Room<{ state: GameState }> {
     return a.flatMap((player, index) => [player, b[index]!]);
   }
 
+  private isSpeaker(sessionId: string): boolean {
+    return (
+      this.state.phase === "playing" &&
+      this.state.speakerOrder[this.state.turnIndex - 1] === sessionId
+    );
+  }
+
+  private paintAreaMultiplier(player: PlayerState): number {
+    if (this.state.phase !== "playing" || !this.state.speakerOrder.length)
+      return 1;
+    const speakerId = this.state.speakerOrder[this.state.turnIndex - 1];
+    const speaker = speakerId && this.state.players.get(speakerId);
+    if (!speaker || speaker.team !== player.team) return 1;
+    const teamSize = this.state.speakerOrder.length / 2;
+    return speakerTeamAreaMultiplier(teamSize);
+  }
+
   private advanceTurn(): void {
     while (
       this.state.turnIndex < this.state.speakerOrder.length &&
@@ -317,6 +338,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         if (
           special.landed &&
           (this.state.phase === "playing" || practice) &&
+          (practice || !this.isSpeaker(sessionId)) &&
           (practice || player.team === "A" || player.team === "B")
         ) {
           const stroke: PaintStroke = {
@@ -328,6 +350,7 @@ export class GameRoom extends Room<{ state: GameState }> {
             ...(practice ? { practiceColor: player.practiceColor } : {}),
             kind: "slam",
             specialShape: this.specialShapes.get(sessionId) ?? "star",
+            areaMultiplier: this.paintAreaMultiplier(player),
           };
           this.paint.apply(stroke);
           if (!practice) {
@@ -376,6 +399,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         player.jumpTime < 0 &&
         distance > 0.001 &&
         (this.state.phase === "playing" || practice) &&
+        (practice || !this.isSpeaker(sessionId)) &&
         (practice || player.team === "A" || player.team === "B")
       ) {
         const footprint: PaintStroke = {
@@ -388,6 +412,7 @@ export class GameRoom extends Room<{ state: GameState }> {
           team: player.team === "B" ? "B" : "A",
           ...(practice ? { practiceColor: player.practiceColor } : {}),
           kind: "footprint",
+          areaMultiplier: this.paintAreaMultiplier(player),
         };
         this.paint.apply(footprint);
         if (!practice) {

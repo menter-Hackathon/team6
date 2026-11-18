@@ -107,9 +107,12 @@ export type PaintStroke = {
   /** Lobby-only palette color; match strokes use the assigned team. */
   practiceColor?: string;
   kind: z.infer<typeof paintKindSchema>;
+  /** Server-assigned area multiplier for the speaker's team. */
+  areaMultiplier?: number;
 };
 
 export { rasterizePaintStroke } from "./paint-raster.js";
+export { speakerTeamAreaMultiplier } from "./paint-balance.js";
 export { countPaintedCells } from "./paint-result.js";
 export { isFootprintOwned } from "./paint-ownership.js";
 

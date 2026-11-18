@@ -12,6 +12,7 @@ interface ResultFlowProps {
   cells?: Uint8Array;
   room?: Room<GameState>;
   onClose?: () => void;
+  onReplay?: () => void;
 }
 
 export function ResultFlow({
@@ -23,6 +24,7 @@ export function ResultFlow({
   cells,
   room,
   onClose,
+  onReplay,
 }: ResultFlowProps) {
   const [stage, setStage] = useState<
     "finish" | "curtain" | "suspense" | "revealed"
@@ -101,7 +103,12 @@ export function ResultFlow({
             colorA={colorA}
             colorB={colorB}
           />
-          {preview ? (
+          {onReplay ? (
+            <div className="result-screen-actions">
+              <button onClick={onReplay}>もう一度スタート</button>
+              <button onClick={onClose}>検証を終了</button>
+            </div>
+          ) : preview ? (
             <div className="result-screen-actions">
               <button onClick={() => setRun((value) => value + 1)}>
                 もう一度見る
