@@ -12,6 +12,7 @@ import {
   type PaintDisk,
   type PaintStroke,
 } from "@gaya/shared";
+import { INK_GLOSS } from "./ink-material";
 
 export const INK_SETTLE_SECONDS = 0.22;
 
@@ -22,7 +23,7 @@ interface Shot {
   surfaceHit?: boolean;
   shed: number;
   duration: number;
-  trail: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+  trail: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial>;
 }
 interface Drop {
   mesh: THREE.Mesh;
@@ -73,15 +74,21 @@ export class InkEffects {
     ...NEON_COLORS.map((entry) => entry.hex),
   ].map(
     (color) =>
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         color,
-        roughness: 0.13,
-        metalness: 0.04,
+        ...INK_GLOSS,
       }),
   );
   setColors(colorA: string, colorB: string): void {
     this.materials[0]!.color.set(colorA);
     this.materials[1]!.color.set(colorB);
+  }
+  /** Reflections for the cosmetic drops; the texture is shared and owned elsewhere. */
+  setEnvironment(texture: THREE.Texture | null): void {
+    for (const material of this.materials) {
+      material.envMap = texture;
+      material.needsUpdate = true;
+    }
   }
   private drops: Drop[] = [];
   private spreads: Spread[] = [];
