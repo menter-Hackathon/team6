@@ -11,6 +11,8 @@ interface EntryScreenProps {
   onTurnOrderChange: (order: string) => void;
   talkDuration: number;
   onTalkDurationChange: (seconds: number) => void;
+  devMatch: boolean;
+  onDevMatchChange: (devMatch: boolean) => void;
   inviteCode: string;
   onInviteCodeChange: (code: string) => void;
   /** Opened from an invite link: start on the join form with the code filled in. */
@@ -105,6 +107,14 @@ export function EntryScreen(props: EntryScreenProps) {
                 <option value="alternating">チーム交互（各チーム内はランダム）</option>
                 <option value="random">全員ランダム</option>
               </select>
+            </label>
+            <label className="ink-entry-check">
+              <input
+                type="checkbox"
+                checked={props.devMatch}
+                onChange={(event) => props.onDevMatchChange(event.target.checked)}
+              />
+              <span>開発者モード（2人から試合を始められる）</span>
             </label>
             <div className="ink-entry-actions">
               <button type="button" className="ink-link" onClick={() => setStep("choose")}>

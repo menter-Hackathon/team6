@@ -258,6 +258,20 @@
   box-shadow: 3px 4px 0 var(--ink-shadow);
   transform: rotate(-3deg) scale(1.06);
 }
+.ink-entry-form label.ink-entry-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.ink-entry-form .ink-entry-check input {
+  width: 20px;
+  min-height: 20px;
+  height: 20px;
+  box-shadow: none;
+  accent-color: var(--ink-pink);
+}
 .ink-entry-actions {
   display: flex;
   align-items: center;

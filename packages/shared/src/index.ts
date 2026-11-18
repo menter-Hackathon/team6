@@ -67,11 +67,21 @@ export const talkDurationSchema = z.number().int().refine(
 export const GAME_START_COUNTDOWN_SECONDS = 7;
 export const TURN_INTRO_MS = 2650;
 export const STARTABLE_PLAYER_COUNTS = [4, 6, 8] as const;
+/** Developer-mode rooms may also start with 2 players (1 vs 1) for testing (D-041). */
+export const DEV_STARTABLE_PLAYER_COUNTS = [2, 4, 6, 8] as const;
+export function canStartWithPlayers(count: number, devMatch: boolean): boolean {
+  const allowed: readonly number[] = devMatch
+    ? DEV_STARTABLE_PLAYER_COUNTS
+    : STARTABLE_PLAYER_COUNTS;
+  return allowed.includes(count);
+}
 export const roomOptionsSchema = z.object({
   displayName: z.string().trim().min(1).max(20),
   turnOrder: z.enum(["alternating", "random"]).default("alternating"),
   /** Seconds per speaker, chosen when the room is created (still adjustable in team selection). */
   talkDuration: talkDurationSchema.default(PRESENTATION_SECONDS),
+  /** Developer mode: allow a 2-player (1 vs 1) match for testing. */
+  devMatch: z.boolean().default(false),
 });
 export const joinOptionsSchema = roomOptionsSchema.pick({ displayName: true });
 export type TurnOrder = z.infer<typeof roomOptionsSchema>["turnOrder"];

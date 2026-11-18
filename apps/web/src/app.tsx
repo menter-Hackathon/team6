@@ -6,7 +6,7 @@ import {
   NEON_COLORS,
   PAINT_GRID_SIZE,
   countPaintedCells,
-  STARTABLE_PLAYER_COUNTS,
+  canStartWithPlayers,
   TURN_INTRO_MS,
   type SpecialShape,
   speakerTeamAreaMultiplier,
@@ -75,6 +75,7 @@ export function App() {
   );
   const [turnOrder, setTurnOrder] = useState("alternating");
   const [talkDuration, setTalkDuration] = useState(PRESENTATION_SECONDS);
+  const [devMatch, setDevMatch] = useState(false);
   const [roomCode, setRoomCode] = useState("");
   // A story belongs to one room; start fresh when the room changes.
   useEffect(() => setEpisodeDraft(EMPTY_EPISODE_DRAFT), [roomCode]);
@@ -110,6 +111,7 @@ export function App() {
             displayName,
             turnOrder,
             talkDuration,
+            devMatch,
           })
         : await client.joinById<GameState>(inviteCode.trim().toUpperCase(), {
             displayName,
@@ -186,12 +188,12 @@ export function App() {
   const localPlayer = gameState?.players.get(roomRef.current?.sessionId ?? "");
   const canStart =
     gameState?.hostId === roomRef.current?.sessionId &&
-    STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) &&
+    canStartWithPlayers(players.length, gameState?.devMatch ?? false) &&
     (gameState?.replayPlayerCount === 0 || players.length === gameState?.replayPlayerCount) &&
     players.every((player) => player.ready);
   const canReplay =
     gameState?.hostId === roomRef.current?.sessionId &&
-    STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) &&
+    canStartWithPlayers(players.length, gameState?.devMatch ?? false) &&
     players.filter((player) => player.team === "A").length === players.length / 2 &&
     players.filter((player) => player.team === "B").length === players.length / 2;
   const devSpeakerBlocked =
@@ -260,6 +262,8 @@ export function App() {
           onTurnOrderChange={setTurnOrder}
           talkDuration={talkDuration}
           onTalkDurationChange={setTalkDuration}
+          devMatch={devMatch}
+          onDevMatchChange={setDevMatch}
           inviteCode={inviteCode}
           onInviteCodeChange={(code) => {
             setInviteCode(code);

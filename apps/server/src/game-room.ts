@@ -8,7 +8,7 @@ import {
   specialRequestSchema,
   type SpecialShape,
   SERVER_TICK_RATE,
-  STARTABLE_PLAYER_COUNTS,
+  canStartWithPlayers,
   joinOptionsSchema,
   moveInputSchema,
   paintRequestSchema,
@@ -59,6 +59,7 @@ export class GameRoom extends Room<{ state: GameState }> {
     this.setState(new GameState());
     this.state.turnOrder = settings.turnOrder;
     this.state.talkDuration = settings.talkDuration;
+    this.state.devMatch = settings.devMatch;
     registerEpisodeSource(this.roomId, () => this.currentEpisode());
     this.setPatchRate(1000 / SERVER_TICK_RATE);
     this.setSimulationInterval(
@@ -215,7 +216,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         return;
       const players = Array.from(this.state.players.values());
       if (
-        !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
+        !canStartWithPlayers(players.length, this.state.devMatch) ||
         (this.state.replayPlayerCount > 0 && players.length !== this.state.replayPlayerCount) ||
         players.some((player) => !player.ready)
       )
@@ -249,7 +250,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (client.sessionId !== this.state.hostId || this.state.phase !== "result") return;
       const players = Array.from(this.state.players.values());
       if (
-        !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
+        !canStartWithPlayers(players.length, this.state.devMatch) ||
         players.filter((player) => player.team === "A").length !== players.length / 2 ||
         players.filter((player) => player.team === "B").length !== players.length / 2
       ) return;
@@ -285,7 +286,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         return;
       const players = Array.from(this.state.players.values());
       if (
-        !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
+        !canStartWithPlayers(players.length, this.state.devMatch) ||
         (this.state.replayPlayerCount > 0 && players.length !== this.state.replayPlayerCount) ||
         players.some((player) => !player.ready) ||
         players.filter((player) => player.team === "A").length !== players.length / 2 ||
