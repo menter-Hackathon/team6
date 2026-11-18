@@ -1,5 +1,7 @@
 import * as THREE from "three";
+import type { ReactionDrop } from "./reaction-preview";
 import {
+  reactionInkPattern,
   inkOutlineRadius,
   specialOutline,
   type SpecialShape,
@@ -19,6 +21,7 @@ interface Shot {
   velocity: THREE.Vector3;
   stroke?: PaintStroke;
   voiceImpact?: PaintDisk;
+  voicePersistent?: boolean;
   yaw: number;
   shed: number;
   duration: number;
@@ -84,6 +87,13 @@ export class InkEffects {
     this.materials[0]!.color.set(colorA);
     this.materials[1]!.color.set(colorB);
   }
+  private pendingPaint: {
+    elapsed: number;
+    stroke: PaintStroke;
+    disk: PaintDisk;
+    drop: ReactionDrop;
+    team: number;
+  }[] = [];
   private drops: Drop[] = [];
   private spreads: Spread[] = [];
   private readonly direction = new THREE.Vector3();
@@ -120,6 +130,20 @@ export class InkEffects {
       : stroke.team === "A"
         ? 0
         : 1;
+    if (stroke.kind === "reaction-fan" || stroke.kind === "reaction-pair") {
+      const pattern = reactionInkPattern(stroke.kind),
+        disks = paintDisks(stroke);
+      pattern.forEach((drop, i) =>
+        this.pendingPaint.push({
+          elapsed: 0,
+          stroke,
+          disk: disks[i]!,
+          drop,
+          team,
+        }),
+      );
+      return Math.max(...pattern.map((drop) => drop.delay + drop.duration));
+    }
     if (stroke.kind !== "ink") {
       this.spread(stroke, team);
       if (stroke.kind === "slam") {
@@ -165,7 +189,7 @@ export class InkEffects {
     if (this.drops.length >= MAX_DROPS) return duration;
     const velocity = destination.sub(origin).divideScalar(duration);
     velocity.y += 0.5 * GRAVITY * duration;
-    const radius = 0.22 * INK_SCALE;
+    const radius = 0.22 * INK_SCALE * (stroke.scale ?? 1);
     const drop = this.addDrop(origin, velocity, radius, team);
     drop.mesh.scale.set(radius * 0.8, radius * 1.9, radius * 0.8);
     drop.shot = {
@@ -187,38 +211,44 @@ export class InkEffects {
     yaw: number,
     level: number,
     height = 0,
+    variation?: ReactionDrop,
+    paintTarget?: { disk: PaintDisk; team: number },
   ): void {
     if (this.drops.length >= MAX_SECONDARY_DROPS) return;
     const strength = THREE.MathUtils.clamp(level, 0, 1);
-    const angle = yaw + (Math.random() - 0.5) * 0.18;
+    const angle = yaw + (variation?.angle ?? (Math.random() - 0.5) * 0.18);
     const forward = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
     const origin = new THREE.Vector3(x, height + 0.85, z).addScaledVector(
       forward,
       0.8,
     );
-    const reach = 2.6 + strength * 2.2;
-    const destination = new THREE.Vector3(x, 0.035, z).addScaledVector(
-      forward,
-      reach,
-    );
-    const duration = 0.24 + strength * 0.08;
+    const reach = variation?.reach ?? 2.6 + strength * 2.2;
+    const destination = paintTarget
+      ? new THREE.Vector3(paintTarget.disk.x, 0.035, paintTarget.disk.z)
+      : new THREE.Vector3(x, 0.035, z).addScaledVector(forward, reach);
+    const duration = variation?.duration ?? 0.24 + strength * 0.08;
     const velocity = destination.clone().sub(origin).divideScalar(duration);
     velocity.y += 0.5 * GRAVITY * duration;
-    const radius = (0.13 + strength * 0.11) * INK_SCALE;
-    const drop = this.addDrop(origin, velocity, radius, 0);
+    const radius = (variation?.radius ?? 0.13 + strength * 0.11) * INK_SCALE;
+    const team = paintTarget?.team ?? 0;
+    const drop = this.addDrop(origin, velocity, radius, team);
     drop.shot = {
       origin,
       velocity: velocity.clone(),
       yaw: angle,
       duration,
       shed: 0,
+      voicePersistent: Boolean(paintTarget),
       voiceImpact: {
         x: destination.x,
         z: destination.z,
-        radius: 0.5 + strength * 0.6,
+        radius:
+          paintTarget?.disk.radius ??
+          variation?.spreadRadius ??
+          0.5 + strength * 0.6,
         organic: true,
       },
-      trail: this.createTrail(0),
+      trail: this.createTrail(team),
     };
   }
 
@@ -367,7 +397,7 @@ export class InkEffects {
   private impact(shot: Shot, team: number): void {
     if (shot.stroke) this.spread(shot.stroke, team);
     else if (shot.voiceImpact)
-      this.addSpread(shot.voiceImpact, team, true, 0, true);
+      this.addSpread(shot.voiceImpact, team, true, 0, !shot.voicePersistent);
     const center = shot.voiceImpact ?? paintDisks(shot.stroke!)[0]!;
     const forward = new THREE.Vector3(
       -Math.sin(shot.yaw),
@@ -407,6 +437,21 @@ export class InkEffects {
 
   update(delta: number): void {
     const dt = Math.min(Math.max(delta, 0), 0.05);
+    for (let i = this.pendingPaint.length - 1; i >= 0; i--) {
+      const entry = this.pendingPaint[i]!;
+      entry.elapsed += dt;
+      if (entry.elapsed < entry.drop.delay) continue;
+      this.emitVoice(
+        entry.stroke.x,
+        entry.stroke.z,
+        entry.stroke.yaw,
+        0.65,
+        0,
+        entry.drop,
+        { disk: entry.disk, team: entry.team },
+      );
+      this.pendingPaint.splice(i, 1);
+    }
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const p = this.drops[i]!;
       p.age += dt;
@@ -512,6 +557,7 @@ export class InkEffects {
     for (const drop of this.drops) drop.shot?.trail.geometry.dispose();
     for (const spread of this.spreads)
       if (spread.transient) (spread.mesh.material as THREE.Material).dispose();
+    this.pendingPaint = [];
     this.group.clear();
     this.drops = [];
     this.spreads = [];

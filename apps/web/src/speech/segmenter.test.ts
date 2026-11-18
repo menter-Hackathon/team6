@@ -45,6 +45,32 @@ describe("speech segmentation", () => {
     expect(result).toHaveLength(1);
     expect(result[0]!.filter((value) => value > 0.02).length).toBe(40 * 320);
   });
+  it("emits the first of three quick aizuchi as soon as it ends", () => {
+    const result: Float32Array[] = [];
+    const vad = new SpeechSegmenter(rate, (audio) => result.push(audio));
+    // うん (240ms) · 200ms gap · うん · 200ms gap · うん
+    feed(vad, 12, 0.04);
+    expect(vad.speaking).toBe(true);
+    feed(vad, 7, 0);
+    expect(result).toHaveLength(0);
+    feed(vad, 1, 0);
+    expect(result).toHaveLength(1);
+    feed(vad, 2, 0);
+    feed(vad, 12, 0.04);
+    feed(vad, 10, 0);
+    feed(vad, 12, 0.04);
+    feed(vad, 10, 0);
+    expect(result).toHaveLength(3);
+    for (const audio of result)
+      expect(audio.filter((value) => value > 0.02).length).toBe(12 * 320);
+  });
+  it("tracks whether the latest chunk is voiced for paint scaling", () => {
+    const vad = new SpeechSegmenter(rate, () => {});
+    feed(vad, 1, 0.04);
+    expect(vad.sounding).toBe(true);
+    feed(vad, 1, 0);
+    expect(vad.sounding).toBe(false);
+  });
   it("bounds continuous speech to six seconds and flushes the last utterance on stop", () => {
     const result: Float32Array[] = [],
       vad = new SpeechSegmenter(rate, (audio) => result.push(audio));

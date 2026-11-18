@@ -14,6 +14,7 @@ import {
   paintRequestSchema,
   type PaintStroke,
   INK_SHOT_INTERVAL,
+  inkShotScale,
   INK_SHOT_SERVER_TOLERANCE,
   updateDiveState,
   type DiveState,
@@ -91,6 +92,9 @@ export class GameRoom extends Room<{ state: GameState }> {
         team: player.team === "B" ? "B" : "A",
         ...(practice ? { practiceColor: player.practiceColor } : {}),
         kind: parsed.data.kind,
+        ...(parsed.data.kind === "ink"
+          ? { scale: inkShotScale(parsed.data.voiced) }
+          : {}),
       };
       this.paint.apply(stroke);
       if (!practice) {

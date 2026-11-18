@@ -1,3 +1,4 @@
+import { reactionInkPattern } from "./reaction-ink.js";
 import {
   FIELD_HALF_WIDTH,
   FIELD_HALF_DEPTH,
@@ -35,7 +36,17 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
       z: stroke.z + dz * forward - dx * side,
       radius,
     });
-  if (stroke.kind === "slam" && stroke.specialShape === "ink") {
+  if (stroke.kind === "reaction-fan" || stroke.kind === "reaction-pair") {
+    for (const drop of reactionInkPattern(stroke.kind)) {
+      const angle = stroke.yaw + drop.angle;
+      disks.push({
+        x: stroke.x - Math.sin(angle) * drop.reach,
+        z: stroke.z + Math.cos(angle) * drop.reach,
+        radius: drop.spreadRadius,
+        organic: true,
+      });
+    }
+  } else if (stroke.kind === "slam" && stroke.specialShape === "ink") {
     disks.push({
       x: stroke.x,
       z: stroke.z,
@@ -172,14 +183,16 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
     }
   }
   const impact = stroke.kind === "ink" ? disks[0] : undefined;
+  // Bounded so a malformed stroke cannot paint an arbitrarily large area.
+  const scale = Number.isFinite(stroke.scale) ? stroke.scale! : 1;
+  const splat = impact
+    ? INK_SPLAT_SCALE * Math.max(0.5, Math.min(1.5, scale))
+    : 1;
   return disks.map((disk) => ({
     ...disk,
-    x: impact ? impact.x + (disk.x - impact.x) * INK_SPLAT_SCALE : disk.x,
-    z: impact ? impact.z + (disk.z - impact.z) * INK_SPLAT_SCALE : disk.z,
-    radius:
-      disk.radius *
-      (stroke.kind === "footprint" ? 1 : INK_SCALE) *
-      (impact ? INK_SPLAT_SCALE : 1),
+    x: impact ? impact.x + (disk.x - impact.x) * splat : disk.x,
+    z: impact ? impact.z + (disk.z - impact.z) * splat : disk.z,
+    radius: disk.radius * (stroke.kind === "footprint" ? 1 : INK_SCALE) * splat,
   }));
 }
 

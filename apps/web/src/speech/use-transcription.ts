@@ -179,9 +179,9 @@ export function useTranscription() {
     try {
       await current.start(
         (audio) => submit(audio, "microphone"),
-        (level, speaking) => {
+        (level, speaking, sounding) => {
           if (!alive.current || capture.current !== current) return;
-          reportVoiceInput(level, speaking);
+          reportVoiceInput(level, speaking, sounding);
           if (performance.now() - lastMeter.current < 90) return;
           lastMeter.current = performance.now();
           setActivity({ level, speaking });

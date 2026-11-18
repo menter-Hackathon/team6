@@ -13,6 +13,7 @@ import {
   DIVE_SPEED,
   DISC_SPEED,
   INK_SHOT_INTERVAL,
+  inkShotScale,
   updateDiveState,
   type DiveState,
   PAINT_GRID_SIZE,
@@ -29,8 +30,13 @@ import * as THREE from "three";
 import { bleedSpecialPaint } from "./paint-bleed";
 import { useSpecialAppearance } from "./special-appearance";
 import { InkEffects, INK_SETTLE_SECONDS } from "./ink-effects";
+import { reactionPaintKind, reactionPreview } from "./reaction-preview";
 import type { GameState } from "./game-types";
-import { buttonInkInput, VoiceInkPulse } from "./speech/voice-feedback";
+import {
+  buttonInkInput,
+  isVoicedNow,
+  VoiceInkPulse,
+} from "./speech/voice-feedback";
 
 import {
   rotateYaw,
@@ -55,6 +61,7 @@ interface ControlState {
   specialShape: SpecialShape;
   yaw: number;
   height: number;
+  lastShot: number;
   position: { x: number; z: number };
   sequence: number;
   latestInput: MoveInput;
@@ -79,6 +86,7 @@ export function GameScene({
     specialShape: "star",
     yaw: 0,
     height: 0,
+    lastShot: -Infinity,
     position: { x: 0, z: 0 },
     sequence: 0,
     latestInput: { sequence: 0, x: 0, z: 0, yaw: 0, dive: false },
@@ -108,11 +116,6 @@ export function GameScene({
           /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(event.target.tagName))
       )
         return;
-      if (event.code === "KeyF" && !event.repeat) {
-        event.preventDefault();
-        activateSpecial();
-        return;
-      }
       if (event.code === "Space") {
         event.preventDefault();
         if (
@@ -297,6 +300,8 @@ export function GameScene({
     )
       return;
     shotClock.current = INK_SHOT_INTERVAL;
+    control.lastShot = performance.now() / 1000;
+    const voiced = isVoicedNow();
     if (devMode)
       window.dispatchEvent(
         new CustomEvent("dev-paint", {
@@ -307,6 +312,7 @@ export function GameScene({
             team: "A",
             practiceColor: devColor.current,
             kind: "ink",
+            scale: inkShotScale(voiced),
           } satisfies PaintStroke,
         }),
       );
@@ -314,15 +320,13 @@ export function GameScene({
       roomRef.current?.state.phase === "playing" ||
       roomRef.current?.state.phase === "lobby"
     )
-      roomRef.current.send("paint", { kind: "ink" });
+      roomRef.current.send("paint", { kind: "ink", voiced });
   });
 
-  // Kept entirely outside Field's paint/snapshot/rasterization path.
-  const voiceEffects = useMemo(() => new InkEffects(), []);
+  // Experimental level inputs use the same authoritative paint path as clicks.
   const voicePulse = useMemo(() => new VoiceInkPulse(), []);
-  useEffect(() => () => voiceEffects.dispose(), [voiceEffects]);
+  const reactionSequence = useRef(reactionPreview.sequence);
   useFrame((_, delta) => {
-    voiceEffects.update(delta);
     const room = roomRef.current;
     const player = room?.state.players.get(room.sessionId);
     if (!devMode && !player) return;
@@ -332,25 +336,40 @@ export function GameScene({
       buttonInkInput.active,
       true,
     );
-    if (strength === null) return;
-    const practice =
-      !room ||
-      room.state.phase === "lobby" ||
-      room.state.phase === "team_selection";
-    const color = practice
-      ? (player?.practiceColor ?? colorA)
-      : player?.team === "B"
-        ? colorB
-        : colorA;
-    voiceEffects.setColors(color, color);
     const control = controls.current;
-    voiceEffects.emitVoice(
-      control.position.x,
-      control.position.z,
-      control.yaw,
-      strength,
-      control.height,
-    );
+    const emitPaint = (kind: "ink" | "reaction-fan" | "reaction-pair") => {
+      if (
+        control.specialTime >= 0 ||
+        control.keys.has("ShiftLeft") ||
+        control.keys.has("ShiftRight") ||
+        (player?.specialTime !== undefined && player.specialTime >= 0) ||
+        player?.dive
+      )
+        return;
+      control.lastShot = performance.now() / 1000;
+      const voiced = kind === "ink" && isVoicedNow();
+      if (devMode)
+        window.dispatchEvent(
+          new CustomEvent("dev-paint", {
+            detail: {
+              revision: 0,
+              ...control.position,
+              yaw: control.yaw,
+              team: "A",
+              practiceColor: colorA,
+              kind,
+              ...(kind === "ink" ? { scale: inkShotScale(voiced) } : {}),
+            } satisfies PaintStroke,
+          }),
+        );
+      else room?.send("paint", kind === "ink" ? { kind, voiced } : { kind });
+    };
+    if (reactionSequence.current !== reactionPreview.sequence) {
+      reactionSequence.current = reactionPreview.sequence;
+      const kind = reactionPaintKind(reactionPreview.level);
+      if (kind) emitPaint(kind);
+    }
+    if (strength !== null) emitPaint("ink");
   });
 
   const localId = roomRef.current?.sessionId;
@@ -372,7 +391,6 @@ export function GameScene({
         shadow-normalBias={0.03}
       />
 
-      <primitive object={voiceEffects.group} />
       <Field
         room={roomRef.current}
         devMode={devMode}
@@ -573,6 +591,7 @@ function DevPlayer({
       appearance.body.current,
       controls.current.specialTime,
       delta,
+      performance.now() / 1000 - controls.current.lastShot,
     );
     object.rotation.y = toModelRotation(controls.current.yaw);
     controls.current.height = object.position.y;
@@ -948,7 +967,12 @@ function Player({
           controls.current.keys.has("ShiftRight")
         : player.dive);
     appearance.update(diving, diving && player.submerged, delta);
-    specialAppearance(appearance.body.current, player.specialTime, delta);
+    specialAppearance(
+      appearance.body.current,
+      player.specialTime,
+      delta,
+      local ? performance.now() / 1000 - controls.current.lastShot : Infinity,
+    );
 
     if (!initialized.current) {
       predicted.current.set(player.x, 0, player.z);

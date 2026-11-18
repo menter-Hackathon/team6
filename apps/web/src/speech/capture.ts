@@ -10,7 +10,7 @@ export class MicrophoneCapture {
 
   async start(
     onSegment: (audio: Float32Array) => void,
-    onActivity: (level: number, speaking: boolean) => void,
+    onActivity: (level: number, speaking: boolean, sounding: boolean) => void,
   ): Promise<void> {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
       throw new Error("secure-context");
@@ -41,7 +41,7 @@ export class MicrophoneCapture {
       node.port.onmessage = (event: MessageEvent<Float32Array>) => {
         if (this.stopped) return;
         segmenter.push(event.data);
-        onActivity(segmenter.level, segmenter.speaking);
+        onActivity(segmenter.level, segmenter.speaking, segmenter.sounding);
       };
       const mute = context.createGain();
       mute.gain.value = 0;

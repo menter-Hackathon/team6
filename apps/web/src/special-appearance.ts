@@ -7,7 +7,12 @@ export function useSpecialAppearance() {
   const clock = useRef(-1),
     previous = useRef(-1),
     recovery = useRef(1);
-  return (body: THREE.Mesh | null, time: number, delta: number) => {
+  return (
+    body: THREE.Mesh | null,
+    time: number,
+    delta: number,
+    shotAge = Infinity,
+  ) => {
     if (!body) return;
     body.rotation.set(0, 0, 0);
     body.scale.set(1, 1, 1);
@@ -31,6 +36,17 @@ export function useSpecialAppearance() {
       body.scale.set(width, 1 - compression, width);
       body.position.y = (1 - compression) * 0.5;
       clock.current = -1;
+    }
+    if (time < 0 && shotAge >= 0 && shotAge < 0.25) {
+      const pulse = Math.exp(-shotAge * 18);
+      body.scale.multiply(
+        new THREE.Vector3(
+          1 - 0.035 * pulse,
+          1 - 0.12 * pulse,
+          1 - 0.035 * pulse,
+        ),
+      );
+      body.position.y -= 0.06 * pulse;
     }
     previous.current = time;
   };

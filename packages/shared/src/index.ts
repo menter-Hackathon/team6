@@ -78,16 +78,26 @@ export interface PlayerSnapshot {
 export const PAINT_GRID_SIZE = 2048;
 export const INK_SCALE = 1.4;
 export const INK_SPLAT_SCALE = 1.875;
+/** Normal ink is 0.9x; a shot fired while the shooter's mic hears voice is 1.2x. */
+export const INK_QUIET_SCALE = 0.9;
+export const INK_VOICED_SCALE = 1.2;
+export function inkShotScale(voiced: boolean | undefined): number {
+  return voiced ? INK_VOICED_SCALE : INK_QUIET_SCALE;
+}
 export const paintKindSchema = z.enum([
   "ring",
   "line",
   "fan",
+  "reaction-fan",
+  "reaction-pair",
   "ink",
   "footprint",
   "slam",
 ]);
 export const paintRequestSchema = z.object({
   kind: paintKindSchema.exclude(["footprint", "slam"]),
+  /** Local mic heard voice when the shot left; only affects `ink` size. */
+  voiced: z.boolean().optional(),
 });
 export const specialShapeSchema = z.enum(["ink", "star", "heart"]);
 export type SpecialShape = z.infer<typeof specialShapeSchema>;
@@ -107,6 +117,8 @@ export type PaintStroke = {
   /** Lobby-only palette color; match strokes use the assigned team. */
   practiceColor?: string;
   kind: z.infer<typeof paintKindSchema>;
+  /** Server-set size multiplier for `ink` splats (see INK_QUIET_SCALE / INK_VOICED_SCALE). */
+  scale?: number;
 };
 
 export { rasterizePaintStroke } from "./paint-raster.js";
@@ -127,3 +139,5 @@ export {
 } from "./special.js";
 
 export { specialOutline } from "./special-outline.js";
+
+export { reactionInkPattern, type ReactionInkDrop } from "./reaction-ink.js";

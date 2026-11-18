@@ -8,6 +8,7 @@ import {
   PAINT_GRID_SIZE,
   paintDisks,
   paintRequestSchema,
+  inkShotScale,
   rasterizePaintStroke,
   type PaintStroke,
 } from "./index.js";
@@ -109,5 +110,46 @@ describe("continuous walking trails", () => {
     expect(
       resumed.filter((d) => !d.organic).every((d) => d.x >= 4 && d.z === 4),
     ).toBe(true);
+  });
+});
+
+describe("voice-scaled ink", () => {
+  const base = {
+    revision: 1,
+    x: 0,
+    z: 0,
+    yaw: 0,
+    team: "A",
+    kind: "ink",
+  } as const;
+  it("keeps the impact point and scales the splat 0.9x quietly and 1.2x while voiced", () => {
+    const plain = paintDisks(base),
+      quiet = paintDisks({ ...base, scale: inkShotScale(false) }),
+      loud = paintDisks({ ...base, scale: inkShotScale(true) });
+    expect(quiet[0]!.x).toBeCloseTo(plain[0]!.x);
+    expect(quiet[0]!.z).toBeCloseTo(plain[0]!.z);
+    expect(quiet[0]!.radius).toBeCloseTo(plain[0]!.radius * 0.9);
+    expect(loud[0]!.radius).toBeCloseTo(plain[0]!.radius * 1.2);
+    expect(loud[3]!.z - loud[0]!.z).toBeCloseTo(
+      (plain[3]!.z - plain[0]!.z) * 1.2,
+    );
+  });
+  it("bounds malformed scales", () => {
+    const plain = paintDisks(base)[0]!.radius;
+    expect(paintDisks({ ...base, scale: 50 })[0]!.radius).toBeCloseTo(
+      plain * 1.5,
+    );
+    expect(paintDisks({ ...base, scale: Number.NaN })[0]!.radius).toBeCloseTo(
+      plain,
+    );
+  });
+  it("accepts the voiced flag on paint requests", () => {
+    expect(paintRequestSchema.parse({ kind: "ink", voiced: true })).toEqual({
+      kind: "ink",
+      voiced: true,
+    });
+    expect(
+      paintRequestSchema.safeParse({ kind: "ink", voiced: "yes" }).success,
+    ).toBe(false);
   });
 });
