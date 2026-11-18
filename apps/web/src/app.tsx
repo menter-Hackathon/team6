@@ -163,6 +163,11 @@ export function App() {
     gameState?.hostId === roomRef.current?.sessionId &&
     STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) &&
     players.every((player) => player.ready);
+  const canReplay =
+    gameState?.hostId === roomRef.current?.sessionId &&
+    STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) &&
+    players.filter((player) => player.team === "A").length === players.length / 2 &&
+    players.filter((player) => player.team === "B").length === players.length / 2;
   const devSpeakerBlocked =
     devMatchActive && devMatchTurn?.isYourTurn && devTeam === "A";
   const devAreaMultiplier =
@@ -608,6 +613,7 @@ export function App() {
               colorA={gameState.colorA}
               colorB={gameState.colorB}
               {...(roomRef.current ? { room: roomRef.current } : {})}
+              {...(canReplay ? { onReplay: () => roomRef.current?.send("replay") } : {})}
               onClose={leaveRoom}
             />
           )}

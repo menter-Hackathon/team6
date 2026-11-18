@@ -115,9 +115,7 @@ export function DevMatchFlow({
 
   const restart = () => {
     window.dispatchEvent(new Event("dev-reset-paint"));
-    setPhase("lobby");
-    setReady(false);
-    setShowLobby(true);
+    setPhase("team_selection");
     setTurnIndex(0);
     setResultCells(null);
   };

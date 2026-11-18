@@ -105,8 +105,8 @@ export function ResultFlow({
           />
           {onReplay ? (
             <div className="result-screen-actions">
-              <button onClick={onReplay}>もう一度スタート</button>
-              <button onClick={onClose}>検証を終了</button>
+              <button onClick={onReplay}>同じチームで再戦</button>
+              <button onClick={onClose}>{room ? "ルームを退出" : "検証を終了"}</button>
             </div>
           ) : preview ? (
             <div className="result-screen-actions">

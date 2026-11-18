@@ -202,6 +202,27 @@ export class GameRoom extends Room<{ state: GameState }> {
       ) return;
       this.assignTeams(Array.from(this.state.players.values()));
     });
+    this.onMessage("replay", (client) => {
+      if (client.sessionId !== this.state.hostId || this.state.phase !== "result") return;
+      const players = Array.from(this.state.players.values());
+      if (
+        !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
+        players.filter((player) => player.team === "A").length !== players.length / 2 ||
+        players.filter((player) => player.team === "B").length !== players.length / 2
+      ) return;
+      this.paint.reset();
+      this.lastPaint.clear();
+      this.state.scoreA = 0;
+      this.state.scoreB = 0;
+      this.state.turnIndex = 0;
+      this.state.turnEndsAt = 0;
+      this.state.countdownEndsAt = 0;
+      this.broadcast("paint-snapshot", {
+        revision: this.paint.revision,
+        data: deflateSync(this.paint.cells).toString("base64"),
+      });
+      this.state.phase = "team_selection";
+    });
     this.onMessage("start", (client) => {
       if (
         client.sessionId !== this.state.hostId ||
