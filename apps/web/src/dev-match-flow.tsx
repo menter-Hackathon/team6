@@ -13,7 +13,7 @@ import { TeamSelection } from "./team-selection";
 import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 
-type Phase = "lobby" | "team_selection" | "countdown" | "playing" | "result";
+export type DevMatchPhase = "lobby" | "team_selection" | "countdown" | "playing" | "result";
 
 export interface DevMatchTurn {
   count: 4 | 6 | 8;
@@ -28,6 +28,8 @@ interface Props {
   onColorSelect: (team: "A" | "B", color: string) => void;
   onCountChange: (count: number) => void;
   onTurnChange: (turn: DevMatchTurn | null) => void;
+  onPhaseChange: (phase: DevMatchPhase) => void;
+  onTeamOffsetChange: (offset: number) => void;
   onClose: () => void;
 }
 
@@ -38,43 +40,50 @@ export function DevMatchFlow({
   onColorSelect,
   onCountChange,
   onTurnChange,
+  onPhaseChange,
+  onTeamOffsetChange,
   onClose,
 }: Props) {
   const [count, setCount] = useState<4 | 6 | 8>(4);
-  const [phase, setPhase] = useState<Phase>("lobby");
+  const [phase, setPhase] = useState<DevMatchPhase>("lobby");
   const [ready, setReady] = useState(false);
   const [turnIndex, setTurnIndex] = useState(0);
   const [endsAt, setEndsAt] = useState(0);
   const [resultCells, setResultCells] = useState<Uint8Array | null>(null);
   const [showLobby, setShowLobby] = useState(true);
+  const [teamOffset, setTeamOffset] = useState(0);
+  const [talkDuration, setTalkDuration] = useState(PRESENTATION_SECONDS);
   const players = Array.from({ length: count }, (_, index) => ({
     id: index === 0 ? "you" : `com-${index}`,
     displayName: index === 0 ? "あなた" : `COM ${index}`,
-    team: (index % 2 === 0 ? "A" : "B") as "A" | "B",
+    team: ((index + teamOffset) % 2 === 0 ? "A" : "B") as "A" | "B",
     ready: index === 0 ? ready : true,
   }));
+
+  useEffect(() => onPhaseChange(phase), [phase, onPhaseChange]);
+  useEffect(() => onTeamOffsetChange(teamOffset), [teamOffset, onTeamOffsetChange]);
 
   useEffect(() => {
     onTurnChange(
       phase === "playing"
         ? {
             count,
-            speakerTeam: turnIndex % 2 === 0 ? "A" : "B",
-            isYourTurn: turnIndex === 0,
+            speakerTeam: players[turnIndex]!.team,
+            isYourTurn: players[turnIndex]!.id === "you",
           }
         : null,
     );
-  }, [phase, count, turnIndex, onTurnChange]);
+  }, [phase, count, turnIndex, teamOffset, ready, onTurnChange]);
 
   useEffect(() => {
     if (phase !== "countdown") return;
     const timer = window.setTimeout(() => {
       setTurnIndex(0);
-      setEndsAt(Date.now() + TURN_INTRO_MS + PRESENTATION_SECONDS * 1000);
+      setEndsAt(Date.now() + TURN_INTRO_MS + talkDuration * 1000);
       setPhase("playing");
     }, GAME_START_COUNTDOWN_SECONDS * 1000);
     return () => window.clearTimeout(timer);
-  }, [phase]);
+  }, [phase, talkDuration]);
 
   useEffect(() => {
     if (phase !== "playing") return;
@@ -87,13 +96,13 @@ export function DevMatchFlow({
           setPhase("result");
         } else {
           setTurnIndex(turnIndex + 1);
-          setEndsAt(Date.now() + TURN_INTRO_MS + PRESENTATION_SECONDS * 1000);
+          setEndsAt(Date.now() + TURN_INTRO_MS + talkDuration * 1000);
         }
       },
       Math.max(0, endsAt - Date.now()),
     );
     return () => window.clearTimeout(timer);
-  }, [phase, turnIndex, endsAt, count, cells]);
+  }, [phase, turnIndex, endsAt, count, cells, talkDuration]);
 
   const nextTurn = () => {
     if (turnIndex + 1 >= count) {
@@ -103,15 +112,13 @@ export function DevMatchFlow({
       setPhase("result");
     } else {
       setTurnIndex(turnIndex + 1);
-      setEndsAt(Date.now() + TURN_INTRO_MS + PRESENTATION_SECONDS * 1000);
+      setEndsAt(Date.now() + TURN_INTRO_MS + talkDuration * 1000);
     }
   };
 
   const restart = () => {
     window.dispatchEvent(new Event("dev-reset-paint"));
-    setPhase("lobby");
-    setReady(false);
-    setShowLobby(true);
+    setPhase("team_selection");
     setTurnIndex(0);
     setResultCells(null);
   };
@@ -193,7 +200,11 @@ export function DevMatchFlow({
           colorA={colorA}
           colorB={colorB}
           isHost
+          talkDuration={talkDuration}
+          onTalkDurationSelect={setTalkDuration}
           onColorSelect={onColorSelect}
+          onReshuffle={() => setTeamOffset((value) => value + 1)}
+          onReturnToLobby={() => { setPhase("lobby"); setReady(false); setShowLobby(true); }}
           onStart={startMatch}
         />
       )}
@@ -206,6 +217,7 @@ export function DevMatchFlow({
           turnNumber={turnIndex + 1}
           turnCount={count}
           endsAt={endsAt}
+          talkDuration={talkDuration}
         />
       )}
       {phase === "result" && resultCells && (

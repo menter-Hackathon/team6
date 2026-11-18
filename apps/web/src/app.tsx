@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { Client, type Room } from "@colyseus/sdk";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   GAME_ROOM_NAME,
   NEON_COLORS,
@@ -19,7 +19,7 @@ import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
 import { TeamSelection } from "./team-selection";
 import { TeamColorPicker } from "./team-color-picker";
-import { DevMatchFlow, type DevMatchTurn } from "./dev-match-flow";
+import { DevMatchFlow, type DevMatchPhase, type DevMatchTurn } from "./dev-match-flow";
 
 type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
 
@@ -67,7 +67,13 @@ export function App() {
   const [devMatchActive, setDevMatchActive] = useState(false);
   const [devMatchCount, setDevMatchCount] = useState(4);
   const [devMatchTurn, setDevMatchTurn] = useState<DevMatchTurn | null>(null);
+  const [devMatchPhase, setDevMatchPhase] = useState<DevMatchPhase>("lobby");
+  const [devTeamOffset, setDevTeamOffset] = useState(0);
   const [showTopicPopup, setShowTopicPopup] = useState(true);
+  const syncDevTeamOffset = useCallback((offset: number) => {
+    setDevTeamOffset(offset);
+    setDevTeam(offset % 2 === 0 ? "A" : "B");
+  }, []);
 
   const connect = async (create: boolean) => {
     if (!SERVER_URL) {
@@ -144,6 +150,8 @@ export function App() {
     setDevResult(null);
     setDevMatchActive(false);
     setDevMatchTurn(null);
+    setDevMatchPhase("lobby");
+    setDevTeamOffset(0);
   };
 
   const leaveRoom = () => {
@@ -160,9 +168,19 @@ export function App() {
   const canStart =
     gameState?.hostId === roomRef.current?.sessionId &&
     STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) &&
+    (gameState?.replayPlayerCount === 0 || players.length === gameState?.replayPlayerCount) &&
     players.every((player) => player.ready);
+  const canReplay =
+    gameState?.hostId === roomRef.current?.sessionId &&
+    STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) &&
+    players.filter((player) => player.team === "A").length === players.length / 2 &&
+    players.filter((player) => player.team === "B").length === players.length / 2;
   const devSpeakerBlocked =
-    devMatchActive && devMatchTurn?.isYourTurn && devTeam === "A";
+    devMatchActive && devMatchTurn?.isYourTurn === true;
+  const devMatchCanPaint =
+    !devMatchActive ||
+    devMatchPhase === "lobby" ||
+    (devMatchPhase === "playing" && devMatchTurn !== null && !devSpeakerBlocked);
   const devAreaMultiplier =
     devMatchActive &&
     devMatchTurn &&
@@ -356,6 +374,7 @@ export function App() {
         className="viewport"
         onContextMenu={(event) => event.preventDefault()}
       >
+        <div className="game-canvas-layer">
         <Canvas
           shadows
           camera={{ fov: 55, near: 0.1, far: 100, position: [0, 7, 9] }}
@@ -367,9 +386,12 @@ export function App() {
               playerIds={devMode ? [] : playerIds}
               devMode={devMode}
               devComCount={devMatchActive ? devMatchCount - 1 : 0}
+              devMatchPhase={devMatchActive ? devMatchPhase : undefined}
+              devTeamOffset={devTeamOffset}
               devTeam={devTeam}
               devAreaMultiplier={devAreaMultiplier}
-              devCanPaint={!devSpeakerBlocked}
+              devCanMove={!devMatchActive || devMatchPhase === "lobby" || devMatchPhase === "playing"}
+              devCanPaint={devMatchCanPaint}
               devPaintCells={devPaintCells}
               specialShape={specialShape}
               colorA={devMode ? devColorA : gameState?.colorA}
@@ -377,6 +399,7 @@ export function App() {
             />
           </Suspense>
         </Canvas>
+        </div>
         <label className="special-shape-picker">
           着地のインク
           <select
@@ -428,6 +451,8 @@ export function App() {
             colorB={devColorB}
             onCountChange={setDevMatchCount}
             onTurnChange={setDevMatchTurn}
+            onPhaseChange={setDevMatchPhase}
+            onTeamOffsetChange={syncDevTeamOffset}
             onColorSelect={(team, color) => {
               if (team === "A") setDevColorA(color);
               else setDevColorB(color);
@@ -435,6 +460,8 @@ export function App() {
             onClose={() => {
               setDevMatchActive(false);
               setDevMatchTurn(null);
+              setDevMatchPhase("lobby");
+              setDevTeamOffset(0);
             }}
           />
         )}
@@ -513,10 +540,9 @@ export function App() {
               isHost={gameState.hostId === roomRef.current?.sessionId}
               isReady={localPlayer?.ready ?? false}
               canStart={canStart}
+              requiredPlayerCount={gameState.replayPlayerCount}
               practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
-              onPracticeColorSelect={(color) =>
-                roomRef.current?.send("practice-color", color)
-              }
+              onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               onClose={() => setShowTopicPopup(false)}
               onReady={() => {
                 const nextReady = !localPlayer?.ready;
@@ -536,10 +562,9 @@ export function App() {
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
               canStart={canStart}
+              requiredPlayerCount={gameState.replayPlayerCount}
               practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
-              onPracticeColorSelect={(color) =>
-                roomRef.current?.send("practice-color", color)
-              }
+              onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               ready={localPlayer?.ready ?? false}
               readyCount={players.filter((player) => player.ready).length}
               onReady={() => {
@@ -560,16 +585,21 @@ export function App() {
               colorA={gameState.colorA}
               colorB={gameState.colorB}
               isHost={gameState.hostId === roomRef.current?.sessionId}
+              talkDuration={gameState.talkDuration}
+              onTalkDurationSelect={(seconds) => roomRef.current?.send("talk-duration", seconds)}
               onColorSelect={(team, color) =>
                 roomRef.current?.send("team-color", { team, color })
               }
+              onReshuffle={() => roomRef.current?.send("reshuffle-teams")}
+              onReturnToLobby={() => roomRef.current?.send("return-to-lobby")}
+              canStart={players.length === gameState.speakerOrder.length && (gameState.replayPlayerCount === 0 || players.length === gameState.replayPlayerCount)}
               onStart={() => roomRef.current?.send("start")}
             />
           )}
         {!devMode &&
           connectionState === "connected" &&
           gameState?.phase === "countdown" && (
-            <ProgressionPopup scene="countdown" />
+            <ProgressionPopup scene="countdown" countdownEndsAt={gameState.countdownEndsAt} />
           )}
         {!devMode &&
           connectionState === "connected" &&
@@ -590,6 +620,7 @@ export function App() {
               turnNumber={gameState.turnIndex}
               turnCount={gameState.speakerOrder.length}
               endsAt={gameState.turnEndsAt}
+              talkDuration={gameState.talkDuration}
             />
           )}
         {!devMode &&
@@ -601,6 +632,7 @@ export function App() {
               colorA={gameState.colorA}
               colorB={gameState.colorB}
               {...(roomRef.current ? { room: roomRef.current } : {})}
+              {...(canReplay ? { onReplay: () => roomRef.current?.send("replay") } : {})}
               onClose={leaveRoom}
             />
           )}

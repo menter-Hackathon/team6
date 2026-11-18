@@ -5,6 +5,7 @@ interface RoomSummaryProps {
   roomCode: string;
   names: string[];
   canStart?: boolean;
+  requiredPlayerCount?: number;
   onStart?: () => void;
   onClose?: () => void;
   practiceColor?: string;
@@ -18,6 +19,7 @@ export function RoomSummary({
   roomCode,
   names,
   canStart = false,
+  requiredPlayerCount = 0,
   onStart,
   onClose,
   practiceColor = "#ff4f8b",
@@ -71,10 +73,12 @@ export function RoomSummary({
           <li key={index}>{name}</li>
         ))}
       </ul>
-      <PracticeColorPicker
-        color={practiceColor}
-        onSelect={onPracticeColorSelect}
-      />
+      <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
+      {requiredPlayerCount > names.length && (
+        <p className="room-summary-waiting" role="status">
+          再戦にはあと{requiredPlayerCount - names.length}人の入室が必要です
+        </p>
+      )}
       {onReady && (
         <button
           className="room-summary-ready"
@@ -84,7 +88,7 @@ export function RoomSummary({
         >
           <span>{ready ? "準備完了 ✓" : "準備OKにする"}</span>
           <span className="room-summary-ready-count">
-            {readyCount}/{names.length}人
+            {readyCount}/{Math.max(requiredPlayerCount, names.length)}人
           </span>
         </button>
       )}

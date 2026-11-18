@@ -1,7 +1,7 @@
 import { Client, Room } from "@colyseus/core";
 import { randomBytes } from "node:crypto";
 import {
-  PRESENTATION_SECONDS,
+  talkDurationSchema,
   GAME_START_COUNTDOWN_SECONDS,
   TURN_INTRO_MS,
   advanceSpecial,
@@ -25,6 +25,7 @@ import {
   type MoveInput,
   countPaintedCells,
   speakerTeamAreaMultiplier,
+  teamStartPosition,
 } from "@gaya/shared";
 import { GameState, PlayerState } from "./game-state.js";
 import { PaintField } from "./paint.js";
@@ -54,8 +55,7 @@ export class GameRoom extends Room<{ state: GameState }> {
     );
 
     this.onMessage("move", (client, payload: unknown) => {
-      if (this.state.phase !== "playing" && this.state.phase !== "lobby")
-        return;
+      if (this.state.phase !== "playing" && this.state.phase !== "lobby") return;
       const result = moveInputSchema.safeParse(payload);
       if (!result.success) return;
 
@@ -124,8 +124,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.dives.delete(client.sessionId);
     });
     this.onMessage("jump", (client) => {
-      if (this.state.phase !== "lobby" && this.state.phase !== "playing")
-        return;
+      if (this.state.phase !== "lobby" && this.state.phase !== "playing") return;
       const player = this.state.players.get(client.sessionId);
       if (!player || player.jumpTime >= 0 || player.specialTime >= 0) return;
       player.jumpTime = 0;
@@ -155,6 +154,11 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (team === "A") this.state.colorA = color;
       else this.state.colorB = color;
     });
+    this.onMessage("talk-duration", (client, payload: unknown) => {
+      if (this.state.phase !== "team_selection" || client.sessionId !== this.state.hostId) return;
+      const parsed = talkDurationSchema.safeParse(payload);
+      if (parsed.success) this.state.talkDuration = parsed.data;
+    });
     this.onMessage("practice-color", (client, payload: unknown) => {
       if (this.state.phase !== "lobby") return;
       const parsed = practiceColorSchema.safeParse(payload);
@@ -171,12 +175,17 @@ export class GameRoom extends Room<{ state: GameState }> {
       const players = Array.from(this.state.players.values());
       if (
         !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
+        (this.state.replayPlayerCount > 0 && players.length !== this.state.replayPlayerCount) ||
         players.some((player) => !player.ready)
       )
         return;
-      const shuffled = [...players].sort(() => Math.random() - 0.5);
-      shuffled.forEach((player, index) => {
-        player.team = index < shuffled.length / 2 ? "A" : "B";
+      this.paint.reset();
+      this.broadcast("paint-snapshot", {
+        revision: this.paint.revision,
+        data: deflateSync(this.paint.cells).toString("base64"),
+      });
+      this.assignTeams(players);
+      players.forEach((player) => {
         player.specialTime = -1;
         player.jumpTime = -1;
         player.dive = false;
@@ -186,12 +195,46 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.movementInputs.forEach((_, sessionId) => {
         this.movementInputs.set(sessionId, { ...IDLE_INPUT });
       });
-      const order =
-        this.state.turnOrder === "random"
-          ? shuffled
-          : this.alternatingOrder(shuffled);
-      this.state.speakerOrder.push(...order.map((player) => player.id));
       this.state.phase = "team_selection";
+    });
+    this.onMessage("reshuffle-teams", (client) => {
+      if (
+        client.sessionId !== this.state.hostId ||
+        this.state.phase !== "team_selection"
+      ) return;
+      this.assignTeams(Array.from(this.state.players.values()));
+    });
+    this.onMessage("replay", (client) => {
+      if (client.sessionId !== this.state.hostId || this.state.phase !== "result") return;
+      const players = Array.from(this.state.players.values());
+      if (
+        !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
+        players.filter((player) => player.team === "A").length !== players.length / 2 ||
+        players.filter((player) => player.team === "B").length !== players.length / 2
+      ) return;
+      this.paint.reset();
+      this.lastPaint.clear();
+      this.state.scoreA = 0;
+      this.state.scoreB = 0;
+      this.state.turnIndex = 0;
+      this.state.turnEndsAt = 0;
+      this.state.countdownEndsAt = 0;
+      this.state.replayPlayerCount = players.length;
+      this.broadcast("paint-snapshot", {
+        revision: this.paint.revision,
+        data: deflateSync(this.paint.cells).toString("base64"),
+      });
+      this.state.phase = "team_selection";
+    });
+    this.onMessage("return-to-lobby", (client) => {
+      if (client.sessionId !== this.state.hostId || this.state.phase !== "team_selection") return;
+      this.state.phase = "lobby";
+      this.state.replayPlayerCount = 0;
+      this.state.speakerOrder.clear();
+      this.state.players.forEach((player) => {
+        player.team = "";
+        player.ready = false;
+      });
     });
     this.onMessage("start", (client) => {
       if (
@@ -199,7 +242,34 @@ export class GameRoom extends Room<{ state: GameState }> {
         this.state.phase !== "team_selection"
       )
         return;
+      const players = Array.from(this.state.players.values());
+      if (
+        !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
+        (this.state.replayPlayerCount > 0 && players.length !== this.state.replayPlayerCount) ||
+        players.some((player) => !player.ready) ||
+        players.filter((player) => player.team === "A").length !== players.length / 2 ||
+        players.filter((player) => player.team === "B").length !== players.length / 2
+      ) return;
+      this.state.replayPlayerCount = 0;
       this.paint.reset();
+      this.lastPaint.clear();
+      const teams = {
+        A: Array.from(this.state.players.values()).filter((player) => player.team === "A"),
+        B: Array.from(this.state.players.values()).filter((player) => player.team === "B"),
+      };
+      this.state.players.forEach((player, sessionId) => {
+        const team = player.team === "B" ? "B" : "A";
+        const position = teamStartPosition(team, teams[team].indexOf(player), teams[team].length);
+        player.x = position.x;
+        player.z = position.z;
+        player.yaw = position.yaw;
+        player.jumpTime = -1;
+        player.specialTime = -1;
+        player.dive = false;
+        player.submerged = false;
+        this.movementInputs.set(sessionId, { ...IDLE_INPUT });
+      });
+      this.dives.clear();
       this.state.scoreA = 0;
       this.state.scoreB = 0;
       this.broadcast("paint-snapshot", {
@@ -207,6 +277,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         data: deflateSync(this.paint.cells).toString("base64"),
       });
       this.state.phase = "countdown";
+      this.state.countdownEndsAt = Date.now() + GAME_START_COUNTDOWN_SECONDS * 1000;
       setTimeout(() => {
         if (this.state.phase !== "countdown") return;
         this.state.phase = "playing";
@@ -275,6 +346,25 @@ export class GameRoom extends Room<{ state: GameState }> {
     return a.flatMap((player, index) => [player, b[index]!]);
   }
 
+  private assignTeams(players: PlayerState[]): void {
+    const previous = players.map((player) => player.team).join("");
+    let shuffled: PlayerState[];
+    do {
+      shuffled = [...players];
+      for (let index = shuffled.length - 1; index > 0; index--) {
+        const swap = randomBytes(4).readUInt32BE(0) % (index + 1);
+        [shuffled[index], shuffled[swap]] = [shuffled[swap]!, shuffled[index]!];
+      }
+      shuffled.forEach((player, index) => {
+        player.team = index < shuffled.length / 2 ? "A" : "B";
+      });
+    } while (shuffled.length > 1 && players.map((player) => player.team).join("") === previous);
+    const order = this.state.turnOrder === "random"
+      ? shuffled
+      : this.alternatingOrder(shuffled);
+    this.state.speakerOrder.splice(0, this.state.speakerOrder.length, ...order.map((player) => player.id));
+  }
+
   private isSpeaker(sessionId: string): boolean {
     return (
       this.state.phase === "playing" &&
@@ -309,7 +399,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       return;
     }
     this.state.turnEndsAt =
-      Date.now() + TURN_INTRO_MS + PRESENTATION_SECONDS * 1000;
+      Date.now() + TURN_INTRO_MS + this.state.talkDuration * 1000;
     this.state.turnIndex += 1;
   }
 

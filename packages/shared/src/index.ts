@@ -35,6 +35,15 @@ export const INK_SHOT_INTERVAL = 0.17;
 export const INK_SHOT_SERVER_TOLERANCE = 0.02;
 export const PLAYER_SIZE = 1;
 export const PLAYER_RADIUS = PLAYER_SIZE * 0.45;
+export function teamStartPosition(team: "A" | "B", index: number, count: number) {
+  const sideMargin = 3;
+  const spread = FIELD_HALF_WIDTH - sideMargin;
+  return {
+    x: count === 1 ? 0 : -spread + (2 * spread * index) / (count - 1),
+    z: (team === "A" ? -1 : 1) * (FIELD_HALF_DEPTH - sideMargin),
+    yaw: team === "A" ? 0 : Math.PI,
+  };
+}
 export const JUMP_DURATION = 0.72;
 export const JUMP_HEIGHT = 1.2;
 export function advanceJump(time: number, deltaSeconds: number): number {
@@ -47,6 +56,10 @@ export function jumpHeight(time: number): number {
   return JUMP_HEIGHT * Math.sin((Math.PI * time) / JUMP_DURATION);
 }
 export const PRESENTATION_SECONDS = 30;
+export const TALK_DURATION_OPTIONS = [10, 20, 30, 40, 50, 60] as const;
+export const talkDurationSchema = z.number().int().refine(
+  (seconds) => TALK_DURATION_OPTIONS.some((option) => option === seconds),
+);
 export const GAME_START_COUNTDOWN_SECONDS = 7;
 export const TURN_INTRO_MS = 2650;
 export const STARTABLE_PLAYER_COUNTS = [4, 6, 8] as const;
