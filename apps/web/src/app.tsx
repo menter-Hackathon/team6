@@ -19,7 +19,7 @@ import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
 import { TeamSelection } from "./team-selection";
 import { TeamColorPicker } from "./team-color-picker";
-import { DevMatchFlow, type DevMatchTurn } from "./dev-match-flow";
+import { DevMatchFlow, type DevMatchPhase, type DevMatchTurn } from "./dev-match-flow";
 
 type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
 
@@ -67,6 +67,7 @@ export function App() {
   const [devMatchActive, setDevMatchActive] = useState(false);
   const [devMatchCount, setDevMatchCount] = useState(4);
   const [devMatchTurn, setDevMatchTurn] = useState<DevMatchTurn | null>(null);
+  const [devMatchPhase, setDevMatchPhase] = useState<DevMatchPhase>("lobby");
   const [showTopicPopup, setShowTopicPopup] = useState(true);
 
   const connect = async (create: boolean) => {
@@ -144,6 +145,7 @@ export function App() {
     setDevResult(null);
     setDevMatchActive(false);
     setDevMatchTurn(null);
+    setDevMatchPhase("lobby");
   };
 
   const leaveRoom = () => {
@@ -370,8 +372,8 @@ export function App() {
               devComCount={devMatchActive ? devMatchCount - 1 : 0}
               devTeam={devTeam}
               devAreaMultiplier={devAreaMultiplier}
-              devCanMove={!devMatchActive || devMatchTurn !== null}
-              devCanPaint={(!devMatchActive || devMatchTurn !== null) && !devSpeakerBlocked}
+              devCanMove={!devMatchActive || devMatchPhase === "lobby" || devMatchPhase === "playing"}
+              devCanPaint={(!devMatchActive || devMatchPhase === "lobby" || devMatchPhase === "playing") && !devSpeakerBlocked}
               devPaintCells={devPaintCells}
               specialShape={specialShape}
               colorA={devMode ? devColorA : gameState?.colorA}
@@ -431,6 +433,7 @@ export function App() {
             colorB={devColorB}
             onCountChange={setDevMatchCount}
             onTurnChange={setDevMatchTurn}
+            onPhaseChange={setDevMatchPhase}
             onColorSelect={(team, color) => {
               if (team === "A") setDevColorA(color);
               else setDevColorB(color);
@@ -438,6 +441,7 @@ export function App() {
             onClose={() => {
               setDevMatchActive(false);
               setDevMatchTurn(null);
+              setDevMatchPhase("lobby");
             }}
           />
         )}

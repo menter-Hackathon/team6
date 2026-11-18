@@ -375,12 +375,12 @@ export function GameScene({
               key={index}
               position={[Math.cos(angle) * 5, 0, Math.sin(angle) * 5]}
             >
-              <mesh castShadow position-y={0.6}>
-                <capsuleGeometry args={[0.4, 0.8, 6, 10]} />
-                <meshStandardMaterial color={team === "A" ? colorA : colorB} />
+              <mesh castShadow receiveShadow position-y={0.5}>
+                <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
+                <meshStandardMaterial color={team === "A" ? colorA : colorB} roughness={0.45} metalness={0.1} />
               </mesh>
-              <Html position={[0, 1.8, 0]} center zIndexRange={[2, 0]} style={{ pointerEvents: "none" }}>
-                <span className="player-gamertag">COM {index + 1}</span>
+              <Html position={[0, 1.55, 0]} center zIndexRange={[2, 0]} style={{ pointerEvents: "none" }}>
+                <span className="player-gamertag" style={{ borderColor: team === "A" ? colorA : colorB }}>COM {index + 1}</span>
               </Html>
             </group>
           );

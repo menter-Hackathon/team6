@@ -13,7 +13,7 @@ import { TeamSelection } from "./team-selection";
 import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 
-type Phase = "lobby" | "team_selection" | "countdown" | "playing" | "result";
+export type DevMatchPhase = "lobby" | "team_selection" | "countdown" | "playing" | "result";
 
 export interface DevMatchTurn {
   count: 4 | 6 | 8;
@@ -28,6 +28,7 @@ interface Props {
   onColorSelect: (team: "A" | "B", color: string) => void;
   onCountChange: (count: number) => void;
   onTurnChange: (turn: DevMatchTurn | null) => void;
+  onPhaseChange: (phase: DevMatchPhase) => void;
   onClose: () => void;
 }
 
@@ -38,10 +39,11 @@ export function DevMatchFlow({
   onColorSelect,
   onCountChange,
   onTurnChange,
+  onPhaseChange,
   onClose,
 }: Props) {
   const [count, setCount] = useState<4 | 6 | 8>(4);
-  const [phase, setPhase] = useState<Phase>("lobby");
+  const [phase, setPhase] = useState<DevMatchPhase>("lobby");
   const [ready, setReady] = useState(false);
   const [turnIndex, setTurnIndex] = useState(0);
   const [endsAt, setEndsAt] = useState(0);
@@ -55,6 +57,8 @@ export function DevMatchFlow({
     team: ((index + teamOffset) % 2 === 0 ? "A" : "B") as "A" | "B",
     ready: index === 0 ? ready : true,
   }));
+
+  useEffect(() => onPhaseChange(phase), [phase, onPhaseChange]);
 
   useEffect(() => {
     onTurnChange(
