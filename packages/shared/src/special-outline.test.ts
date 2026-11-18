@@ -52,11 +52,11 @@ describe("special ink silhouettes", () => {
     expect(star(0.62, 0.6)).toBe(false);
   });
   it("validates shape requests and reproduces the same server/client shape", () => {
-    expect(specialRequestSchema.parse({}).shape).toBe("star");
+    expect(specialRequestSchema.parse({}).shape).toBe("ink");
     expect(specialRequestSchema.safeParse({ shape: "other" }).success).toBe(
       false,
     );
-    expect(specialRequestSchema.parse({ shape: "heart" }).shape).toBe("heart");
+    expect(specialRequestSchema.parse({ shape: "heart" }).shape).toBe("ink");
     expect(specialRequestSchema.parse({ shape: "ink" }).shape).toBe("ink");
     const normal = paintDisks({ ...base, specialShape: "ink" })[0]!;
     expect(normal.organic).toBe(true);

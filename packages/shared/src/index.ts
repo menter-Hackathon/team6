@@ -31,6 +31,7 @@ export const DIVE_SPEED = PLAYER_SPEED * 1.5;
 export const DISC_SPEED = PLAYER_SPEED;
 export const DIVE_GAP_SECONDS = 0.28;
 export const INK_SHOT_INTERVAL = 0.17;
+export const REACTION_SHOT_INTERVAL = 0.32;
 // Allow one frame of timing jitter when the server checks client-paced shots.
 export const INK_SHOT_SERVER_TOLERANCE = 0.02;
 export const PLAYER_SIZE = 1;
@@ -91,7 +92,25 @@ export interface PlayerSnapshot {
 export const PAINT_GRID_SIZE = 2048;
 export const INK_SCALE = 1.4;
 export const INK_SPLAT_SCALE = 1.875;
+/**
+ * Ink size by the shooter's voice when the shot left (D-085):
+ * silent 0.9x, voiced 1.2x, still speaking a long sentence 1.5x.
+ */
+export const INK_QUIET_SCALE = 0.9;
+export const INK_VOICED_SCALE = 1.2;
+export const INK_LONG_SPEECH_SCALE = 1.5;
+export const inkVoiceSchema = z.enum(["voiced", "long"]);
+export type InkVoice = z.infer<typeof inkVoiceSchema>;
+export function inkShotScale(voice: InkVoice | undefined): number {
+  return voice === "long"
+    ? INK_LONG_SPEECH_SCALE
+    : voice === "voiced"
+      ? INK_VOICED_SCALE
+      : INK_QUIET_SCALE;
+}
 export const paintKindSchema = z.enum([
+  "reaction-fan",
+  "reaction-pair",
   "ring",
   "line",
   "fan",
@@ -101,16 +120,21 @@ export const paintKindSchema = z.enum([
 ]);
 export const paintRequestSchema = z.object({
   kind: paintKindSchema.exclude(["footprint", "slam"]),
+  /** Shooter's voice when the shot left; only affects `ink` size. */
+  voice: inkVoiceSchema.optional(),
   pitch: z.number().finite().min(-Math.PI / 3).max(Math.PI / 3).optional(),
 });
 export const specialShapeSchema = z.enum(["ink", "star", "heart"]);
 export type SpecialShape = z.infer<typeof specialShapeSchema>;
 export const specialRequestSchema = z.object({
-  shape: specialShapeSchema.default("star"),
+  // Accept legacy requests, while keeping all current landing paint organic.
+  shape: specialShapeSchema.default("ink").transform(() => "ink" as const),
 });
 export type PaintStroke = {
   specialShape?: SpecialShape;
   revision: number;
+  /** Server-generated actor for cosmetic response motion. */
+  actorId?: string;
   /** Server-generated start of a continuous walking segment. */
   fromX?: number;
   fromZ?: number;
@@ -123,6 +147,8 @@ export type PaintStroke = {
   /** Lobby-only palette color; match strokes use the assigned team. */
   practiceColor?: string;
   kind: z.infer<typeof paintKindSchema>;
+  /** Server-set size multiplier for `ink` splats (see inkShotScale). */
+  scale?: number;
   /** Server-assigned area multiplier for the speaker's team. */
   areaMultiplier?: number;
 };
@@ -149,6 +175,21 @@ export {
 } from "./special.js";
 
 export { specialOutline } from "./special-outline.js";
+
+export { reactionInkPattern, type ReactionInkDrop } from "./reaction-ink.js";
+export {
+  EPISODE_MAX_LENGTH,
+  episodeSchema,
+  reactionLevelSchema,
+  reactionRequestSchema,
+  reactionResponseSchema,
+  reactionEffect,
+  reactionForKey,
+  REACTION_KEYS,
+  type ReactionLevel,
+  type ReactionDecision,
+  type ReactionSegment,
+} from "./reaction.js";
 export {
   PRESENTATION_TOPICS,
   createTopicDeck,

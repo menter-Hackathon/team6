@@ -17,7 +17,13 @@ import { ProgressionPopup, type PopupScene } from "./progression-popup";
 import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
+import {
+  EMPTY_EPISODE_DRAFT,
+  EpisodeInput,
+  type EpisodeDraft,
+} from "./episode-input";
 import { TeamSelection } from "./team-selection";
+import { TranscriptionPanel } from "./speech/transcription-panel";
 import { TeamColorPicker } from "./team-color-picker";
 import { DevMatchFlow, type DevMatchPhase, type DevMatchTurn } from "./dev-match-flow";
 
@@ -33,7 +39,11 @@ const SERVER_URL =
 
 export function App() {
   const [showDevObstacles, setShowDevObstacles] = useState(true);
-  const [specialShape, setSpecialShape] = useState<SpecialShape>("star");
+  const [autoFire, setAutoFire] = useState(true);
+  // D-086: the star/heart picker stays hidden; the special always lands as ink.
+  const specialShape: SpecialShape = "ink";
+  const [episodeDraft, setEpisodeDraft] =
+    useState<EpisodeDraft>(EMPTY_EPISODE_DRAFT);
   const [devColorA, setDevColorA] = useState<string>(NEON_COLORS[0]!.hex);
   const [devColorB, setDevColorB] = useState<string>(NEON_COLORS[1]!.hex);
   const [devTeam, setDevTeam] = useState<"A" | "B">("A");
@@ -62,6 +72,8 @@ export function App() {
   );
   const [turnOrder, setTurnOrder] = useState("alternating");
   const [roomCode, setRoomCode] = useState("");
+  // A story belongs to one room; start fresh when the room changes.
+  useEffect(() => setEpisodeDraft(EMPTY_EPISODE_DRAFT), [roomCode]);
   const [errorMessage, setErrorMessage] = useState("");
   const [previewPopup, setPreviewPopup] = useState<PopupScene | null>(null);
   const [previewReady, setPreviewReady] = useState(false);
@@ -191,6 +203,18 @@ export function App() {
       ? speakerTeamAreaMultiplier(devMatchTurn.count / 2)
       : 1;
 
+  // D-090: one story field, shown in whichever lobby view is open.
+  const episodeInput = (
+    <EpisodeInput
+      draft={episodeDraft}
+      onDraftChange={setEpisodeDraft}
+      saved={localPlayer?.hasEpisode ?? false}
+      enteredCount={players.filter((player) => player.hasEpisode).length}
+      playerCount={players.length}
+      onSave={(text) => roomRef.current?.send("episode", text)}
+    />
+  );
+
   return (
     <main className="game-shell">
       <header className="hud">
@@ -198,6 +222,16 @@ export function App() {
           <p className="eyebrow">GAYA SPLATOON / PARTY GAME</p>
           <h1>ガヤでスプラトゥーン</h1>
         </div>
+        <TranscriptionPanel
+          roomId={
+            connectionState === "connected" && roomCode ? roomCode : undefined
+          }
+          userNames={
+            players.length
+              ? players.map((player) => player.displayName)
+              : [displayName].filter(Boolean)
+          }
+        />
         <button className="hud-dev-button" onClick={toggleDevMode}>
           {devMode ? "検証モードを終了" : "操作を検証"}
         </button>
@@ -328,7 +362,10 @@ export function App() {
             <li>WASD・矢印キー：移動</li>
             <li>クリック：視点回転／長押しでインク発射</li>
             <li>Shift：潜航 / Space：ジャンプ</li>
-            <li>Q・E：塗り分け / Esc：視点回転を解除</li>
+            <li>
+              1・F：回転ジャンプ / 2：扇状 / 3：通常 / 4：除外（塗らない） /
+              Esc：視点回転を解除
+            </li>
           </ul>
           <p>座標と向きは画面左下に表示します。</p>
           <TeamColorPicker
@@ -418,6 +455,7 @@ export function App() {
               playerIds={devMode ? [] : playerIds}
               devMode={devMode}
               showDevObstacles={showDevObstacles}
+              autoFire={autoFire}
               devComCount={devMatchActive ? devMatchCount - 1 : 0}
               devMatchPhase={devMatchActive ? devMatchPhase : undefined}
               devTeamOffset={devTeamOffset}
@@ -433,19 +471,15 @@ export function App() {
           </Suspense>
         </Canvas>
         </div>
-        <label className="special-shape-picker">
-          着地のインク
-          <select
-            id="special-shape"
-            aria-label="必殺技の塗り形"
-            value={specialShape}
-            onChange={(e) => setSpecialShape(e.target.value as SpecialShape)}
-          >
-            <option value="ink">● 通常インク</option>
-            <option value="star">★ 星＋インク</option>
-            <option value="heart">♥ ハート＋インク</option>
-          </select>
-        </label>
+        <button
+          className="auto-fire-toggle"
+          aria-label="通常インクの常時発射"
+          aria-pressed={autoFire}
+          onClick={() => setAutoFire((active) => !active)}
+        >
+          <span aria-hidden="true">{autoFire ? "●" : "○"}</span>{" "}
+          通常インク常時発射：{autoFire ? "ON" : "OFF"}
+        </button>
         <button
           id="special-button"
           className="special-button"
@@ -579,6 +613,7 @@ export function App() {
               practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
               onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               onClose={() => setShowTopicPopup(false)}
+              episodeInput={episodeInput}
               onReady={() => {
                 const nextReady = !localPlayer?.ready;
                 roomRef.current?.send("ready", nextReady);
@@ -607,6 +642,7 @@ export function App() {
                 roomRef.current?.send("ready", nextReady);
                 if (!nextReady) setShowTopicPopup(true);
               }}
+              episodeInput={episodeInput}
               {...(gameState.hostId === roomRef.current?.sessionId
                 ? { onStart: () => roomRef.current?.send("prepare-teams") }
                 : {})}

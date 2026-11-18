@@ -1,3 +1,4 @@
+import { reactionInkPattern } from "./reaction-ink.js";
 import {
   FIELD_HALF_WIDTH,
   FIELD_HALF_DEPTH,
@@ -55,7 +56,17 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
       z: stroke.z + dz * forward - dx * side,
       radius,
     });
-  if (stroke.kind === "slam" && stroke.specialShape === "ink") {
+  if (stroke.kind === "reaction-fan" || stroke.kind === "reaction-pair") {
+    for (const drop of reactionInkPattern(stroke.kind)) {
+      const angle = stroke.yaw + drop.angle;
+      disks.push({
+        x: stroke.x - Math.sin(angle) * drop.reach,
+        z: stroke.z + Math.cos(angle) * drop.reach,
+        radius: drop.spreadRadius,
+        organic: true,
+      });
+    }
+  } else if (stroke.kind === "slam" && stroke.specialShape === "ink") {
     disks.push({
       x: stroke.x,
       z: stroke.z,
@@ -192,26 +203,24 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
     }
   }
   const impact = stroke.kind === "ink" ? disks[0] : undefined;
+  // Voice scale (ink only, bounded so a malformed stroke cannot paint an arbitrarily
+  // large area) and the speaker team's area buff both widen the splat around its anchor.
+  const voiceScale =
+    impact && Number.isFinite(stroke.scale)
+      ? Math.max(0.5, Math.min(1.5, stroke.scale!))
+      : 1;
   const radiusMultiplier = Math.sqrt(stroke.areaMultiplier ?? 1);
   const anchor =
     stroke.kind === "footprint"
       ? undefined
       : (impact ?? { x: stroke.x, z: stroke.z });
+  const spread = (impact ? INK_SPLAT_SCALE * voiceScale : 1) * radiusMultiplier;
   return disks.map((disk) => ({
     ...disk,
-    x: anchor
-      ? anchor.x +
-        (disk.x - anchor.x) * (impact ? INK_SPLAT_SCALE : 1) * radiusMultiplier
-      : disk.x,
-    z: anchor
-      ? anchor.z +
-        (disk.z - anchor.z) * (impact ? INK_SPLAT_SCALE : 1) * radiusMultiplier
-      : disk.z,
+    x: anchor ? anchor.x + (disk.x - anchor.x) * spread : disk.x,
+    z: anchor ? anchor.z + (disk.z - anchor.z) * spread : disk.z,
     radius:
-      disk.radius *
-      (stroke.kind === "footprint" ? 1 : INK_SCALE) *
-      (impact ? INK_SPLAT_SCALE : 1) *
-      radiusMultiplier,
+      disk.radius * (stroke.kind === "footprint" ? 1 : INK_SCALE) * spread,
   }));
 }
 

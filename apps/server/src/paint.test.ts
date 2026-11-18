@@ -92,3 +92,20 @@ describe("PaintField", () => {
     expect(isFootprintOwned(cells, 0, 2, 1)).toBe(field.fullyOwnedAt(0, 2, 1));
   });
 });
+
+it("retains reaction fan and pair paint in the authoritative grid", () => {
+  for (const kind of ["reaction-fan", "reaction-pair"] as const) {
+    const field = new PaintField();
+    field.apply({ revision: 1, x: 0, z: 0, yaw: 0, team: "A", kind });
+    expect(field.counts[1]).toBeGreaterThan(0);
+    field.apply({
+      revision: 2,
+      x: -10,
+      z: -20,
+      yaw: 0,
+      team: "B",
+      kind: "ink",
+    });
+    expect(field.ownerAt(0, kind === "reaction-fan" ? 5.7 : 2.7)).toBe(1);
+  }
+});
