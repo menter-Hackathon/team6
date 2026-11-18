@@ -4,6 +4,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import {
   GAME_ROOM_NAME,
   NEON_COLORS,
+  PAINT_GRID_SIZE,
+  countPaintedCells,
   STARTABLE_PLAYER_COUNTS,
   TURN_INTRO_MS,
   type SpecialShape,
@@ -31,6 +33,9 @@ export function App() {
   const [specialShape, setSpecialShape] = useState<SpecialShape>("star");
   const [devColorA, setDevColorA] = useState<string>(NEON_COLORS[0]!.hex);
   const [devColorB, setDevColorB] = useState<string>(NEON_COLORS[1]!.hex);
+  const [devTeam, setDevTeam] = useState<"A" | "B">("A");
+  const devPaintCells = useRef<Uint8Array | null>(null);
+  const [devResult, setDevResult] = useState<{ cells: Uint8Array; scoreA: number; scoreB: number } | null>(null);
   const [devMode, setDevMode] = useState(() =>
     new URLSearchParams(location.search).has("dev"),
   );
@@ -125,6 +130,7 @@ export function App() {
     setDevMode(next);
     setPreviewPopup(null);
     setPreviewReady(false);
+    setDevResult(null);
   };
 
   const leaveRoom = () => {
@@ -262,6 +268,11 @@ export function App() {
               else setDevColorB(color);
             }}
           />
+          <div className="dev-team-picker" role="group" aria-label="塗るチーム">
+            <span>塗るチーム：</span>
+            <button aria-pressed={devTeam === "A"} onClick={() => setDevTeam("A")}>A</button>
+            <button aria-pressed={devTeam === "B"} onClick={() => setDevTeam("B")}>B</button>
+          </div>
           <h3>進行ポップアップを確認</h3>
           <div className="popup-preview-buttons">
             {(["lobby", "countdown", "turn", "result"] as const).map(
@@ -269,6 +280,10 @@ export function App() {
                 <button
                   key={scene}
                   onClick={() => {
+                    if (scene === "result") {
+                      const cells = devPaintCells.current?.slice() ?? new Uint8Array(PAINT_GRID_SIZE ** 2);
+                      setDevResult({ cells, ...countPaintedCells(cells) });
+                    }
                     setPreviewPopup(scene);
                     setPreviewReady(false);
                   }}
@@ -302,6 +317,8 @@ export function App() {
               roomRef={roomRef}
               playerIds={devMode ? [] : playerIds}
               devMode={devMode}
+              devTeam={devTeam}
+              devPaintCells={devPaintCells}
               specialShape={specialShape}
               colorA={devMode ? devColorA : gameState?.colorA}
               colorB={devMode ? devColorB : gameState?.colorB}
@@ -366,8 +383,9 @@ export function App() {
         )}
         {devMode && previewPopup === "result" && (
           <ResultFlow
-            scoreA={1240}
-            scoreB={980}
+            scoreA={devResult?.scoreA ?? 0}
+            scoreB={devResult?.scoreB ?? 0}
+            {...(devResult ? { cells: devResult.cells } : {})}
             colorA={devColorA}
             colorB={devColorB}
             preview

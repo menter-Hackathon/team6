@@ -110,6 +110,7 @@ export type PaintStroke = {
 };
 
 export { rasterizePaintStroke } from "./paint-raster.js";
+export { countPaintedCells } from "./paint-result.js";
 export { isFootprintOwned } from "./paint-ownership.js";
 
 export {

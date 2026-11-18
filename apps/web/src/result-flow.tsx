@@ -9,6 +9,7 @@ interface ResultFlowProps {
   colorA?: string;
   colorB?: string;
   preview?: boolean;
+  cells?: Uint8Array;
   room?: Room<GameState>;
   onClose?: () => void;
 }
@@ -19,6 +20,7 @@ export function ResultFlow({
   colorA = "#ff4f8b",
   colorB = "#37d9ff",
   preview = false,
+  cells,
   room,
   onClose,
 }: ResultFlowProps) {
@@ -94,7 +96,7 @@ export function ResultFlow({
           </div>
           <PaintOverview
             room={room}
-            preview={preview}
+            {...(cells ? { cells } : {})}
             revealed={revealed}
             colorA={colorA}
             colorB={colorB}

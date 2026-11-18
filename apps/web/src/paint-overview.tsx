@@ -1,13 +1,14 @@
 import { useEffect, useRef } from "react";
 import type { Room } from "@colyseus/sdk";
-import { PAINT_GRID_SIZE } from "@gaya/shared";
+import { FIELD_HALF_DEPTH, FIELD_HALF_WIDTH, PAINT_GRID_SIZE } from "@gaya/shared";
 import type { GameState } from "./game-types";
 
-const MAP_SIZE = 512;
+const MAP_WIDTH = 512;
+const MAP_HEIGHT = Math.round(MAP_WIDTH * FIELD_HALF_WIDTH / FIELD_HALF_DEPTH);
 
 interface PaintOverviewProps {
   room?: Room<GameState> | undefined;
-  preview?: boolean;
+  cells?: Uint8Array;
   revealed: boolean;
   colorA: string;
   colorB: string;
@@ -15,7 +16,7 @@ interface PaintOverviewProps {
 
 export function PaintOverview({
   room,
-  preview = false,
+  cells,
   revealed,
   colorA,
   colorB,
@@ -33,27 +34,18 @@ export function PaintOverview({
     const rgbB = [1, 3, 5].map((index) =>
       parseInt(colorB.slice(index, index + 2), 16),
     );
-    const draw = (cells?: Uint8Array) => {
+    const draw = (mapCells?: Uint8Array) => {
       if (disposed) return;
-      const image = context.createImageData(MAP_SIZE, MAP_SIZE);
-      for (let y = 0; y < MAP_SIZE; y++) {
-        for (let x = 0; x < MAP_SIZE; x++) {
-          const owner = cells
-            ? cells[
-                Math.floor((y * PAINT_GRID_SIZE) / MAP_SIZE) * PAINT_GRID_SIZE +
-                  Math.floor((x * PAINT_GRID_SIZE) / MAP_SIZE)
+      const image = context.createImageData(MAP_WIDTH, MAP_HEIGHT);
+      for (let y = 0; y < MAP_HEIGHT; y++) {
+        for (let x = 0; x < MAP_WIDTH; x++) {
+          const owner = mapCells
+            ? mapCells[
+                Math.floor((x * PAINT_GRID_SIZE) / MAP_WIDTH) * PAINT_GRID_SIZE +
+                  Math.floor(((MAP_HEIGHT - 1 - y) * PAINT_GRID_SIZE) / MAP_HEIGHT)
               ]
-            : preview
-              ? Math.sin(x * 0.07) +
-                  Math.cos(y * 0.09) +
-                  Math.sin((x + y) * 0.045) >
-                0.6
-                ? 1
-                : Math.sin(x * 0.055 - y * 0.08) > -0.2
-                  ? 2
-                  : 0
-              : 0;
-          const offset = (y * MAP_SIZE + x) * 4;
+            : 0;
+          const offset = (y * MAP_WIDTH + x) * 4;
           const rgb = owner === 1 ? rgbA : owner === 2 ? rgbB : [206, 215, 205];
           image.data[offset] = rgb[0]!;
           image.data[offset + 1] = rgb[1]!;
@@ -63,7 +55,7 @@ export function PaintOverview({
       }
       context.putImageData(image, 0, 0);
     };
-    draw();
+    draw(cells);
     if (!room)
       return () => {
         disposed = true;
@@ -92,7 +84,7 @@ export function PaintOverview({
       disposed = true;
       remove?.();
     };
-  }, [room, preview, colorA, colorB]);
+  }, [room, cells, colorA, colorB]);
 
   return (
     <div
@@ -100,8 +92,8 @@ export function PaintOverview({
     >
       <canvas
         ref={canvasRef}
-        width={MAP_SIZE}
-        height={MAP_SIZE}
+        width={MAP_WIDTH}
+        height={MAP_HEIGHT}
         role="img"
         aria-label="試合終了時の陣地を上から見た地図"
       />
