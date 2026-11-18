@@ -1707,3 +1707,34 @@ canvas {
 .result-screen-actions button, .result-leave { border-radius: 0; font-weight: 1000; box-shadow: 5px 5px 0 #09090d; }
 .player-gamertag { padding: 5px 10px; border-width: 2px; background: #15121bdc; box-shadow: 3px 3px 0 #09080d; font-weight: 1000; transform: rotate(-2deg); }
 @media (max-width: 620px) { .hud { gap: 8px; padding: 9px 10px; } .hud-dev-button { font-size: 10px; padding: 6px; } .status { font-size: 10px; padding: 6px; } .lobby-panel--entry { padding: 21px; } }
+
+/* Dedicated URL-only screenshot view; normal game UI is unchanged. */
+.game-shell--capture > .hud,
+.game-shell--capture > .lobby-panel,
+.game-shell--capture .viewport > :not(.game-canvas-layer) { display: none !important; }
+.game-shell--capture .viewport { position: fixed; inset: 0; width: 100vw; height: 100vh; border: 0; border-radius: 0; }
+.game-shell--capture .game-canvas-layer { position: absolute; inset: 0; }
+.game-shell--capture { padding: 0; }
+
+/* Keep the live scene mounted while hiding its surrounding controls. */
+.game-shell--panels-hidden > .hud,
+.game-shell--panels-hidden > .lobby-panel,
+.game-shell--panels-hidden .viewport > :not(.game-canvas-layer) { display: none !important; }
+.game-shell--panels-hidden .viewport { position: fixed; inset: 0; width: 100vw; height: 100vh; border: 0; border-radius: 0; }
+.game-shell--panels-hidden .game-canvas-layer { position: absolute; inset: 0; }
+.game-shell--panels-hidden { padding: 0; }
+.panels-restore-button {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2000;
+  padding: 8px 12px;
+  border: 1px solid #ffffff80;
+  border-radius: 6px;
+  background: #17131dcc;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.panels-restore-button:focus-visible { outline: 3px solid #ff4f8b; outline-offset: 3px; }

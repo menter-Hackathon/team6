@@ -41,8 +41,10 @@ const SERVER_URL =
       : "");
 
 export function App() {
-  const [showDevObstacles, setShowDevObstacles] = useState(true);
-  const [autoFire, setAutoFire] = useState(true);
+  const captureMode = new URLSearchParams(location.search).has("capture");
+  const [panelsHidden, setPanelsHidden] = useState(false);
+  const [showDevObstacles, setShowDevObstacles] = useState(false);
+  const [autoFire, setAutoFire] = useState(!captureMode);
   // D-086: the star/heart picker stays hidden; the special always lands as ink.
   const specialShape: SpecialShape = "ink";
   const [episodeDraft, setEpisodeDraft] =
@@ -224,7 +226,7 @@ export function App() {
   );
 
   return (
-    <main className="game-shell">
+    <main className={`game-shell${captureMode ? " game-shell--capture" : ""}${panelsHidden ? " game-shell--panels-hidden" : ""}`}>
       <header className="hud">
         <div>
           <p className="eyebrow">GAYA SPLATOON / PARTY GAME</p>
@@ -240,6 +242,13 @@ export function App() {
               : [displayName].filter(Boolean)
           }
         />
+        <button
+          type="button"
+          className="hud-dev-button"
+          onClick={(event) => { setPanelsHidden(true); event.currentTarget.blur(); }}
+        >
+          操作パネルを隠す
+        </button>
         <button className="hud-dev-button" onClick={toggleDevMode}>
           {devMode ? "検証モードを終了" : "操作を検証"}
         </button>
@@ -254,6 +263,15 @@ export function App() {
                 : "ルーム未参加"}
         </div>
       </header>
+      {panelsHidden && !captureMode && (
+        <button
+          type="button"
+          className="panels-restore-button"
+          onClick={(event) => { setPanelsHidden(false); event.currentTarget.blur(); }}
+        >
+          操作パネルを表示
+        </button>
+      )}
 
       {!devMode && connectionState !== "connected" ? (
         <EntryScreen
