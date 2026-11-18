@@ -58,6 +58,7 @@ export class GameRoom extends Room<{ state: GameState }> {
     this.roomId = randomBytes(4).toString("hex").toUpperCase();
     this.setState(new GameState());
     this.state.turnOrder = settings.turnOrder;
+    this.state.talkDuration = settings.talkDuration;
     registerEpisodeSource(this.roomId, () => this.currentEpisode());
     this.setPatchRate(1000 / SERVER_TICK_RATE);
     this.setSimulationInterval(
@@ -169,11 +170,16 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (parsed.data) this.episodes.set(client.sessionId, parsed.data);
       else this.episodes.delete(client.sessionId);
       player.hasEpisode = parsed.data.length > 0;
+      // Clearing the episode also clears readiness (ready requires an episode).
+      if (!player.hasEpisode) player.ready = false;
     });
     this.onMessage("ready", (client, payload: unknown) => {
       if (this.state.phase !== "lobby" || typeof payload !== "boolean") return;
       const player = this.state.players.get(client.sessionId);
-      if (player) player.ready = payload;
+      if (!player) return;
+      // A player can get ready only after entering the episode they will tell.
+      if (payload && !this.episodes.has(client.sessionId)) return;
+      player.ready = payload;
     });
     this.onMessage("team-color", (client, payload: unknown) => {
       if (

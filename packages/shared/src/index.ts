@@ -70,6 +70,8 @@ export const STARTABLE_PLAYER_COUNTS = [4, 6, 8] as const;
 export const roomOptionsSchema = z.object({
   displayName: z.string().trim().min(1).max(20),
   turnOrder: z.enum(["alternating", "random"]).default("alternating"),
+  /** Seconds per speaker, chosen when the room is created (still adjustable in team selection). */
+  talkDuration: talkDurationSchema.default(PRESENTATION_SECONDS),
 });
 export const joinOptionsSchema = roomOptionsSchema.pick({ displayName: true });
 export type TurnOrder = z.infer<typeof roomOptionsSchema>["turnOrder"];

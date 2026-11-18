@@ -24,6 +24,8 @@ interface ProgressionPopupProps {
   onClose?: () => void;
   /** The story field (D-090), shown under the talk topics in the lobby. */
   episodeInput?: ReactNode;
+  /** When set, "ready" stays disabled (e.g. the episode is not written yet). */
+  readyBlockedReason?: string | undefined;
 }
 
 export function ProgressionPopup({
@@ -45,6 +47,7 @@ export function ProgressionPopup({
   onStart,
   onClose,
   episodeInput,
+  readyBlockedReason,
 }: ProgressionPopupProps) {
   const [secondsLeft, setSecondsLeft] = useState(GAME_START_COUNTDOWN_SECONDS);
   const [countdownRun, setCountdownRun] = useState(0);
@@ -158,8 +161,25 @@ export function ProgressionPopup({
               ))}
             </ul>
             </div>
+            <div className="lobby-episode-step">
+              <div className="lobby-topic-box" aria-label="話す話題">
+                <div className="lobby-topic-box-header">
+                  <span>トークのお題（ヒント）</span>
+                  <button type="button" className="lobby-topic-shuffle" onClick={shuffleSuggestions} aria-label="別の話題を表示">↻</button>
+                </div>
+                <ul className="lobby-topic-list">
+                  {topicSuggestions.map((topic) => <li key={topic}>{topic}</li>)}
+                </ul>
+              </div>
+              {episodeInput}
+            </div>
             <div className="progression-actions">
-              <button className="lobby-ready-button" aria-pressed={isReady} onClick={onReady}>
+              <button
+                className="lobby-ready-button"
+                aria-pressed={isReady}
+                disabled={!isReady && Boolean(readyBlockedReason)}
+                onClick={onReady}
+              >
                 {isReady ? "準備を取り消す ✓" : "準備OKにする"}
               </button>
               {isHost && (
@@ -179,17 +199,12 @@ export function ProgressionPopup({
                 </button>
               )}
             </div>
+            {!isReady && readyBlockedReason && (
+              <p className="lobby-ready-blocked" role="status">
+                {readyBlockedReason}
+              </p>
+            )}
             <div className="lobby-extras">
-              <div className="lobby-topic-box" aria-label="話す話題">
-                <div className="lobby-topic-box-header">
-                  <span>トークのお題</span>
-                  <button type="button" className="lobby-topic-shuffle" onClick={shuffleSuggestions} aria-label="別の話題を表示">↻</button>
-                </div>
-                <ul className="lobby-topic-list">
-                  {topicSuggestions.map((topic) => <li key={topic}>{topic}</li>)}
-                </ul>
-              </div>
-              {episodeInput}
               <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
             </div>
           </>

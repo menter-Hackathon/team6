@@ -1,0 +1,363 @@
+/* Ink theme: splats, drips and glossy blobs for the entry and lobby screens. */
+:root {
+  --ink-pink: #ff3d8b;
+  --ink-cyan: #19d3ff;
+  --ink-yellow: #f7e83a;
+  --ink-lime: #a6f23a;
+  --ink-night: #120f1b;
+  --ink-paper: #fbf7ec;
+  --ink-shadow: #07060c;
+}
+
+/* ---------- Entry screen ---------- */
+.ink-entry {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 24px 16px;
+  background:
+    radial-gradient(circle at 20% 15%, #2a1b44 0, transparent 45%),
+    radial-gradient(circle at 85% 85%, #0f2c3d 0, transparent 50%),
+    var(--ink-night);
+}
+.ink-entry-splats {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ink-splat {
+  position: absolute;
+  width: 320px;
+  height: 300px;
+  opacity: 0.9;
+  filter: drop-shadow(0 6px 0 #0008);
+  border-radius: 58% 42% 63% 37% / 45% 58% 42% 55%;
+  animation: ink-wobble 9s ease-in-out infinite alternate;
+}
+.ink-splat::before,
+.ink-splat::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  background: inherit;
+}
+.ink-splat::before { width: 26%; height: 26%; right: -14%; top: 12%; }
+.ink-splat::after { width: 12%; height: 34%; left: 38%; bottom: -24%; border-radius: 40% 40% 50% 50% / 30% 30% 70% 70%; }
+.ink-splat--pink { left: -90px; top: -70px; background: var(--ink-pink); }
+.ink-splat--cyan { right: -110px; bottom: -80px; width: 380px; background: var(--ink-cyan); animation-delay: -3s; }
+.ink-splat--yellow { right: 12%; top: -120px; width: 190px; height: 210px; background: var(--ink-yellow); opacity: 0.75; animation-delay: -6s; }
+@keyframes ink-wobble {
+  to { border-radius: 42% 58% 37% 63% / 55% 42% 58% 45%; transform: rotate(6deg) scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ink-splat { animation: none; }
+}
+
+.ink-entry-card {
+  position: relative;
+  width: min(460px, 100%);
+  padding: 30px 28px 28px;
+  background: var(--ink-paper);
+  color: #17131d;
+  border: 3px solid var(--ink-shadow);
+  border-radius: 34px 28px 38px 24px / 26px 36px 24px 34px;
+  box-shadow: 10px 12px 0 var(--ink-shadow), 16px 18px 0 #ff3d8b55;
+}
+.ink-entry-card::after {
+  /* a drip running off the card's bottom edge */
+  content: "";
+  position: absolute;
+  left: 22%;
+  bottom: -26px;
+  width: 18px;
+  height: 34px;
+  background: var(--ink-pink);
+  border: 3px solid var(--ink-shadow);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+}
+.ink-entry-kicker {
+  margin: 0;
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--ink-night);
+  color: var(--ink-yellow);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  border-radius: 999px 999px 999px 4px;
+}
+.ink-entry-title {
+  margin: 10px 0 18px;
+  font-size: clamp(38px, 8vw, 56px);
+  font-weight: 1000;
+  line-height: 1.05;
+  letter-spacing: -0.06em;
+}
+.ink-entry-title span {
+  color: var(--ink-pink);
+  -webkit-text-stroke: 2px var(--ink-shadow);
+  text-shadow: 4px 4px 0 var(--ink-shadow);
+}
+
+.ink-entry-choices {
+  display: grid;
+  gap: 16px;
+}
+
+/* Blob buttons: wobbly ink puddles with a glossy highlight and a drip. */
+.ink-blob-button {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  width: 100%;
+  min-height: 84px;
+  padding: 16px 20px;
+  border: 3px solid var(--ink-shadow);
+  border-radius: 46% 54% 52% 48% / 60% 48% 52% 40%;
+  color: var(--ink-shadow);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 5px 6px 0 var(--ink-shadow);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-radius 0.4s ease;
+}
+.ink-blob-button::before {
+  /* gloss */
+  content: "";
+  position: absolute;
+  top: 12%;
+  left: 14%;
+  width: 22%;
+  height: 22%;
+  border-radius: 50%;
+  background: #fff9;
+  pointer-events: none;
+}
+.ink-blob-button::after {
+  /* drip */
+  content: "";
+  position: absolute;
+  right: 24%;
+  bottom: -16px;
+  width: 12px;
+  height: 20px;
+  background: inherit;
+  border: 3px solid var(--ink-shadow);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+}
+.ink-blob-button strong {
+  font-size: 22px;
+  font-weight: 1000;
+  letter-spacing: -0.03em;
+}
+.ink-blob-button small {
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.75;
+}
+.ink-blob-button--pink { background: var(--ink-pink); }
+.ink-blob-button--cyan { background: var(--ink-cyan); }
+.ink-blob-button:hover:not(:disabled) {
+  transform: translate(-2px, -3px) rotate(-1deg);
+  box-shadow: 8px 9px 0 var(--ink-shadow);
+  border-radius: 54% 46% 48% 52% / 48% 60% 40% 52%;
+}
+.ink-blob-button:active:not(:disabled) {
+  transform: translate(3px, 4px);
+  box-shadow: 1px 2px 0 var(--ink-shadow);
+}
+.ink-blob-button:disabled {
+  filter: grayscale(0.8);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ink-blob-button:focus-visible {
+  outline: 4px solid var(--ink-yellow);
+  outline-offset: 5px;
+}
+.ink-blob-button--small {
+  min-height: 56px;
+  width: auto;
+  padding: 10px 26px;
+}
+.ink-blob-button--small strong,
+.ink-blob-button--small {
+  font-size: 17px;
+  font-weight: 1000;
+}
+
+.ink-entry-form {
+  display: grid;
+  gap: 14px;
+}
+.ink-entry-form h3 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 1000;
+}
+.ink-entry-form label,
+.ink-entry-durations {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ink-entry-form label > span,
+.ink-entry-durations legend {
+  padding: 0;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.ink-entry-form input,
+.ink-entry-form select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 3px solid var(--ink-shadow);
+  border-radius: 18px 14px 20px 12px;
+  background: #fff;
+  color: var(--ink-shadow);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: 3px 4px 0 var(--ink-shadow);
+}
+.ink-entry-form input:focus-visible,
+.ink-entry-form select:focus-visible {
+  outline: 3px solid var(--ink-pink);
+  outline-offset: 3px;
+}
+.ink-entry-durations > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ink-entry-durations button {
+  min-width: 54px;
+  padding: 8px 10px;
+  border: 3px solid var(--ink-shadow);
+  border-radius: 50% 44% 52% 46% / 46% 54% 44% 56%;
+  background: #fff;
+  color: var(--ink-shadow);
+  font: inherit;
+  font-size: 18px;
+  font-weight: 1000;
+  cursor: pointer;
+}
+.ink-entry-durations button small { font-size: 11px; margin-left: 1px; }
+.ink-entry-durations button[aria-pressed="true"] {
+  background: var(--ink-yellow);
+  box-shadow: 3px 4px 0 var(--ink-shadow);
+  transform: rotate(-3deg) scale(1.06);
+}
+.ink-entry-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+.ink-link {
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: #4c4655;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.ink-link:hover { color: var(--ink-pink); }
+.ink-entry-note {
+  margin: 4px 0 0;
+  color: #5d5764;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ink-entry-error {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #ffe1ec;
+  color: #a10f45;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+@media (max-width: 480px) {
+  .ink-entry-card { padding: 24px 18px 22px; }
+  .ink-splat { width: 220px; height: 200px; }
+}
+
+/* ---------- Ready screen (lobby popup) ---------- */
+.progression-popup--lobby {
+  position: relative;
+}
+.progression-popup--lobby::before {
+  content: "";
+  position: absolute;
+  top: -34px;
+  right: -26px;
+  width: 120px;
+  height: 110px;
+  background: var(--ink-pink);
+  border-radius: 58% 42% 63% 37% / 45% 58% 42% 55%;
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: -1;
+}
+.lobby-episode-step {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 4px;
+  padding: 14px;
+  border: 3px solid var(--ink-shadow);
+  border-radius: 22px 18px 26px 16px / 18px 26px 16px 22px;
+  background: linear-gradient(160deg, #fff7c4, #ffe0ee);
+  color: var(--ink-shadow);
+  box-shadow: 4px 5px 0 var(--ink-shadow);
+}
+.lobby-episode-step .episode-input label {
+  font-size: 15px;
+  font-weight: 1000;
+}
+.lobby-episode-step .episode-input textarea {
+  border: 3px solid var(--ink-shadow);
+  border-radius: 16px 12px 18px 10px;
+  background: #fff;
+  color: var(--ink-shadow);
+  font-size: 14px;
+}
+.lobby-episode-step .episode-input-footer,
+.lobby-episode-step .episode-input p {
+  color: #4c4655;
+}
+.lobby-episode-step .episode-input-footer button {
+  border: 2px solid var(--ink-shadow);
+  border-radius: 999px;
+  background: var(--ink-cyan);
+  color: var(--ink-shadow);
+  font-weight: 900;
+}
+.lobby-ready-button:disabled {
+  filter: grayscale(0.7);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.lobby-ready-blocked {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-radius: 999px 999px 999px 6px;
+  background: var(--ink-night);
+  color: var(--ink-yellow);
+  font-size: 12px;
+  font-weight: 900;
+}

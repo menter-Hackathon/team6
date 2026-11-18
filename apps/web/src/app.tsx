@@ -10,6 +10,7 @@ import {
   TURN_INTRO_MS,
   type SpecialShape,
   speakerTeamAreaMultiplier,
+  PRESENTATION_SECONDS,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
 import { GameScene } from "./game-scene";
@@ -17,6 +18,7 @@ import { ProgressionPopup, type PopupScene } from "./progression-popup";
 import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
+import { EntryScreen } from "./entry-screen";
 import {
   EMPTY_EPISODE_DRAFT,
   EpisodeInput,
@@ -71,6 +73,7 @@ export function App() {
     new URLSearchParams(location.search).has("room"),
   );
   const [turnOrder, setTurnOrder] = useState("alternating");
+  const [talkDuration, setTalkDuration] = useState(PRESENTATION_SECONDS);
   const [roomCode, setRoomCode] = useState("");
   // A story belongs to one room; start fresh when the room changes.
   useEffect(() => setEpisodeDraft(EMPTY_EPISODE_DRAFT), [roomCode]);
@@ -105,6 +108,7 @@ export function App() {
         ? await client.create<GameState>(GAME_ROOM_NAME, {
             displayName,
             turnOrder,
+            talkDuration,
           })
         : await client.joinById<GameState>(inviteCode.trim().toUpperCase(), {
             displayName,
@@ -203,6 +207,10 @@ export function App() {
       ? speakerTeamAreaMultiplier(devMatchTurn.count / 2)
       : 1;
 
+  // A player can only get ready after writing (and saving) the episode they will tell.
+  const readyBlockedReason = localPlayer?.hasEpisode
+    ? undefined
+    : "話すエピソードを書いて保存すると、準備完了にできます";
   // D-090: one story field, shown in whichever lobby view is open.
   const episodeInput = (
     <EpisodeInput
@@ -248,65 +256,24 @@ export function App() {
       </header>
 
       {!devMode && connectionState !== "connected" ? (
-        <section className="lobby-panel lobby-panel--entry" aria-label="ルームに参加">
-          <span className="entry-kicker">MATCH ENTRY ／ 01</span>
-          <h2>ルームに参加</h2>
-          <label className="entry-label" htmlFor="entry-name">PLAYER NAME</label>
-          <input
-            id="entry-name"
-            aria-label="表示名"
-            placeholder="表示名"
-            maxLength={20}
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-          />
-          <div className="entry-create">
-          <label className="entry-label" htmlFor="entry-order">発表順</label>
-          <select
-            id="entry-order"
-            aria-label="発表順"
-            value={turnOrder}
-            onChange={(event) => setTurnOrder(event.target.value)}
-          >
-            <option value="alternating">A・B交互に発表</option>
-            <option value="random">完全ランダム</option>
-          </select>
-          <button
-            disabled={!displayName.trim() || connectionState === "connecting"}
-            onClick={() => void connect(true)}
-          >
-            ルームを作る <span aria-hidden="true">↗</span>
-          </button>
-          </div>
-          <div className="entry-divider"><span>OR JOIN</span></div>
-          <label className="entry-label" htmlFor="entry-code">INVITE CODE</label>
-          <input
-            id="entry-code"
-            aria-label="招待コード"
-            placeholder="招待コード"
-            value={inviteCode}
-            onChange={(event) => {
-              setInviteCode(event.target.value);
-              setFromInviteLink(false);
-            }}
-          />
-          {fromInviteLink && inviteCode && (
-            <p>
-              招待コード {inviteCode} を入力済み
-            </p>
-          )}
-          <button
-            disabled={
-              !displayName.trim() ||
-              !inviteCode.trim() ||
-              connectionState === "connecting"
-            }
-            onClick={() => void connect(false)}
-          >
-            {fromInviteLink ? "このルームに参加" : "コードで参加"} <span aria-hidden="true">→</span>
-          </button>
-          {errorMessage && <p role="alert">{errorMessage}</p>}
-        </section>
+        <EntryScreen
+          displayName={displayName}
+          onDisplayNameChange={setDisplayName}
+          turnOrder={turnOrder}
+          onTurnOrderChange={setTurnOrder}
+          talkDuration={talkDuration}
+          onTalkDurationChange={setTalkDuration}
+          inviteCode={inviteCode}
+          onInviteCodeChange={(code) => {
+            setInviteCode(code);
+            setFromInviteLink(false);
+          }}
+          fromInviteLink={fromInviteLink}
+          connecting={connectionState === "connecting"}
+          errorMessage={errorMessage}
+          onCreate={() => void connect(true)}
+          onJoin={() => void connect(false)}
+        />
       ) : !devMode &&
         gameState?.phase !== "lobby" &&
         gameState?.phase !== "countdown" &&
@@ -614,6 +581,7 @@ export function App() {
               onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               onClose={() => setShowTopicPopup(false)}
               episodeInput={episodeInput}
+              readyBlockedReason={readyBlockedReason}
               onReady={() => {
                 const nextReady = !localPlayer?.ready;
                 roomRef.current?.send("ready", nextReady);
@@ -643,6 +611,7 @@ export function App() {
                 if (!nextReady) setShowTopicPopup(true);
               }}
               episodeInput={episodeInput}
+              readyBlockedReason={readyBlockedReason}
               {...(gameState.hostId === roomRef.current?.sessionId
                 ? { onStart: () => roomRef.current?.send("prepare-teams") }
                 : {})}
