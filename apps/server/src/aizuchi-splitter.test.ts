@@ -74,14 +74,67 @@ it("classifies repeated common aizuchi immediately without model preparation", a
   });
   const evaluator = new ReactionEvaluator(load);
   await expect(
-    evaluator.classify({ source: "", reaction: "はいはいはいはい" }),
+    evaluator.classify({
+      source: "",
+      reaction: "なるほどなるほどなるほどなるほど",
+    }),
   ).resolves.toEqual({
     level: "短い相槌",
     streamable: true,
     segments: Array.from({ length: 4 }, () => ({
-      text: "はい",
+      text: "なるほど",
       level: "短い相槌",
     })),
   });
   expect(load).not.toHaveBeenCalled();
+});
+
+it("recognizes fixed standalone aizuchi, including transcription variants", async () => {
+  const evaluate = vi.fn(async () => ({ level: "除外" }));
+  const evaluator = new ReactionEvaluator(async () => evaluate);
+  const source = "旅行先で財布をなくした";
+  for (const reaction of [
+    "なになに？",
+    "ナニナニ",
+    "何々？",
+    "何何",
+    "確かに！",
+    "たしかに",
+    "流石！",
+    "さすが",
+    "知らなかった",
+    "しらなかった",
+    "すごい",
+    "凄い",
+    "センスある",
+    "そうなんだ",
+  ]) {
+    await expect(evaluator.classify({ source, reaction })).resolves.toEqual({
+      level: "短い相槌",
+      streamable: true,
+    });
+  }
+  expect(evaluate).not.toHaveBeenCalled();
+  await expect(
+    evaluator.classify({ source, reaction: "確かに明日のバイトは忙しい" }),
+  ).resolves.toEqual({ level: "除外" });
+  expect(evaluate).toHaveBeenCalledOnce();
+});
+
+it("groups repeated hai into one final short aizuchi", async () => {
+  const evaluator = new ReactionEvaluator();
+  for (const reaction of ["はい！", "はい、はい、はい", "ハイハイ"]) {
+    await expect(evaluator.classify({ source: "", reaction })).resolves.toEqual(
+      { level: "短い相槌" },
+    );
+  }
+  await expect(
+    evaluator.classify({ source: "", reaction: "はいはい、なるほど" }),
+  ).resolves.toEqual({
+    level: "短い相槌",
+    segments: [
+      { text: "はいはい", level: "短い相槌" },
+      { text: "なるほど", level: "短い相槌" },
+    ],
+  });
 });

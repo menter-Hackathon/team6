@@ -1,7 +1,7 @@
 import { Router, json } from "express";
 import { reactionRequestSchema } from "@gaya/shared";
 import { EvaluatorBusyError, ReactionEvaluator } from "./reaction-evaluator.js";
-import { currentEpisode } from "./episode-sources.js";
+import { currentEpisode, currentReactionTurn } from "./episode-sources.js";
 
 export function createReactionRouter(evaluator = new ReactionEvaluator()) {
   const router = Router();
@@ -29,14 +29,23 @@ export function createReactionRouter(evaluator = new ReactionEvaluator()) {
     const closed = () => controller.abort();
     response.on("close", closed);
     // During a turn, the speaker's entered story is the source (D-090).
-    const { roomId, ...reactionPair } = pair.data;
+    const { roomId, turnIndex, ...reactionPair } = pair.data;
+    const activeTurn = currentReactionTurn(roomId);
     const source = currentEpisode(roomId) || reactionPair.source;
     try {
+      if (turnIndex !== undefined && turnIndex !== activeTurn) {
+        response.status(409).json({ code: "REACTION_TURN_CHANGED" });
+        return;
+      }
       const decision = await evaluator.classify(
         { ...reactionPair, source },
         controller.signal,
       );
-      if (!controller.signal.aborted) response.json(decision);
+      if (!controller.signal.aborted) {
+        if (activeTurn !== currentReactionTurn(roomId))
+          response.status(409).json({ code: "REACTION_TURN_CHANGED" });
+        else response.json(decision);
+      }
     } catch (error) {
       if (!controller.signal.aborted)
         response.status(error instanceof EvaluatorBusyError ? 429 : 503).json({

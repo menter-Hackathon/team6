@@ -1,4 +1,4 @@
-.hud:has(> .speech-panel) {
+.hud:has(.speech-panel) {
   position: relative;
 }
 .hud .speech-toggle {
@@ -9,6 +9,30 @@
   background: var(--ink-cyan);
   border-color: var(--ink-cyan);
   color: var(--ink-shadow);
+}
+.hud-microphone {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  color: #fff;
+}
+.hud .speech-microphone {
+  margin-left: 0;
+  white-space: nowrap;
+}
+.hud .speech-microphone[aria-pressed="true"] {
+  background: var(--ink-cyan);
+  border-color: var(--ink-cyan);
+  color: var(--ink-shadow);
+}
+.hud .speech-microphone:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.hud-microphone-error {
+  font-size: 10px;
+  max-width: 24ch;
+  color: #ffadc8;
 }
 .speech-panel {
   position: absolute;
@@ -104,19 +128,6 @@
 .speech-panel .speech-secondary {
   background: transparent;
 }
-.speech-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 16px 0 12px;
-}
-.speech-actions button {
-  background: var(--ink-lime);
-  box-shadow: 3px 4px 0 var(--ink-shadow);
-}
-.speech-actions .speech-stop {
-  background: var(--ink-pink);
-}
 .speech-state {
   display: flex;
   align-items: center;
@@ -199,7 +210,13 @@
   }
 }
 
-.speech-panel[data-between-lobby-panels] {
+.speech-panel--left {
+  z-index: 31;
+  left: 18px;
+  transform: none;
+}
+
+.speech-panel[data-positioned] {
   top: var(--speech-top);
   left: var(--speech-left);
   width: var(--speech-width);

@@ -32,7 +32,7 @@ it("keeps the combined-aizuchi rule and leaves the product-word rule off (D-095)
   );
   expect(excluded.level).toBe("除外");
 });
-it("keeps the username override ahead of the updated product-word rule", async () => {
+it("applies the regular classification to sentences containing a username", async () => {
   const evaluator = new ReactionEvaluator(
     async () => (pair) => evaluate(pair, scores({ isAizuchi: 0.9 })),
   );
@@ -42,5 +42,5 @@ it("keeps the username override ahead of the updated product-word rule", async (
       reaction: "太郎さん、デザインいいね",
       userNames: ["太郎"],
     }),
-  ).resolves.toBe("短い相槌");
+  ).resolves.toBe("除外");
 });

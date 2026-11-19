@@ -30,4 +30,10 @@ describe("splitUtterance", () => {
     expect(splitUtterance("  うん   はい  ")).toEqual(["うん", "はい"]);
     expect(splitUtterance("   ")).toEqual([]);
   });
+  it("treats adjacent hai fragments as a single utterance", () => {
+    expect(splitUtterance("はい！ ハイ はい、はい。 確かに！")).toEqual([
+      "はい！ハイはい、はい。",
+      "確かに！",
+    ]);
+  });
 });

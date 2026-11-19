@@ -8,12 +8,15 @@ export type PopupScene = "lobby" | "countdown" | "turn" | "result";
 interface ProgressionPopupProps {
   scene: PopupScene;
   preview?: boolean;
+  localRoom?: boolean;
   roomCode?: string;
   players?: { displayName: string; ready: boolean }[];
   isHost?: boolean;
   isReady?: boolean;
+  microphoneListening?: boolean;
   canStart?: boolean;
   requiredPlayerCount?: number;
+  targetPlayerCount?: number;
 
   onOpenWardrobe?: () => void;
 
@@ -29,12 +32,15 @@ interface ProgressionPopupProps {
 export function ProgressionPopup({
   scene,
   preview = false,
+  localRoom = false,
   roomCode = "ABCD12",
   players = [],
   isHost = false,
   isReady = false,
+  microphoneListening = true,
   canStart = false,
   requiredPlayerCount = 0,
+  targetPlayerCount = 0,
 
   onOpenWardrobe,
 
@@ -120,7 +126,7 @@ export function ProgressionPopup({
           <>
             <span className="lobby-kicker">MATCH LOBBY ／ 01</span>
             <h2 id="progression-title">入室待ち</h2>
-            <div className="progression-code">
+            {!localRoom && <div className="progression-code">
               <div>
                 <span>INVITE CODE / 招待コード</span>
                 <strong>{roomCode}</strong>
@@ -131,8 +137,8 @@ export function ProgressionPopup({
               >
                 {copied ? "コピー済み ✓" : "コピー"}
               </button>
-            </div>
-            {!preview && (
+            </div>}
+            {!preview && !localRoom && (
               <button className="invite-link-button" onClick={() => void copyInviteLink()}>
                 参加リンクをコピー <span aria-hidden="true">↗</span>
               </button>
@@ -140,7 +146,7 @@ export function ProgressionPopup({
             {linkCopyMessage && <p className="lobby-copy-status" role="status">{linkCopyMessage}</p>}
             {onOpenWardrobe && <WardrobeButton onClick={onOpenWardrobe} />}
             <div className="lobby-readiness">
-              <p className="lobby-ready-count">準備完了 <strong>{readyCount} / {Math.max(requiredPlayerCount, players.length)}</strong></p>
+              <p className="lobby-ready-count">準備完了 <strong>{readyCount} / {Math.max(targetPlayerCount, requiredPlayerCount, players.length)}</strong></p>
             {requiredPlayerCount > players.length && (
               <p className="lobby-replay-waiting" role="status">
                 再戦にはあと{requiredPlayerCount - players.length}人の入室が必要です
@@ -160,7 +166,9 @@ export function ProgressionPopup({
                   !canStart
                     ? requiredPlayerCount > 0
                       ? `${requiredPlayerCount}人全員が揃って準備完了すると開始できます`
-                      : "4・6・8人で全員が準備すると開始できます"
+                      : targetPlayerCount > 0
+                        ? `${targetPlayerCount}人全員が揃って準備完了すると開始できます`
+                        : "4・6・8人で全員が準備すると開始できます"
                     : undefined
                 }
                 onClick={onStart}
@@ -173,6 +181,8 @@ export function ProgressionPopup({
               <button
                 className="lobby-ready-button"
                 aria-pressed={isReady}
+                disabled={!isReady && !microphoneListening}
+                title={!isReady && !microphoneListening ? "マイクをオンにしてください" : undefined}
                 onClick={onReady}
               >
                 {isReady ? "準備を取り消す ✓" : "準備OKにする"}
@@ -185,6 +195,8 @@ export function ProgressionPopup({
                     !canStart
                       ? requiredPlayerCount > 0
                         ? `${requiredPlayerCount}人全員が揃って準備完了すると開始できます`
+                        : targetPlayerCount > 0
+                        ? `${targetPlayerCount}人全員が揃って準備完了すると開始できます`
                         : "4・6・8人で全員が準備すると開始できます"
                       : undefined
                   }

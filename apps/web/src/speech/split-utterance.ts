@@ -1,3 +1,5 @@
+import { isHaiAizuchi } from "@gaya/shared";
+
 /**
  * Splits one final speech result into the pieces that should be judged separately (D-096).
  *
@@ -16,7 +18,12 @@ export function splitUtterance(text: string): string[] {
   const chars = [...text.trim()];
   const push = () => {
     const piece = current.trim();
-    if (piece) pieces.push(piece);
+    if (piece) {
+      const previous = pieces.at(-1);
+      if (previous && isHaiAizuchi(previous) && isHaiAizuchi(piece))
+        pieces[pieces.length - 1] = previous + piece;
+      else pieces.push(piece);
+    }
     current = "";
   };
   for (let i = 0; i < chars.length; i++) {

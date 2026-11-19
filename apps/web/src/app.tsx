@@ -9,6 +9,8 @@ import {
   canStartWithPlayers,
   TURN_INTRO_MS,
   type SpecialShape,
+  type PlayerAccessory,
+  type RoomPlayerCount,
   speakerTeamAreaMultiplier,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
@@ -44,6 +46,10 @@ export function App() {
   const captureMode = new URLSearchParams(location.search).has("capture");
   const [panelsHidden, setPanelsHidden] = useState(false);
   const [showDevObstacles, setShowDevObstacles] = useState(false);
+  const [{ listening: microphoneListening, changing: microphoneChanging }, setMicrophoneState] =
+    useState({ listening: false, changing: false });
+  const microphoneRef = useRef<{ start: () => void }>(null);
+  const startMicrophone = () => microphoneRef.current?.start();
   const [autoFire, setAutoFire] = useState(!captureMode);
   // D-086: the star/heart picker stays hidden; the special always lands as ink.
   const specialShape: SpecialShape = "ink";
@@ -76,7 +82,7 @@ export function App() {
     new URLSearchParams(location.search).has("room"),
   );
   const [turnOrder, setTurnOrder] = useState("alternating");
-  const [devMatch, setDevMatch] = useState(false);
+  const [roomPlayerCount, setRoomPlayerCount] = useState<RoomPlayerCount>(4);
   const [speakerPreview, setSpeakerPreview] = useState(false);
   const [roomCode, setRoomCode] = useState("");
   // A story belongs to one room; start fresh when the room changes.
@@ -88,7 +94,9 @@ export function App() {
   const [devMatchCount, setDevMatchCount] = useState(4);
   const [devMatchTurn, setDevMatchTurn] = useState<DevMatchTurn | null>(null);
   const [devMatchPhase, setDevMatchPhase] = useState<DevMatchPhase>("lobby");
-  const [devTeamOffset, setDevTeamOffset] = useState(0);
+  const [devTeams, setDevTeams] = useState<readonly ("A" | "B")[]>([]);
+  const [devAccessory, setDevAccessory] = useState<PlayerAccessory>("none");
+  const [devPracticeColor, setDevPracticeColor] = useState<string>(NEON_COLORS[0]!.hex);
   const [showTopicPopup, setShowTopicPopup] = useState(true);
   const [wardrobeOpen, setWardrobeOpen] = useState(false);
   const openWardrobe = () => {
@@ -97,10 +105,23 @@ export function App() {
   };
   const closeWardrobe = useCallback(() => setWardrobeOpen(false), []);
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
-  const syncDevTeamOffset = useCallback((offset: number) => {
-    setDevTeamOffset(offset);
-    setDevTeam(offset % 2 === 0 ? "A" : "B");
+  const syncDevTeams = useCallback((teams: readonly ("A" | "B")[]) => {
+    setDevTeams(teams);
+    setDevTeam(teams[0] ?? "A");
   }, []);
+
+  const resetRoom = () => {
+    if (document.pointerLockElement) document.exitPointerLock();
+    closeWardrobe();
+    roomRef.current = null;
+    setGameState(null);
+    setPlayerIds([]);
+    setRoomCode("");
+    setInviteCode("");
+    setFromInviteLink(false);
+    setPanelsHidden(false);
+    setConnectionState("disconnected");
+  };
 
   const connect = async (create: boolean) => {
     if (!SERVER_URL) {
@@ -118,7 +139,7 @@ export function App() {
         ? await client.create<GameState>(GAME_ROOM_NAME, {
             displayName,
             turnOrder,
-            devMatch,
+            playerCount: roomPlayerCount,
           })
         : await client.joinById<GameState>(inviteCode.trim().toUpperCase(), {
             displayName,
@@ -134,6 +155,7 @@ export function App() {
       history.replaceState(null, "", url);
       setConnectionState("connected");
       const syncPlayerIds = (state: GameState) => {
+        if (roomRef.current !== joinedRoom) return;
         setPlayerIds(Array.from(state.players.keys()));
         setGameState(state);
         if (state.phase !== "lobby") closeWardrobe();
@@ -141,11 +163,10 @@ export function App() {
       joinedRoom.onStateChange(syncPlayerIds);
       syncPlayerIds(initialState);
       joinedRoom.onLeave(() => {
-        setConnectionState("disconnected");
-        roomRef.current = null;
-        closeWardrobe();
+        if (roomRef.current === joinedRoom) resetRoom();
       });
       joinedRoom.onError(() => {
+        if (roomRef.current !== joinedRoom) return;
         setConnectionState("error");
         closeWardrobe();
       });
@@ -185,37 +206,49 @@ export function App() {
     setDevMatchActive(false);
     setDevMatchTurn(null);
     setDevMatchPhase("lobby");
-    setDevTeamOffset(0);
+    syncDevTeams([]);
   };
 
   const leaveRoom = () => {
-    closeWardrobe();
-    if (roomRef.current) void roomRef.current.leave();
-    roomRef.current = null;
-    setGameState(null);
-    setPlayerIds([]);
-    setRoomCode("");
-    setConnectionState("disconnected");
+    const room = roomRef.current;
+    resetRoom();
+    if (room) void room.leave();
   };
 
   const players = gameState ? Array.from(gameState.players.values()) : [];
   const localPlayer = gameState?.players.get(roomRef.current?.sessionId ?? "");
+  const toggleReady = () => {
+    if (!localPlayer || (!localPlayer.ready && (!microphoneListening || !localPlayer.hasEpisode)))
+      return;
+    roomRef.current?.send("ready", !localPlayer.ready);
+  };
+  const canDissolve =
+    connectionState === "connected" &&
+    gameState?.phase !== "closed" &&
+    Boolean(localPlayer && localPlayer.id === gameState?.hostId);
+  const dissolveRoom = () => roomRef.current?.send("dissolve-room");
   const showWardrobe =
     wardrobeOpen &&
     !devMode &&
     connectionState === "connected" &&
     gameState?.phase === "lobby" &&
     Boolean(localPlayer);
+  const targetPlayerCount = gameState?.targetPlayerCount ?? 0;
   const canStart =
     gameState?.hostId === roomRef.current?.sessionId &&
-    canStartWithPlayers(players.length, gameState?.devMatch ?? false) &&
+    canStartWithPlayers(players.length, gameState?.devMatch ?? false, targetPlayerCount) &&
     (gameState?.replayPlayerCount === 0 || players.length === gameState?.replayPlayerCount) &&
     players.every((player) => player.ready);
   const canReplay =
     gameState?.hostId === roomRef.current?.sessionId &&
-    canStartWithPlayers(players.length, gameState?.devMatch ?? false) &&
+    canStartWithPlayers(players.length, gameState?.devMatch ?? false, targetPlayerCount) &&
     players.filter((player) => player.team === "A").length === players.length / 2 &&
     players.filter((player) => player.team === "B").length === players.length / 2;
+  const devLobby = devMode && devMatchActive && devMatchPhase === "lobby";
+  const speechLayoutPhase = devMode
+    ? (devMatchActive ? devMatchPhase : previewPopup === "countdown" ? "countdown" : undefined)
+    : connectionState === "connected" ? gameState?.phase : undefined;
+  const showDevWardrobe = devLobby && wardrobeOpen;
   const devSpeakerBlocked =
     devMatchActive && devMatchTurn?.isYourTurn === true;
   const devMatchCanPaint =
@@ -245,39 +278,71 @@ export function App() {
   return (
     <main className={`game-shell${captureMode ? " game-shell--capture" : ""}${panelsHidden ? " game-shell--panels-hidden" : ""}`}>
       <header className="hud">
-        <div>
-          <p className="eyebrow">GAYA SPLATOON / PARTY GAME</p>
-          <h1>ガヤでスプラトゥーン</h1>
+        <div className="hud-side">
+          <div>
+            <p className="eyebrow">GAYA SPLATOON / PARTY GAME</p>
+            <h1>ガヤでスプラトゥーン</h1>
+          </div>
+          <div className="hud-actions">
+            <TranscriptionPanel
+              onMicrophoneChange={setMicrophoneState}
+              microphoneRef={microphoneRef}
+              turnIndex={
+                devMode
+                  ? devMatchTurn?.turnNumber
+                  : connectionState === "connected" && gameState?.phase === "playing"
+                    ? gameState.turnIndex || undefined
+                    : undefined
+              }
+              localTopic={devMode ? devMatchTurn?.topic : undefined}
+              alignLeft={
+                speechLayoutPhase === "team_selection" ||
+                speechLayoutPhase === "countdown" ||
+                speechLayoutPhase === "playing"
+              }
+              roomId={
+                connectionState === "connected" && roomCode ? roomCode : undefined
+              }
+              userNames={
+                devMode && devMatchActive
+                  ? Array.from({ length: devMatchCount }, (_, index) => index === 0 ? "あなた" : `COM ${index}`)
+                  : players.length
+                    ? players.map((player) => player.displayName)
+                  : [displayName].filter(Boolean)
+              }
+            />
+            <button
+              type="button"
+              className="hud-dev-button"
+              onClick={(event) => { setPanelsHidden(true); event.currentTarget.blur(); }}
+            >
+              操作パネルを隠す
+            </button>
+          </div>
         </div>
-        <TranscriptionPanel
-          roomId={
-            connectionState === "connected" && roomCode ? roomCode : undefined
-          }
-          userNames={
-            players.length
-              ? players.map((player) => player.displayName)
-              : [displayName].filter(Boolean)
-          }
-        />
-        <button
-          type="button"
-          className="hud-dev-button"
-          onClick={(event) => { setPanelsHidden(true); event.currentTarget.blur(); }}
-        >
-          操作パネルを隠す
-        </button>
-        <button className="hud-dev-button" onClick={toggleDevMode}>
-          {devMode ? "検証モードを終了" : "操作を検証"}
-        </button>
-        <div className={`status status--${connectionState}`}>
-          <span />
-          {connectionState === "connected"
-            ? `接続中 · ${playerIds.length}/8人`
-            : connectionState === "connecting"
-              ? "サーバーへ接続中"
-              : connectionState === "error"
-                ? "接続失敗"
-                : "ルーム未参加"}
+        <div className="hud-side hud-side--right">
+          <div className="hud-actions">
+            <button className="hud-dev-button" onClick={toggleDevMode}>
+              {devMode ? "検証モードを終了" : "操作を検証"}
+            </button>
+            {canDissolve && (
+              <button type="button" className="hud-dev-button" onClick={dissolveRoom}>
+                ルームを解散
+              </button>
+            )}
+          </div>
+          <div className={`status status--${devMatchActive ? "connected" : connectionState}`}>
+            <span />
+            {devMatchActive
+              ? `検証ルーム · ${devMatchCount}人`
+              : connectionState === "connected"
+              ? `接続中 · ${playerIds.length}/${targetPlayerCount || 8}人`
+              : connectionState === "connecting"
+                ? "サーバーへ接続中"
+                : connectionState === "error"
+                  ? "接続失敗"
+                  : "ルーム未参加"}
+          </div>
         </div>
       </header>
       {panelsHidden && !captureMode && (
@@ -296,8 +361,8 @@ export function App() {
           onDisplayNameChange={setDisplayName}
           turnOrder={turnOrder}
           onTurnOrderChange={setTurnOrder}
-          devMatch={devMatch}
-          onDevMatchChange={setDevMatch}
+          playerCount={roomPlayerCount}
+          onPlayerCountChange={setRoomPlayerCount}
           inviteCode={inviteCode}
           onInviteCodeChange={(code) => {
             setInviteCode(code);
@@ -335,7 +400,7 @@ export function App() {
             ))}
           </ul>
         </section>
-      ) : devMode ? (
+      ) : devMode && !devMatchActive ? (
         <details className="lobby-panel lobby-panel--dev" open>
           <summary className="dev-panel-summary">
             <h2>開発者用 検証モード</h2>
@@ -450,6 +515,10 @@ export function App() {
           <button
             onClick={() => {
               setPreviewPopup(null);
+              setAutoFire(!captureMode);
+              setSpeakerPreview(false);
+              window.dispatchEvent(new CustomEvent("speaker-preview", { detail: false }));
+              window.dispatchEvent(new Event("dev-reset-paint"));
               setDevMatchActive(true);
             }}
           >
@@ -503,23 +572,25 @@ export function App() {
               devMode={devMode}
               showDevObstacles={showDevObstacles}
               autoFire={autoFire}
-              controlsPaused={showWardrobe}
+              controlsPaused={showWardrobe || showDevWardrobe}
               devComCount={devMatchActive ? devMatchCount - 1 : 0}
               devMatchPhase={devMatchActive ? devMatchPhase : undefined}
-              devTeamOffset={devTeamOffset}
+              devTeams={devTeams}
+              devSpeakerIndex={devMatchTurn?.speakerIndex}
+              devAccessory={devAccessory}
               devTeam={devTeam}
               devAreaMultiplier={devAreaMultiplier}
               devCanMove={!devMatchActive || devMatchPhase === "lobby" || devMatchPhase === "playing"}
               devCanPaint={devMatchCanPaint}
               devPaintCells={devPaintCells}
               specialShape={specialShape}
-              colorA={devMode ? devColorA : gameState?.colorA}
-              colorB={devMode ? devColorB : gameState?.colorB}
+              colorA={devMode ? (devLobby && devTeam === "A" ? devPracticeColor : devColorA) : gameState?.colorA}
+              colorB={devMode ? (devLobby && devTeam === "B" ? devPracticeColor : devColorB) : gameState?.colorB}
             />
           </Suspense>
         </Canvas>
         </div>
-        {devMode && (
+        {devMode && !devMatchActive && (
           <>
         <button
               className="auto-fire-toggle"
@@ -540,7 +611,7 @@ export function App() {
           </>
         )}
         <div className="crosshair" aria-hidden="true" />
-        {devMode && (
+        {devMode && !devMatchActive && (
           <output
             id="dev-readout"
             className="dev-readout"
@@ -565,24 +636,30 @@ export function App() {
           <span><kbd>Esc</kbd> マウス解除</span>
           </div>}
         </aside>
+        {devLobby && <LobbyColorButtons color={devPracticeColor} onSelect={setDevPracticeColor} />}
         {devMode && devMatchActive && (
           <DevMatchFlow
+            microphoneListening={microphoneListening}
+            microphoneChanging={microphoneChanging}
+            onStartMicrophone={startMicrophone}
             cells={devPaintCells}
             colorA={devColorA}
             colorB={devColorB}
             onCountChange={setDevMatchCount}
             onTurnChange={setDevMatchTurn}
             onPhaseChange={setDevMatchPhase}
-            onTeamOffsetChange={syncDevTeamOffset}
+            onTeamsChange={syncDevTeams}
+            onOpenWardrobe={openWardrobe}
             onColorSelect={(team, color) => {
               if (team === "A") setDevColorA(color);
               else setDevColorB(color);
             }}
             onClose={() => {
+              closeWardrobe();
               setDevMatchActive(false);
               setDevMatchTurn(null);
               setDevMatchPhase("lobby");
-              setDevTeamOffset(0);
+              syncDevTeams([]);
             }}
           />
         )}
@@ -626,6 +703,7 @@ export function App() {
               ]}
               isHost
               isReady={previewReady}
+              microphoneListening={microphoneListening}
               speakerName="メンターA"
               onClose={() => setPreviewPopup(null)}
               onReady={() => setPreviewReady(true)}
@@ -662,13 +740,9 @@ export function App() {
               isReady={localPlayer?.ready ?? false}
               canStart={canStart}
               requiredPlayerCount={gameState.replayPlayerCount}
+              targetPlayerCount={targetPlayerCount}
               onOpenWardrobe={openWardrobe}
               onClose={() => setShowTopicPopup(false)}
-              onReady={() => {
-                const nextReady = !localPlayer?.ready;
-                roomRef.current?.send("ready", nextReady);
-                if (nextReady) setShowTopicPopup(false);
-              }}
               {...(gameState.hostId === roomRef.current?.sessionId
                 ? { onStart: () => roomRef.current?.send("prepare-teams") }
                 : {})}
@@ -682,6 +756,7 @@ export function App() {
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
               requiredPlayerCount={gameState.replayPlayerCount}
+              targetPlayerCount={targetPlayerCount}
               onOpenWardrobe={openWardrobe}
               canStart={canStart}
               {...(gameState.hostId === roomRef.current?.sessionId
@@ -689,6 +764,14 @@ export function App() {
                 : {})}
             />
           )}
+        {showDevWardrobe && (
+          <Wardrobe
+            color={devPracticeColor}
+            equipped={devAccessory}
+            onEquip={setDevAccessory}
+            onClose={closeWardrobe}
+          />
+        )}
         {showWardrobe && localPlayer && (
           <Wardrobe
             color={localPlayer.practiceColor}
@@ -709,10 +792,13 @@ export function App() {
                 episodeInput={episodeInput}
                 onSelectTopic={(text) => setEpisodeDraft((draft) => ({ ...draft, text }))}
                 episodeDone={localPlayer?.hasEpisode ?? false}
+                microphoneListening={microphoneListening}
+                microphoneChanging={microphoneChanging}
+                onStartMicrophone={startMicrophone}
                 isReady={localPlayer?.ready ?? false}
                 readyCount={players.filter((player) => player.ready).length}
-                playerCount={Math.max(gameState.replayPlayerCount, players.length)}
-                onReady={() => roomRef.current?.send("ready", !localPlayer?.ready)}
+                playerCount={Math.max(targetPlayerCount, gameState.replayPlayerCount, players.length)}
+                onReady={toggleReady}
               />
             </>
           )}
@@ -731,7 +817,7 @@ export function App() {
               }
               onReshuffle={() => roomRef.current?.send("reshuffle-teams")}
               onReturnToLobby={() => roomRef.current?.send("return-to-lobby")}
-              canStart={players.length === gameState.speakerOrder.length && (gameState.replayPlayerCount === 0 || players.length === gameState.replayPlayerCount)}
+              canStart={canStart && players.length === gameState.speakerOrder.length && (gameState.replayPlayerCount === 0 || players.length === gameState.replayPlayerCount)}
               onStart={() => roomRef.current?.send("start")}
             />
           )}
@@ -756,6 +842,7 @@ export function App() {
                 gameState.speakerOrder[gameState.turnIndex - 1] ===
                 roomRef.current?.sessionId
               }
+              topic={gameState.turnTopic}
               turnNumber={gameState.turnIndex}
               turnCount={gameState.speakerOrder.length}
               endsAt={gameState.turnEndsAt}
@@ -772,6 +859,7 @@ export function App() {
               colorB={gameState.colorB}
               {...(roomRef.current ? { room: roomRef.current } : {})}
               {...(canReplay ? { onReplay: () => roomRef.current?.send("replay") } : {})}
+              {...(canDissolve ? { onDissolve: dissolveRoom } : {})}
               onClose={leaveRoom}
             />
           )}

@@ -1,4 +1,8 @@
-import type { ReactionDecision, ReactionSegment } from "@gaya/shared";
+import {
+  IMMEDIATE_AIZUCHI,
+  type ReactionDecision,
+  type ReactionSegment,
+} from "@gaya/shared";
 interface State {
   revision: number;
   sealed: boolean;
@@ -9,10 +13,19 @@ function canonical(text: string) {
     .normalize("NFKC")
     .toLowerCase()
     .replace(/[ァ-ヶ]/gu, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
-    .replace(/[\s、。,.!?…・w笑]/gu, "");
+    .replace(/[\s、。,.!?…・w笑]/gu, "")
+    .replace(/何々|何何/gu, "なになに")
+    .replace(/確かに/gu, "たしかに")
+    .replace(/流石/gu, "さすが")
+    .replace(/知らなかった/gu, "しらなかった")
+    .replace(/凄い/gu, "すごい");
 }
+const immediatePattern = new RegExp(
+  `^(?:(?:${IMMEDIATE_AIZUCHI.map(canonical).join("|")})[ー~〜]*)+$`,
+  "u",
+);
 export function immediateAizuchiText(text: string) {
-  return /^(?:(?:はい|なるほど)[ー~〜]*)+$/u.test(canonical(text));
+  return immediatePattern.test(canonical(text));
 }
 export class AizuchiStream {
   private states = new Map<string, State>();
@@ -68,7 +81,7 @@ export class AizuchiStream {
           parts,
           remaining: text
             .slice(end)
-            .replace(/^[\s、。,.!?…・wW笑ー~〜]+/u, "")
+            .replace(/^[\s、。,.!?，．！？…・wWｗＷ笑ー~〜～]+/u, "")
             .trim(),
         };
     return { parts, remaining: text };

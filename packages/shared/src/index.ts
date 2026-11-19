@@ -101,8 +101,11 @@ export const GAME_START_COUNTDOWN_SECONDS = 7;
 export const TURN_INTRO_MS = 2650;
 export const STARTABLE_PLAYER_COUNTS = [4, 6, 8] as const;
 /** Developer-mode rooms may also start with 2 players (1 vs 1) for testing (D-041). */
-export const DEV_STARTABLE_PLAYER_COUNTS = [2, 4, 6, 8] as const;
-export function canStartWithPlayers(count: number, devMatch: boolean): boolean {
+export const ROOM_PLAYER_COUNTS = [2, 4, 6, 8] as const;
+export type RoomPlayerCount = (typeof ROOM_PLAYER_COUNTS)[number];
+export const DEV_STARTABLE_PLAYER_COUNTS = ROOM_PLAYER_COUNTS;
+export function canStartWithPlayers(count: number, devMatch: boolean, target = 0): boolean {
+  if (target !== 0) return count === target && ROOM_PLAYER_COUNTS.some((option) => option === target);
   const allowed: readonly number[] = devMatch
     ? DEV_STARTABLE_PLAYER_COUNTS
     : STARTABLE_PLAYER_COUNTS;
@@ -110,6 +113,7 @@ export function canStartWithPlayers(count: number, devMatch: boolean): boolean {
 }
 export const roomOptionsSchema = z.object({
   displayName: z.string().trim().min(1).max(20),
+  playerCount: z.literal(ROOM_PLAYER_COUNTS).optional(),
   turnOrder: z.enum(["alternating", "random"]).default("alternating"),
   /** Seconds per speaker, chosen when the room is created (still adjustable in team selection). */
   talkDuration: talkDurationSchema.default(PRESENTATION_SECONDS),
@@ -240,6 +244,8 @@ export { specialOutline } from "./special-outline.js";
 export { reactionInkPattern, type ReactionInkDrop } from "./reaction-ink.js";
 export {
   EPISODE_MAX_LENGTH,
+  IMMEDIATE_AIZUCHI,
+  isHaiAizuchi,
   episodeSchema,
   reactionLevelSchema,
   reactionRequestSchema,

@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { SpeechModelChoice } from "./protocol";
 import { useTranscription } from "./use-transcription";
 import { useBrowserTranscription } from "./use-browser-transcription";
@@ -13,13 +13,23 @@ import "./transcription.css";
 export function TranscriptionPanel({
   userNames = [],
   roomId,
+  alignLeft = false,
+  turnIndex,
+  localTopic,
+  onMicrophoneChange,
+  microphoneRef,
 }: {
   userNames?: readonly string[];
   /** Joined room; lets the server use the current speaker's story as the source. */
   roomId?: string | undefined;
+  alignLeft?: boolean;
+  turnIndex?: number | undefined;
+  localTopic?: string | undefined;
+  onMicrophoneChange: (state: { listening: boolean; changing: boolean }) => void;
+  microphoneRef: Ref<{ start: () => void }>;
 }) {
   const [open, setOpen] = useState(false);
-  const judge = useReactionClassification(open, userNames, roomId);
+  const judge = useReactionClassification(true, userNames, roomId, turnIndex, localTopic);
   const local = useTranscription();
   const browser = useBrowserTranscription();
   const [engine, setEngine] = useState("web-speech");
@@ -31,7 +41,7 @@ export function TranscriptionPanel({
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
-    const hud = panel?.parentElement;
+    const hud = panel?.closest(".hud");
     const viewport = hud?.parentElement?.querySelector(".viewport");
     if (!panel || !hud || !viewport) return;
 
@@ -43,15 +53,18 @@ export function TranscriptionPanel({
     const positionPanel = () => {
       const summaryBounds = summary?.getBoundingClientRect();
       const guideBounds = guide?.getBoundingClientRect();
-      if (!summaryBounds?.width || !guideBounds?.width) {
-        delete panel.dataset.betweenLobbyPanels;
+      const alignment = alignLeft ? guideBounds : summaryBounds;
+      if (!alignment?.width || !guideBounds?.width) {
+        delete panel.dataset.positioned;
         return;
       }
 
-      const top = summaryBounds.bottom + gap;
+      const top =
+        (alignLeft ? viewport.getBoundingClientRect().top : alignment.bottom) +
+        gap;
       const height = guideBounds.top - gap - top;
       if (height < minimumPanelHeight) {
-        delete panel.dataset.betweenLobbyPanels;
+        delete panel.dataset.positioned;
         return;
       }
 
@@ -59,11 +72,11 @@ export function TranscriptionPanel({
       panel.style.setProperty("--speech-top", `${top - hudBounds.top}px`);
       panel.style.setProperty(
         "--speech-left",
-        `${summaryBounds.left - hudBounds.left}px`,
+        `${alignment.left - hudBounds.left}px`,
       );
-      panel.style.setProperty("--speech-width", `${summaryBounds.width}px`);
+      panel.style.setProperty("--speech-width", `${alignment.width}px`);
       panel.style.setProperty("--speech-height", `${height}px`);
-      panel.dataset.betweenLobbyPanels = "";
+      panel.dataset.positioned = "";
     };
 
     const resizeObserver = new ResizeObserver(positionPanel);
@@ -87,15 +100,70 @@ export function TranscriptionPanel({
       resizeObserver.disconnect();
       viewport.removeEventListener("animationend", positionPanel);
     };
-  }, [open]);
+  }, [open, alignLeft]);
 
-  const close = () => {
-    if (external) browser.cancel();
-    else local.stop();
-    setOpen(false);
+  const close = () => setOpen(false);
+  const microphoneOn = speech.listening || speech.starting;
+  const microphoneStopping = external && browser.stopping;
+  const microphoneUnavailable = speech.phase !== "ready" || speech.pending >= 3;
+  const microphoneChanging = speech.starting || microphoneStopping;
+  useLayoutEffect(() => {
+    onMicrophoneChange({ listening: speech.listening, changing: microphoneChanging });
+  }, [onMicrophoneChange, speech.listening, microphoneChanging]);
+
+  const startMicrophone = () => {
+    if (microphoneOn || microphoneStopping) return;
+    if (microphoneUnavailable) {
+      if (document.pointerLockElement) void document.exitPointerLock();
+      setOpen(true);
+      return;
+    }
+    if (judge.phase !== "ready") void judge.prepare();
+    void speech.start();
   };
+  useImperativeHandle(microphoneRef, () => ({ start: startMicrophone }));
+
+  const toggleMicrophone = () => {
+    if (microphoneOn) {
+      if (speech.starting && external) browser.cancel();
+      else speech.stop();
+      return;
+    }
+    startMicrophone();
+  };
+
   return (
     <>
+      <div className="hud-microphone">
+        <button
+          type="button"
+          className="hud-dev-button speech-microphone"
+          aria-label="マイク"
+          aria-pressed={microphoneOn}
+          title={
+            speech.phase !== "ready"
+              ? "文字起こしを開いて認識方法を確認してください"
+              : undefined
+          }
+          disabled={
+            microphoneStopping || (!microphoneOn && microphoneUnavailable)
+          }
+          onClick={toggleMicrophone}
+        >
+          {speech.starting
+            ? "マイク起動中"
+            : microphoneStopping
+              ? "マイク停止中"
+              : microphoneOn
+                ? "● マイクON"
+                : "マイクOFF"}
+        </button>
+        {!open && speech.error && (
+          <small className="hud-microphone-error" role="alert">
+            {speech.error}
+          </small>
+        )}
+      </div>
       <button
         type="button"
         className="hud-dev-button speech-toggle"
@@ -109,16 +177,16 @@ export function TranscriptionPanel({
           }
         }}
       >
-        {speech.listening ? "● マイクON" : "マイク・文字起こし"}
+        文字起こし
       </button>
       {open && (
         <section
           ref={panelRef}
           id={id}
-          className="speech-panel"
+          className={
+            alignLeft ? "speech-panel speech-panel--left" : "speech-panel"
+          }
           aria-label="音声の文字起こし"
-          onKeyDown={(event) => event.stopPropagation()}
-          onKeyUp={(event) => event.stopPropagation()}
         >
           <header className="speech-heading">
             <h2>音声の文字起こし</h2>
@@ -252,36 +320,6 @@ export function TranscriptionPanel({
             </>
           )}
           <>
-            <div className="speech-actions">
-              {speech.listening ||
-              speech.starting ||
-              (external && browser.stopping) ? (
-                <button
-                  className="speech-stop"
-                  disabled={external && browser.stopping}
-                  onClick={() => {
-                    if (speech.starting && external) browser.cancel();
-                    else speech.stop();
-                  }}
-                >
-                  {external && browser.stopping
-                    ? "マイク停止・文字を確定中…"
-                    : speech.starting
-                      ? "開始をキャンセル"
-                      : "マイクをOFFにする"}
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    if (judge.phase !== "ready") void judge.prepare();
-                    void speech.start();
-                  }}
-                  disabled={speech.phase !== "ready" || speech.pending >= 3}
-                >
-                  {external ? "外部処理でマイクをON" : "マイクをONにする"}
-                </button>
-              )}
-            </div>
             <div className="speech-state">
               <span className={speech.listening ? "speech-live" : ""} />
               {speech.starting

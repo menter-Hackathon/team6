@@ -21,10 +21,6 @@ interface EpisodeInputProps {
   onSave: (text: string) => void;
 }
 
-/**
- * The story the player will tell on their turn (D-090). The server uses it only to judge
- * whether others' gaya relate to the story; it is not shown to other players.
- */
 export function EpisodeInput({
   draft,
   onDraftChange,
@@ -49,6 +45,7 @@ export function EpisodeInput({
         id={id}
         value={draft.text}
         maxLength={EPISODE_MAX_LENGTH}
+        aria-describedby={`${id}-sharing`}
         rows={3}
         placeholder="例：昨日駅前のラーメン屋で1時間並んだ話"
         onChange={(event) =>
@@ -56,6 +53,9 @@ export function EpisodeInput({
         }
         onBlur={save}
       />
+      <p id={`${id}-sharing`}>
+        あなたの発表ターン中、ここに入力した内容が全員に表示されます。
+      </p>
       <div className="episode-input-footer">
         <span>
           {dirty ? "未保存" : saved ? "保存済み ✓" : "未入力"}

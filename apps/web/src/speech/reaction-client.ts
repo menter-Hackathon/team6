@@ -3,6 +3,8 @@ export interface ReactionInput {
   reaction: string;
   source: string;
   userNames: string[];
+  roomId?: string | undefined;
+  turnIndex?: number | undefined;
 }
 type Evaluate = (
   pair: ReactionInput,
@@ -118,6 +120,7 @@ export function createReactionClient(api: string) {
       body: JSON.stringify(pair),
       signal,
     });
+    if (response.status === 409) throw new Error("turn-changed");
     if (!response.ok)
       throw new Error(response.status === 429 ? "busy" : "unavailable");
     return reactionResponseSchema.parse(await response.json());
