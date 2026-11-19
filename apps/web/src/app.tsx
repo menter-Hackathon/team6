@@ -20,6 +20,7 @@ import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
 import { EntryScreen } from "./entry-screen";
+import { WaitingRoom } from "./waiting-room";
 import { LobbyActions, LobbyColorButtons } from "./lobby-hud";
 import {
   EMPTY_EPISODE_DRAFT,
@@ -98,6 +99,7 @@ export function App() {
   const [devAccessory, setDevAccessory] = useState<PlayerAccessory>("none");
   const [devPracticeColor, setDevPracticeColor] = useState<string>(NEON_COLORS[0]!.hex);
   const [showTopicPopup, setShowTopicPopup] = useState(true);
+  const [episodeOpen, setEpisodeOpen] = useState(false);
   const [wardrobeOpen, setWardrobeOpen] = useState(false);
   const openWardrobe = () => {
     if (document.pointerLockElement) document.exitPointerLock();
@@ -729,23 +731,37 @@ export function App() {
           connectionState === "connected" &&
           gameState?.phase === "lobby" &&
           showTopicPopup && (
-            <ProgressionPopup
-              scene="lobby"
+            <WaitingRoom
               roomCode={roomCode}
               players={players.map((player) => ({
                 displayName: player.displayName,
                 ready: player.ready,
               }))}
-              isHost={gameState.hostId === roomRef.current?.sessionId}
-              isReady={localPlayer?.ready ?? false}
-              canStart={canStart}
+              seatCount={Math.max(targetPlayerCount, gameState.replayPlayerCount, players.length)}
               requiredPlayerCount={gameState.replayPlayerCount}
-              targetPlayerCount={targetPlayerCount}
+              episodeDone={localPlayer?.hasEpisode ?? false}
+              microphoneListening={microphoneListening}
+              microphoneChanging={microphoneChanging}
+              isReady={localPlayer?.ready ?? false}
+              isHost={gameState.hostId === roomRef.current?.sessionId}
+              canStart={canStart}
+              startHint={
+                gameState.replayPlayerCount > 0
+                  ? `${gameState.replayPlayerCount}人全員が揃って準備完了すると開始できます`
+                  : targetPlayerCount > 0
+                    ? `${targetPlayerCount}人全員が揃って準備完了すると開始できます`
+                    : "4・6・8人で全員が準備すると開始できます"
+              }
+              onOpenEpisode={() => setEpisodeOpen(true)}
               onOpenWardrobe={openWardrobe}
+              onStartMicrophone={startMicrophone}
+              onReady={toggleReady}
+              onStart={
+                gameState.hostId === roomRef.current?.sessionId
+                  ? () => roomRef.current?.send("prepare-teams")
+                  : undefined
+              }
               onClose={() => setShowTopicPopup(false)}
-              {...(gameState.hostId === roomRef.current?.sessionId
-                ? { onStart: () => roomRef.current?.send("prepare-teams") }
-                : {})}
             />
           )}
         {!devMode &&
@@ -784,10 +800,12 @@ export function App() {
           connectionState === "connected" &&
           gameState?.phase === "lobby" && (
             <>
-              <LobbyColorButtons
-                color={localPlayer?.practiceColor ?? "#ff4f8b"}
-                onSelect={(color) => roomRef.current?.send("practice-color", color)}
-              />
+              {!showTopicPopup && (
+                <LobbyColorButtons
+                  color={localPlayer?.practiceColor ?? "#ff4f8b"}
+                  onSelect={(color) => roomRef.current?.send("practice-color", color)}
+                />
+              )}
               <LobbyActions
                 episodeInput={episodeInput}
                 onSelectTopic={(text) => setEpisodeDraft((draft) => ({ ...draft, text }))}
@@ -799,6 +817,9 @@ export function App() {
                 readyCount={players.filter((player) => player.ready).length}
                 playerCount={Math.max(targetPlayerCount, gameState.replayPlayerCount, players.length)}
                 onReady={toggleReady}
+                episodeOpen={episodeOpen}
+                onEpisodeOpenChange={setEpisodeOpen}
+                showControls={!showTopicPopup}
               />
             </>
           )}

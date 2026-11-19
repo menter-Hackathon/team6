@@ -38,6 +38,11 @@ interface LobbyActionsProps {
   readyCount: number;
   playerCount: number;
   onReady: () => void;
+  /** The episode dialog is controlled so the waiting room can open it too. */
+  episodeOpen: boolean;
+  onEpisodeOpenChange: (open: boolean) => void;
+  /** False while the full-screen waiting room covers the field: only the dialog is shown. */
+  showControls?: boolean;
 }
 
 /**
@@ -56,12 +61,14 @@ export function LobbyActions({
   readyCount,
   playerCount,
   onReady,
+  episodeOpen: open,
+  onEpisodeOpenChange: setOpen,
+  showControls = true,
 }: LobbyActionsProps) {
-  const [open, setOpen] = useState(false);
   const [topics, setTopics] = useState<string[]>(() => pickRandomTopics(3));
   return (
     <>
-      <div className="lobby-hud-actions">
+      {showControls && <div className="lobby-hud-actions">
         {(!episodeDone || !microphoneListening) && (
           <div className="lobby-hud-banner" role="status">
             <strong>準備に必要なこと</strong>
@@ -108,7 +115,7 @@ export function LobbyActions({
             {readyCount}/{playerCount}人
           </small>
         </button>
-      </div>
+      </div>}
       {open && (
         <div className="lobby-hud-dialog-backdrop" onClick={() => setOpen(false)}>
           <section
