@@ -8,6 +8,7 @@ import {
   PAINT_GRID_SIZE,
   paintDisks,
   paintRequestSchema,
+  inkShotScale,
   rasterizePaintStroke,
   type PaintStroke,
 } from "./index.js";
@@ -21,22 +22,52 @@ const stroke: PaintStroke = {
 };
 
 describe("INK/PLAY paint geometry", () => {
+  it("scales ink area by scaling radii and offsets with the square root", () => {
+    const base = paintDisks(stroke);
+    const boosted = paintDisks({ ...stroke, areaMultiplier: 4 / 3 });
+    const scale = Math.sqrt(4 / 3);
+    expect(boosted[0]!.radius / base[0]!.radius).toBeCloseTo(scale);
+    expect(
+      (boosted[1]!.x - boosted[0]!.x) / (base[1]!.x - base[0]!.x),
+    ).toBeCloseTo(scale);
+  });
+  it("widens a boosted walking trail without moving its path", () => {
+    const base = paintDisks({ ...stroke, kind: "footprint", fromX: 0, x: 1 });
+    const boosted = paintDisks({
+      ...stroke,
+      kind: "footprint",
+      fromX: 0,
+      x: 1,
+      areaMultiplier: 3 / 2,
+    });
+    expect(boosted[0]!.x).toBe(base[0]!.x);
+    expect(boosted[0]!.z).toBe(base[0]!.z);
+    expect(boosted[0]!.radius / base[0]!.radius).toBeCloseTo(Math.sqrt(3 / 2));
+  });
   it("lands ahead of the player, aligned with camera-relative forward", () => {
     expect(paintDisks(stroke)[0]).toEqual({
       x: 0,
-      z: 4.5,
+      z: expect.closeTo(4.45, 2),
       radius: 0.9 * INK_SCALE * INK_SPLAT_SCALE,
       organic: true,
     });
     const turned = paintDisks({ ...stroke, yaw: Math.PI / 2 })[0]!;
-    expect(turned.x).toBeCloseTo(-4.5);
+    expect(turned.x).toBeCloseTo(-4.45, 2);
     expect(turned.z).toBeCloseTo(0);
   });
+  it("moves ink landing distance with vertical aim", () => {
+    const level = paintDisks(stroke)[0]!;
+    const upward = paintDisks({ ...stroke, pitch: Math.PI / 4 })[0]!;
+    const downward = paintDisks({ ...stroke, pitch: -0.5 })[0]!;
+    expect(upward.z).toBeGreaterThan(level.z);
+    expect(downward.z).toBeCloseTo(3.720);
+  });
+
   it("reproduces the same splat and clips writes at arena edges", () => {
     expect(paintDisks(stroke)).toEqual(paintDisks({ ...stroke }));
     let count = 0;
     rasterizePaintStroke(
-      { ...stroke, x: FIELD_HALF_WIDTH, z: FIELD_HALF_DEPTH },
+      { ...stroke, kind: "footprint", x: FIELD_HALF_WIDTH, z: FIELD_HALF_DEPTH },
       (x, y) => {
         expect(
           x >= 0 && x < PAINT_GRID_SIZE && y >= 0 && y < PAINT_GRID_SIZE,
@@ -109,5 +140,49 @@ describe("continuous walking trails", () => {
     expect(
       resumed.filter((d) => !d.organic).every((d) => d.x >= 4 && d.z === 4),
     ).toBe(true);
+  });
+});
+
+describe("voice-scaled ink", () => {
+  const base = {
+    revision: 1,
+    x: 0,
+    z: 0,
+    yaw: 0,
+    team: "A",
+    kind: "ink",
+  } as const;
+  it("keeps the impact point and scales the splat 0.9x / 1.2x / 1.5x by voice", () => {
+    const plain = paintDisks(base),
+      quiet = paintDisks({ ...base, scale: inkShotScale(undefined) }),
+      loud = paintDisks({ ...base, scale: inkShotScale("voiced") }),
+      long = paintDisks({ ...base, scale: inkShotScale("long") });
+    expect(quiet[0]!.x).toBeCloseTo(plain[0]!.x);
+    expect(quiet[0]!.z).toBeCloseTo(plain[0]!.z);
+    expect(quiet[0]!.radius).toBeCloseTo(plain[0]!.radius * 0.9);
+    expect(loud[0]!.radius).toBeCloseTo(plain[0]!.radius * 1.2);
+    expect(long[0]!.radius).toBeCloseTo(plain[0]!.radius * 1.5);
+    expect(loud[3]!.z - loud[0]!.z).toBeCloseTo(
+      (plain[3]!.z - plain[0]!.z) * 1.2,
+    );
+  });
+  it("bounds malformed scales", () => {
+    const plain = paintDisks(base)[0]!.radius;
+    expect(paintDisks({ ...base, scale: 50 })[0]!.radius).toBeCloseTo(
+      plain * 1.5,
+    );
+    expect(paintDisks({ ...base, scale: Number.NaN })[0]!.radius).toBeCloseTo(
+      plain,
+    );
+  });
+  it("accepts only the known voice states on paint requests", () => {
+    expect(paintRequestSchema.parse({ kind: "ink", voice: "long" })).toEqual({
+      kind: "ink",
+      voice: "long",
+    });
+    expect(paintRequestSchema.parse({ kind: "ink" })).toEqual({ kind: "ink" });
+    expect(
+      paintRequestSchema.safeParse({ kind: "ink", voice: "huge" }).success,
+    ).toBe(false);
   });
 });

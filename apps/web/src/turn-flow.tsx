@@ -3,25 +3,29 @@ import { PRESENTATION_SECONDS, TURN_INTRO_MS } from "@gaya/shared";
 
 interface TurnFlowProps {
   speakerName: string;
+  topic?: string;
   isYourTurn: boolean;
   turnNumber: number;
   turnCount: number;
   endsAt: number;
+  talkDuration?: number;
   preview?: boolean;
   onClose?: () => void;
 }
 
 export function TurnFlow({
   speakerName,
+  topic,
   isYourTurn,
   turnNumber,
   turnCount,
   endsAt,
+  talkDuration = PRESENTATION_SECONDS,
   preview = false,
   onClose,
 }: TurnFlowProps) {
   const [stage, setStage] = useState<"next" | "presentation" | "timer">("next");
-  const [remaining, setRemaining] = useState(PRESENTATION_SECONDS);
+  const [remaining, setRemaining] = useState(talkDuration);
 
   useEffect(() => {
     const presentationTimer = window.setTimeout(
@@ -39,7 +43,7 @@ export function TurnFlow({
           Math.max(
             0,
             Math.min(
-              PRESENTATION_SECONDS,
+              talkDuration,
               Math.ceil((endsAt - Date.now()) / 1000),
             ),
           ),
@@ -51,16 +55,27 @@ export function TurnFlow({
       window.clearTimeout(moveTimer);
       window.clearInterval(clock);
     };
-  }, [endsAt]);
+  }, [endsAt, talkDuration]);
 
   return (
     <>
+      {topic && (
+        <section className="turn-topic" aria-label="このターンの話題">
+          <div className="turn-topic-heading">
+            <span className="turn-topic-label">このターンの話題</span>
+            <strong className="turn-topic-speaker">
+              {isYourTurn ? "あなたのターン" : `${speakerName}さんのターン`}
+            </strong>
+          </div>
+          <p tabIndex={0}>{topic}</p>
+        </section>
+      )}
       {stage !== "timer" && (
         <div className="progression-backdrop progression-turn-backdrop">
           <section
             className={`progression-popup progression-turn-popup progression-turn-popup--${stage}`}
             role="dialog"
-            aria-modal="true"
+            aria-modal="false"
             aria-labelledby="turn-title"
           >
             {preview && (
@@ -79,9 +94,10 @@ export function TurnFlow({
               PRESENTATION / {turnNumber} OF {turnCount}
             </p>
             <h2 id="turn-title">
-              {isYourTurn
-                ? "次はあなたのターン"
-                : `次は${speakerName}さんのターン`}
+              {isYourTurn ? "次はあなたのターン" : <>
+                <span className="popup-title-lead">次は</span>
+                <span className="popup-name-phrase"><span className="popup-player-name">{speakerName}</span><span className="popup-name-suffix">さんのターン</span></span>
+              </>}
             </h2>
             <div
               className={`turn-intro-time${stage === "presentation" ? " turn-presentation-enter" : ""}`}
@@ -95,7 +111,7 @@ export function TurnFlow({
               aria-hidden={stage === "next"}
             >
               {isYourTurn
-                ? "30秒で話してみよう！"
+                ? `${talkDuration}秒で話してみよう！`
                 : "ガヤを入れて盛り上げよう！"}
             </p>
           </section>
@@ -107,8 +123,8 @@ export function TurnFlow({
           role="timer"
           aria-label={`発表の残り時間 ${remaining}秒`}
         >
-          <span>
-            {isYourTurn ? "あなたの発表" : `${speakerName}さんの発表`}
+          <span title={isYourTurn ? "あなたの発表" : `${speakerName}さんの発表`}>
+            {isYourTurn ? "あなたの発表" : <><span className="popup-player-name">{speakerName}</span><span className="popup-name-suffix">さんの発表</span></>}
           </span>
           <strong>
             {remaining}

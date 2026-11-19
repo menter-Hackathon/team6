@@ -1,6 +1,10 @@
+import { tableInkHit, wallInkHit } from "@gaya/shared";
 import * as THREE from "three";
 import {
+  reactionInkPattern,
   inkOutlineRadius,
+  inkVariantRadius,
+  INK_VARIANT_COUNT,
   specialOutline,
   type SpecialShape,
   INK_SCALE,
@@ -8,9 +12,11 @@ import {
   NEON_COLORS,
   practiceColorOwner,
   paintDisks,
+  inkTravelTime,
   type PaintDisk,
   type PaintStroke,
 } from "@gaya/shared";
+import { INK_GLOSS } from "./ink-material";
 
 export const INK_SETTLE_SECONDS = 0.22;
 
@@ -18,9 +24,12 @@ interface Shot {
   origin: THREE.Vector3;
   velocity: THREE.Vector3;
   stroke: PaintStroke;
+  surfaceHit?: boolean;
+  disk?: PaintDisk;
+  surfaceHeight?: number;
   shed: number;
   duration: number;
-  trail: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+  trail: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial>;
 }
 interface Drop {
   mesh: THREE.Mesh;
@@ -36,6 +45,7 @@ interface Spread {
   radius: number;
   impact: boolean;
   delay: number;
+  energy: number;
 }
 const AXIS = new THREE.Vector3(0, 1, 0);
 const GRAVITY = 16;
@@ -57,6 +67,20 @@ export class InkEffects {
       }),
     ),
   );
+  /** One splat per precomputed ink variant, in its forward-relative frame. */
+  private readonly variantSplats = Array.from(
+    { length: INK_VARIANT_COUNT },
+    (_, variant) =>
+      new THREE.ShapeGeometry(
+        new THREE.Shape(
+          Array.from({ length: 129 }, (_, i) => {
+            const a = (i / 128) * Math.PI * 2,
+              radius = inkVariantRadius(variant, -a);
+            return new THREE.Vector2(Math.cos(a) * radius, Math.sin(a) * radius);
+          }),
+        ),
+      ),
+  );
   private readonly shapes: Record<
     Exclude<SpecialShape, "ink">,
     THREE.ShapeGeometry
@@ -71,15 +95,27 @@ export class InkEffects {
     ...NEON_COLORS.map((entry) => entry.hex),
   ].map(
     (color) =>
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         color,
-        roughness: 0.13,
-        metalness: 0.04,
+        ...INK_GLOSS,
       }),
   );
   setColors(colorA: string, colorB: string): void {
     this.materials[0]!.color.set(colorA);
     this.materials[1]!.color.set(colorB);
+  }
+  private readonly waveGeometry = this.makeWaveGeometry();
+  private waves: {
+    mesh: THREE.Mesh<THREE.ShapeGeometry, THREE.MeshBasicMaterial>;
+    age: number;
+    radius: number;
+  }[] = [];
+  /** Reflections for the cosmetic drops; the texture is shared and owned elsewhere. */
+  setEnvironment(texture: THREE.Texture | null): void {
+    for (const material of this.materials) {
+      material.envMap = texture;
+      material.needsUpdate = true;
+    }
   }
   private drops: Drop[] = [];
   private spreads: Spread[] = [];
@@ -89,6 +125,44 @@ export class InkEffects {
   private readonly center = new THREE.Vector3();
   private readonly normal = new THREE.Vector3();
   private readonly scale = new THREE.Vector3();
+
+  private makeWaveGeometry(): THREE.ShapeGeometry {
+    const outer = Array.from({ length: 97 }, (_, i) => {
+      const a = (i / 96) * Math.PI * 2,
+        r = inkOutlineRadius(a);
+      return new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r);
+    });
+    const shape = new THREE.Shape(outer);
+    shape.holes.push(
+      new THREE.Path(
+        [...outer].reverse().map((p) => p.clone().multiplyScalar(0.84)),
+      ),
+    );
+    return new THREE.ShapeGeometry(shape);
+  }
+  private wave(
+    x: number,
+    z: number,
+    height: number,
+    team: number,
+    radius: number,
+  ): void {
+    if (this.waves.length >= 24) return;
+    const material = new THREE.MeshBasicMaterial({
+      color: this.materials[team]!.color,
+      transparent: true,
+      opacity: 0.7,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(this.waveGeometry, material);
+    mesh.name = "aizuchi-wave";
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, height + 0.045, z);
+    mesh.scale.setScalar(0.001);
+    this.group.add(mesh);
+    this.waves.push({ mesh, age: 0, radius });
+  }
 
   private outlineGeometry(
     shape: Exclude<SpecialShape, "ink">,
@@ -111,14 +185,61 @@ export class InkEffects {
     this.geometry = new THREE.LatheGeometry(profile, 32);
   }
 
-  emit(stroke: PaintStroke): number {
+  emit(
+    stroke: PaintStroke,
+    surface?: THREE.Vector3,
+    surfaceHeight = 0,
+  ): number {
     const team = stroke.practiceColor
       ? practiceColorOwner(stroke.practiceColor) + 1
       : stroke.team === "A"
         ? 0
         : 1;
+    if (stroke.kind === "reaction-fan" || stroke.kind === "reaction-pair") {
+      const pattern = reactionInkPattern(stroke.kind),
+        disks = paintDisks(stroke);
+      if (stroke.kind === "reaction-fan")
+        this.wave(stroke.x, stroke.z, surfaceHeight, team, 1.5);
+      pattern.forEach((part, index) => {
+        if (this.drops.length >= MAX_DROPS) return;
+        const disk = disks[index]!;
+        const origin = new THREE.Vector3(
+          stroke.x - Math.sin(stroke.yaw) * 0.65,
+          1.1 + ((stroke as PaintStroke & { height?: number }).height ?? 0),
+          stroke.z + Math.cos(stroke.yaw) * 0.65,
+        );
+        const velocity = new THREE.Vector3(
+          disk.x,
+          surfaceHeight + 0.035,
+          disk.z,
+        )
+          .sub(origin)
+          .divideScalar(part.duration);
+        velocity.y += 0.5 * GRAVITY * part.duration;
+        const drop = this.addDrop(
+          origin,
+          velocity,
+          part.radius * INK_SCALE,
+          team,
+        );
+        drop.age = -part.delay;
+        drop.mesh.visible = part.delay === 0;
+        drop.shot = {
+          origin,
+          velocity: velocity.clone(),
+          stroke,
+          disk,
+          surfaceHeight,
+          shed: 0,
+          duration: part.duration,
+          trail: this.createTrail(team),
+        };
+      });
+      return Math.max(...pattern.map((part) => part.delay + part.duration));
+    }
     if (stroke.kind !== "ink") {
-      this.spread(stroke, team);
+      surfaceHeight = stroke.height ?? surfaceHeight;
+      this.spread(stroke, team, surfaceHeight);
       if (stroke.kind === "slam") {
         for (
           let i = 0;
@@ -129,7 +250,7 @@ export class InkEffects {
             speed = 3.5 + Math.random() * 3;
           const position = new THREE.Vector3(
             stroke.x + Math.cos(angle) * 0.6,
-            0.09,
+            0.09 + surfaceHeight,
             stroke.z + Math.sin(angle) * 0.6,
           );
           const velocity = new THREE.Vector3(
@@ -147,28 +268,30 @@ export class InkEffects {
       }
       return 0;
     }
+    if (!surface) {
+      const hit = tableInkHit(stroke) ?? wallInkHit(stroke);
+      if (hit) surface = new THREE.Vector3(hit.point.x, hit.point.y, hit.point.z);
+    }
     const impact = paintDisks(stroke)[0]!;
     const origin = new THREE.Vector3(
-      stroke.x - Math.sin(stroke.yaw) * 0.65,
-      1.1,
-      stroke.z + Math.cos(stroke.yaw) * 0.65,
+      stroke.x - Math.sin(stroke.yaw) * (surface ? 0.32 : 0.65),
+      1.1 + ((stroke as PaintStroke & { height?: number }).height ?? 0),
+      stroke.z + Math.cos(stroke.yaw) * (surface ? 0.32 : 0.65),
     );
-    const destination = new THREE.Vector3(impact.x, 0.035, impact.z);
-    const duration = THREE.MathUtils.clamp(
-      origin.distanceTo(destination) / 32,
-      0.12,
-      0.52,
-    );
+    const destination =
+      surface?.clone() ?? new THREE.Vector3(impact.x, 0.035, impact.z);
+    const duration = inkTravelTime(stroke.pitch ?? 0, Math.hypot(destination.x - origin.x, destination.z - origin.z), destination.y - origin.y);
     if (this.drops.length >= MAX_DROPS) return duration;
     const velocity = destination.sub(origin).divideScalar(duration);
     velocity.y += 0.5 * GRAVITY * duration;
-    const radius = 0.22 * INK_SCALE;
+    const radius = 0.22 * INK_SCALE * (stroke.scale ?? 1);
     const drop = this.addDrop(origin, velocity, radius, team);
     drop.mesh.scale.set(radius * 0.8, radius * 1.9, radius * 0.8);
     drop.shot = {
       origin,
       velocity: velocity.clone(),
       stroke,
+      surfaceHit: Boolean(surface),
       shed: 0,
       duration,
       trail: this.createTrail(team),
@@ -265,7 +388,7 @@ export class InkEffects {
     return drop;
   }
 
-  private spread(stroke: PaintStroke, team: number): void {
+  private spread(stroke: PaintStroke, team: number, surfaceHeight = 0): void {
     const disks = paintDisks(stroke);
     const step =
       stroke.kind === "ink" || stroke.kind === "slam"
@@ -279,6 +402,7 @@ export class InkEffects {
         stroke.kind === "ink" || stroke.kind === "slam"
           ? Math.min(i * 0.004, 0.025)
           : 0,
+        surfaceHeight,
       );
     }
   }
@@ -288,49 +412,81 @@ export class InkEffects {
     team: number,
     impact: boolean,
     delay: number,
+    surfaceHeight = 0,
+    energy = 1,
   ): void {
     if (this.spreads.length >= 120) return;
     const mesh = new THREE.Mesh(
       disk.outlineShape
         ? this.shapes[disk.outlineShape]
         : disk.organic
-          ? this.splat
+          ? disk.variant === undefined
+            ? this.splat
+            : (this.variantSplats[disk.variant] ?? this.splat)
           : this.circle,
       this.materials[team]!,
     );
     mesh.rotation.x = -Math.PI / 2;
-    if (disk.outlineShape) mesh.rotation.z = -(disk.rotation ?? 0);
-    mesh.position.set(disk.x, 0.027, disk.z);
+    // Local angle a maps to world angle -a, so -rotation aligns the forward axis.
+    if (disk.outlineShape || disk.variant !== undefined)
+      mesh.rotation.z = -(disk.rotation ?? 0);
+    mesh.position.set(disk.x, surfaceHeight + 0.027, disk.z);
     mesh.scale.setScalar(0.001);
     this.group.add(mesh);
-    this.spreads.push({ mesh, age: 0, radius: disk.radius, impact, delay });
+    this.spreads.push({
+      mesh,
+      age: 0,
+      radius: disk.radius,
+      impact,
+      delay,
+      energy,
+    });
   }
 
   private impact(shot: Shot, team: number): void {
-    this.spread(shot.stroke, team);
-    const center = paintDisks(shot.stroke)[0]!;
+    const strong = shot.stroke.kind === "reaction-fan";
+    if (shot.disk)
+      this.addSpread(
+        shot.disk,
+        team,
+        true,
+        0,
+        shot.surfaceHeight ?? 0,
+        strong ? 1.8 : 1,
+      );
+    else this.spread(shot.stroke, team);
+    const center = shot.disk ?? paintDisks(shot.stroke)[0]!;
+    if (strong)
+      this.wave(
+        center.x,
+        center.z,
+        shot.surfaceHeight ?? 0,
+        team,
+        center.radius * 1.2,
+      );
     const forward = new THREE.Vector3(
       -Math.sin(shot.stroke.yaw),
       0,
       Math.cos(shot.stroke.yaw),
     );
     // A low fan of liquid flicks follows the incoming momentum, rather than a fountain.
-    for (let i = 0; i < 6 && this.drops.length < MAX_SECONDARY_DROPS; i++) {
-      const a = (i / 5 - 0.5) * 2.8 + (Math.random() - 0.5) * 0.2;
+    const count = strong ? 10 : 6;
+    for (let i = 0; i < count && this.drops.length < MAX_SECONDARY_DROPS; i++) {
+      const a = (i / (count - 1) - 0.5) * 2.8 + (Math.random() - 0.5) * 0.2;
       const direction = forward.clone().applyAxisAngle(AXIS, a);
       const position = new THREE.Vector3(
         center.x,
-        0.06,
+        0.06 + (shot.surfaceHeight ?? 0),
         center.z,
       ).addScaledVector(direction, 0.18);
       const velocity = direction.multiplyScalar(
-        (1.8 + Math.random() * 1.5) * INK_SPLAT_SCALE,
+        (1.8 + Math.random() * 1.5) * INK_SPLAT_SCALE * (strong ? 1.3 : 1),
       );
-      velocity.y = 0.75 + Math.random() * 0.9;
+      velocity.y = (0.75 + Math.random() * 0.9) * (strong ? 1.25 : 1);
       this.addDrop(
         position,
         velocity,
-        (0.035 + Math.random() * 0.04) * INK_SCALE,
+        (0.035 + Math.random() * 0.04) * INK_SCALE * (strong ? 1.35 : 1),
         team,
       );
     }
@@ -350,6 +506,8 @@ export class InkEffects {
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const p = this.drops[i]!;
       p.age += dt;
+      if (p.age < 0) continue;
+      p.mesh.visible = true;
       if (p.shot) {
         const shot = p.shot,
           t = Math.min(p.age, shot.duration);
@@ -369,10 +527,13 @@ export class InkEffects {
           1 - Math.exp(-dt * 24),
         );
         this.updateTrail(p, shot);
+        const strong = shot.stroke.kind === "reaction-fan";
         if (
-          p.age < shot.duration * 0.85 &&
-          p.age >= shot.duration * (0.2 + shot.shed * 0.17) &&
-          shot.shed < 4 &&
+          p.age < shot.duration * (strong ? 0.92 : 0.85) &&
+          p.age >=
+            shot.duration *
+              (strong ? 0.12 + shot.shed * 0.12 : 0.2 + shot.shed * 0.17) &&
+          shot.shed < (strong ? 6 : 4) &&
           this.drops.length < MAX_SECONDARY_DROPS
         ) {
           const velocity = p.velocity
@@ -393,7 +554,7 @@ export class InkEffects {
           shot.shed++;
         }
         if (p.age >= shot.duration) {
-          this.impact(shot, p.team);
+          if (!shot.surfaceHit) this.impact(shot, p.team);
           this.removeDrop(p, i);
           continue;
         }
@@ -417,6 +578,18 @@ export class InkEffects {
         this.direction.copy(p.velocity).normalize(),
       );
     }
+    for (let i = this.waves.length - 1; i >= 0; i--) {
+      const wave = this.waves[i]!;
+      wave.age += dt;
+      const t = Math.min(1, wave.age / 0.28);
+      wave.mesh.scale.setScalar(wave.radius * (0.3 + 0.9 * (1 - (1 - t) ** 3)));
+      wave.mesh.material.opacity = 0.7 * (1 - t) ** 2;
+      if (t >= 1) {
+        this.group.remove(wave.mesh);
+        wave.mesh.material.dispose();
+        this.waves.splice(i, 1);
+      }
+    }
     for (let i = this.spreads.length - 1; i >= 0; i--) {
       const p = this.spreads[i]!;
       p.age += dt;
@@ -427,9 +600,9 @@ export class InkEffects {
       );
       // A fast impact, a slight overshoot, then a smooth settle into the exact owned shape.
       const expansion = p.impact
-        ? 1 - (1 - t) ** 5 + 0.28 * Math.sin(Math.PI * t) * (1 - t)
+        ? 1 - (1 - t) ** 5 + 0.28 * p.energy * Math.sin(Math.PI * t) * (1 - t)
         : 1 - (1 - t) ** 3;
-      const pressure = p.impact ? Math.sin(Math.PI * t) * 0.1 : 0;
+      const pressure = p.impact ? Math.sin(Math.PI * t) * 0.1 * p.energy : 0;
       p.mesh.scale.set(
         p.radius * expansion * (1 + pressure),
         (p.radius * expansion) / (1 + pressure),
@@ -443,6 +616,8 @@ export class InkEffects {
   }
 
   clear(): void {
+    for (const wave of this.waves) wave.mesh.material.dispose();
+    this.waves = [];
     for (const drop of this.drops) drop.shot?.trail.geometry.dispose();
     this.group.clear();
     this.drops = [];
@@ -451,8 +626,10 @@ export class InkEffects {
   dispose(): void {
     this.clear();
     this.geometry.dispose();
+    this.waveGeometry.dispose();
     this.circle.dispose();
     this.splat.dispose();
+    for (const splat of this.variantSplats) splat.dispose();
     this.shapes.star.dispose();
     this.shapes.heart.dispose();
     for (const material of this.materials) material.dispose();

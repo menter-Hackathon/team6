@@ -17,6 +17,14 @@ export function rotateYaw(
   );
 }
 
+export function rotatePitch(
+  pitch: number,
+  movementY: number,
+  sensitivity = 0.0025,
+): number {
+  return Math.max(-Math.PI / 3, Math.min(Math.PI / 3, pitch - movementY * sensitivity));
+}
+
 export function toModelRotation(yaw: number): number {
   return -yaw;
 }

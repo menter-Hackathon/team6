@@ -1,4 +1,5 @@
 import type { MapSchema } from "@colyseus/schema";
+import type { PlayerAccessory } from "@gaya/shared";
 
 export interface PlayerState {
   id: string;
@@ -8,12 +9,16 @@ export interface PlayerState {
   practiceColor: string;
   x: number;
   z: number;
+  height: number;
+  climbing: boolean;
   yaw: number;
   specialTime: number;
   jumpTime: number;
   dive: boolean;
   submerged: boolean;
   lastProcessedInput: number;
+  hasEpisode: boolean;
+  accessory: PlayerAccessory;
 }
 
 export interface GameState {
@@ -26,6 +31,12 @@ export interface GameState {
   colorB: string;
   turnOrder: string;
   turnIndex: number;
+  turnTopic: string;
   turnEndsAt: number;
+  countdownEndsAt: number;
+  talkDuration: number;
+  replayPlayerCount: number;
+  targetPlayerCount?: number;
+  devMatch: boolean;
   speakerOrder: string[];
 }

@@ -16,7 +16,7 @@ describe("ink flight effects", () => {
     };
     const duration = effects.emit(stroke);
     expect(duration).toBeGreaterThanOrEqual(0.12);
-    expect(duration).toBeLessThan(0.2);
+    expect(duration).toBeLessThan(1);
     expect(effects.group.children).toHaveLength(2);
     const main = effects.group.children[0]!;
     const trail = effects.group.children[1]! as Mesh;

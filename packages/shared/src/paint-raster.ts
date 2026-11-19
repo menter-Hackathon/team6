@@ -1,3 +1,11 @@
+import { wallInkHit } from "./classroom-walls.js";
+import { tableInkHit, tableInkMarks } from "./table-ink.js";
+import { reactionInkPattern } from "./reaction-ink.js";
+import {
+  isInkVariant,
+  organicOutlineMaxScale,
+  organicOutlineScale,
+} from "./ink-outline.js";
 import {
   FIELD_HALF_WIDTH,
   FIELD_HALF_DEPTH,
@@ -16,12 +24,30 @@ export interface PaintDisk {
   z: number;
   radius: number;
   organic?: boolean;
+  /** Precomputed organic outline; `rotation` is then the world angle of its forward axis. */
+  variant?: number;
   outlineShape?: Exclude<SpecialShape, "ink">;
   rotation?: number;
 }
 
-export function inkOutlineRadius(angle: number): number {
-  return 0.77 + 0.13 * Math.sin(angle * 7) + 0.1 * Math.cos(angle * 11);
+function inkLaunchAngle(pitch: number): number {
+  return Math.max(-Math.PI / 36, pitch);
+}
+
+// Solve the ballistic arc for the actual muzzle and impact, including raised surfaces.
+export function inkTravelTime(pitch: number, horizontal: number, rise: number): number {
+  const drop = horizontal * Math.tan(inkLaunchAngle(pitch)) - rise;
+  return Math.max(0.03, Math.sqrt(Math.max(0, 2 * drop) / 16));
+}
+
+/** Horizontal travel before an ink shot returns to floor height. */
+export function inkFlight(pitch: number): { distance: number; duration: number } {
+  const angle = inkLaunchAngle(pitch);
+  const speed = 12;
+  const gravity = 16;
+  const verticalSpeed = speed * Math.sin(angle);
+  const duration = (verticalSpeed + Math.sqrt(verticalSpeed ** 2 + 2 * gravity * 1.1)) / gravity;
+  return { distance: speed * Math.cos(angle) * duration, duration };
 }
 
 /** Shared world-space geometry: render effects and server ownership use the same splat. */
@@ -35,7 +61,17 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
       z: stroke.z + dz * forward - dx * side,
       radius,
     });
-  if (stroke.kind === "slam" && stroke.specialShape === "ink") {
+  if (stroke.kind === "reaction-fan" || stroke.kind === "reaction-pair") {
+    for (const drop of reactionInkPattern(stroke.kind)) {
+      const angle = stroke.yaw + drop.angle;
+      disks.push({
+        x: stroke.x - Math.sin(angle) * drop.reach,
+        z: stroke.z + Math.cos(angle) * drop.reach,
+        radius: drop.spreadRadius,
+        organic: true,
+      });
+    }
+  } else if (stroke.kind === "slam" && stroke.specialShape === "ink") {
     disks.push({
       x: stroke.x,
       z: stroke.z,
@@ -148,14 +184,22 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
     const center = {
       x: Math.max(
         -FIELD_HALF_WIDTH + 0.8,
-        Math.min(FIELD_HALF_WIDTH - 0.8, stroke.x + inkDx * 4.5),
+        Math.min(FIELD_HALF_WIDTH - 0.8, stroke.x + inkDx * inkFlight(stroke.pitch ?? 0).distance),
       ),
       z: Math.max(
         -FIELD_HALF_DEPTH + 0.8,
-        Math.min(FIELD_HALF_DEPTH - 0.8, stroke.z + dz * 4.5),
+        Math.min(FIELD_HALF_DEPTH - 0.8, stroke.z + dz * inkFlight(stroke.pitch ?? 0).distance),
       ),
     };
-    disks.push({ ...center, radius: 0.9, organic: true });
+    disks.push({
+      ...center,
+      radius: 0.9,
+      organic: true,
+      // Older clients send no variant and keep the legacy outline.
+      ...(isInkVariant(stroke.inkVariant)
+        ? { variant: stroke.inkVariant, rotation: Math.atan2(dz, inkDx) }
+        : {}),
+    });
     for (let i = 0; i < 4; i++)
       disks.push({
         x: center.x + inkDx * (0.25 + i * 0.13) + dz * (i % 2 ? 0.16 : -0.16),
@@ -172,14 +216,24 @@ export function paintDisks(stroke: PaintStroke): PaintDisk[] {
     }
   }
   const impact = stroke.kind === "ink" ? disks[0] : undefined;
+  // Voice scale (ink only, bounded so a malformed stroke cannot paint an arbitrarily
+  // large area) and the speaker team's area buff both widen the splat around its anchor.
+  const voiceScale =
+    impact && Number.isFinite(stroke.scale)
+      ? Math.max(0.5, Math.min(1.5, stroke.scale!))
+      : 1;
+  const radiusMultiplier = Math.sqrt(stroke.areaMultiplier ?? 1);
+  const anchor =
+    stroke.kind === "footprint"
+      ? undefined
+      : (impact ?? { x: stroke.x, z: stroke.z });
+  const spread = (impact ? INK_SPLAT_SCALE * voiceScale : 1) * radiusMultiplier;
   return disks.map((disk) => ({
     ...disk,
-    x: impact ? impact.x + (disk.x - impact.x) * INK_SPLAT_SCALE : disk.x,
-    z: impact ? impact.z + (disk.z - impact.z) * INK_SPLAT_SCALE : disk.z,
+    x: anchor ? anchor.x + (disk.x - anchor.x) * spread : disk.x,
+    z: anchor ? anchor.z + (disk.z - anchor.z) * spread : disk.z,
     radius:
-      disk.radius *
-      (stroke.kind === "footprint" ? 1 : INK_SCALE) *
-      (impact ? INK_SPLAT_SCALE : 1),
+      disk.radius * (stroke.kind === "footprint" ? 1 : INK_SCALE) * spread,
   }));
 }
 
@@ -187,6 +241,7 @@ export function rasterizePaintStroke(
   stroke: PaintStroke,
   put: (x: number, y: number) => void,
 ): void {
+  if (wallInkHit(stroke) || tableInkHit(stroke) || ((stroke.height??0)>=1.57 && tableInkMarks(stroke).length)) return;
   const n = PAINT_GRID_SIZE,
     scaleX = n / (FIELD_HALF_WIDTH * 2),
     scaleZ = n / (FIELD_HALF_DEPTH * 2);
@@ -225,18 +280,19 @@ export function rasterizePaintStroke(
       }
       continue;
     }
-    const left = Math.max(0, Math.floor(x - rx)),
-      right = Math.min(n - 1, Math.ceil(x + rx));
+    const bound = disk.organic ? organicOutlineMaxScale(disk) : 1;
+    const left = Math.max(0, Math.floor(x - rx * bound)),
+      right = Math.min(n - 1, Math.ceil(x + rx * bound));
     for (
-      let yy = Math.max(0, Math.floor(y - rz));
-      yy <= Math.min(n - 1, Math.ceil(y + rz));
+      let yy = Math.max(0, Math.floor(y - rz * bound));
+      yy <= Math.min(n - 1, Math.ceil(y + rz * bound));
       yy++
     ) {
       for (let xx = left; xx <= right; xx++) {
         const dx = (xx - x) / scaleX;
         const dz = (yy - y) / scaleZ;
         const radius = disk.organic
-          ? disk.radius * inkOutlineRadius(Math.atan2(dz, dx))
+          ? disk.radius * organicOutlineScale(disk, Math.atan2(dz, dx))
           : disk.radius;
         if (dx ** 2 + dz ** 2 <= radius * radius) put(xx, yy);
       }
