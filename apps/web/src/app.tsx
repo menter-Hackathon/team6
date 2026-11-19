@@ -9,6 +9,7 @@ import {
   canStartWithPlayers,
   TURN_INTRO_MS,
   type SpecialShape,
+  type PlayerAccessory,
   speakerTeamAreaMultiplier,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
@@ -88,7 +89,9 @@ export function App() {
   const [devMatchCount, setDevMatchCount] = useState(4);
   const [devMatchTurn, setDevMatchTurn] = useState<DevMatchTurn | null>(null);
   const [devMatchPhase, setDevMatchPhase] = useState<DevMatchPhase>("lobby");
-  const [devTeamOffset, setDevTeamOffset] = useState(0);
+  const [devTeams, setDevTeams] = useState<readonly ("A" | "B")[]>([]);
+  const [devAccessory, setDevAccessory] = useState<PlayerAccessory>("none");
+  const [devPracticeColor, setDevPracticeColor] = useState<string>(NEON_COLORS[0]!.hex);
   const [showTopicPopup, setShowTopicPopup] = useState(true);
   const [wardrobeOpen, setWardrobeOpen] = useState(false);
   const openWardrobe = () => {
@@ -97,9 +100,9 @@ export function App() {
   };
   const closeWardrobe = useCallback(() => setWardrobeOpen(false), []);
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
-  const syncDevTeamOffset = useCallback((offset: number) => {
-    setDevTeamOffset(offset);
-    setDevTeam(offset % 2 === 0 ? "A" : "B");
+  const syncDevTeams = useCallback((teams: readonly ("A" | "B")[]) => {
+    setDevTeams(teams);
+    setDevTeam(teams[0] ?? "A");
   }, []);
 
   const connect = async (create: boolean) => {
@@ -185,7 +188,7 @@ export function App() {
     setDevMatchActive(false);
     setDevMatchTurn(null);
     setDevMatchPhase("lobby");
-    setDevTeamOffset(0);
+    syncDevTeams([]);
   };
 
   const leaveRoom = () => {
@@ -216,6 +219,8 @@ export function App() {
     canStartWithPlayers(players.length, gameState?.devMatch ?? false) &&
     players.filter((player) => player.team === "A").length === players.length / 2 &&
     players.filter((player) => player.team === "B").length === players.length / 2;
+  const devLobby = devMode && devMatchActive && devMatchPhase === "lobby";
+  const showDevWardrobe = devLobby && wardrobeOpen;
   const devSpeakerBlocked =
     devMatchActive && devMatchTurn?.isYourTurn === true;
   const devMatchCanPaint =
@@ -251,10 +256,13 @@ export function App() {
         </div>
         <TranscriptionPanel
           turnIndex={
-            connectionState === "connected" && gameState?.phase === "playing"
-              ? gameState.turnIndex || undefined
-              : undefined
+            devMode
+              ? devMatchTurn?.turnNumber
+              : connectionState === "connected" && gameState?.phase === "playing"
+                ? gameState.turnIndex || undefined
+                : undefined
           }
+          localTopic={devMode ? devMatchTurn?.topic : undefined}
           inMatch={
             devMode
               ? devMatchActive && devMatchPhase === "playing"
@@ -264,8 +272,10 @@ export function App() {
             connectionState === "connected" && roomCode ? roomCode : undefined
           }
           userNames={
-            players.length
-              ? players.map((player) => player.displayName)
+            devMode && devMatchActive
+              ? Array.from({ length: devMatchCount }, (_, index) => index === 0 ? "あなた" : `COM ${index}`)
+              : players.length
+                ? players.map((player) => player.displayName)
               : [displayName].filter(Boolean)
           }
         />
@@ -279,9 +289,11 @@ export function App() {
         <button className="hud-dev-button" onClick={toggleDevMode}>
           {devMode ? "検証モードを終了" : "操作を検証"}
         </button>
-        <div className={`status status--${connectionState}`}>
+        <div className={`status status--${devMatchActive ? "connected" : connectionState}`}>
           <span />
-          {connectionState === "connected"
+          {devMatchActive
+            ? `検証ルーム · ${devMatchCount}人`
+            : connectionState === "connected"
             ? `接続中 · ${playerIds.length}/8人`
             : connectionState === "connecting"
               ? "サーバーへ接続中"
@@ -345,7 +357,7 @@ export function App() {
             ))}
           </ul>
         </section>
-      ) : devMode ? (
+      ) : devMode && !devMatchActive ? (
         <details className="lobby-panel lobby-panel--dev" open>
           <summary className="dev-panel-summary">
             <h2>開発者用 検証モード</h2>
@@ -460,6 +472,10 @@ export function App() {
           <button
             onClick={() => {
               setPreviewPopup(null);
+              setAutoFire(!captureMode);
+              setSpeakerPreview(false);
+              window.dispatchEvent(new CustomEvent("speaker-preview", { detail: false }));
+              window.dispatchEvent(new Event("dev-reset-paint"));
               setDevMatchActive(true);
             }}
           >
@@ -513,23 +529,25 @@ export function App() {
               devMode={devMode}
               showDevObstacles={showDevObstacles}
               autoFire={autoFire}
-              controlsPaused={showWardrobe}
+              controlsPaused={showWardrobe || showDevWardrobe}
               devComCount={devMatchActive ? devMatchCount - 1 : 0}
               devMatchPhase={devMatchActive ? devMatchPhase : undefined}
-              devTeamOffset={devTeamOffset}
+              devTeams={devTeams}
+              devSpeakerIndex={devMatchTurn?.speakerIndex}
+              devAccessory={devAccessory}
               devTeam={devTeam}
               devAreaMultiplier={devAreaMultiplier}
               devCanMove={!devMatchActive || devMatchPhase === "lobby" || devMatchPhase === "playing"}
               devCanPaint={devMatchCanPaint}
               devPaintCells={devPaintCells}
               specialShape={specialShape}
-              colorA={devMode ? devColorA : gameState?.colorA}
-              colorB={devMode ? devColorB : gameState?.colorB}
+              colorA={devMode ? (devLobby && devTeam === "A" ? devPracticeColor : devColorA) : gameState?.colorA}
+              colorB={devMode ? (devLobby && devTeam === "B" ? devPracticeColor : devColorB) : gameState?.colorB}
             />
           </Suspense>
         </Canvas>
         </div>
-        {devMode && (
+        {devMode && !devMatchActive && (
           <>
         <button
               className="auto-fire-toggle"
@@ -550,7 +568,7 @@ export function App() {
           </>
         )}
         <div className="crosshair" aria-hidden="true" />
-        {devMode && (
+        {devMode && !devMatchActive && (
           <output
             id="dev-readout"
             className="dev-readout"
@@ -575,6 +593,7 @@ export function App() {
           <span><kbd>Esc</kbd> マウス解除</span>
           </div>}
         </aside>
+        {devLobby && <LobbyColorButtons color={devPracticeColor} onSelect={setDevPracticeColor} />}
         {devMode && devMatchActive && (
           <DevMatchFlow
             cells={devPaintCells}
@@ -583,16 +602,18 @@ export function App() {
             onCountChange={setDevMatchCount}
             onTurnChange={setDevMatchTurn}
             onPhaseChange={setDevMatchPhase}
-            onTeamOffsetChange={syncDevTeamOffset}
+            onTeamsChange={syncDevTeams}
+            onOpenWardrobe={openWardrobe}
             onColorSelect={(team, color) => {
               if (team === "A") setDevColorA(color);
               else setDevColorB(color);
             }}
             onClose={() => {
+              closeWardrobe();
               setDevMatchActive(false);
               setDevMatchTurn(null);
               setDevMatchPhase("lobby");
-              setDevTeamOffset(0);
+              syncDevTeams([]);
             }}
           />
         )}
@@ -699,6 +720,14 @@ export function App() {
                 : {})}
             />
           )}
+        {showDevWardrobe && (
+          <Wardrobe
+            color={devPracticeColor}
+            equipped={devAccessory}
+            onEquip={setDevAccessory}
+            onClose={closeWardrobe}
+          />
+        )}
         {showWardrobe && localPlayer && (
           <Wardrobe
             color={localPlayer.practiceColor}

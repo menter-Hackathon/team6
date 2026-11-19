@@ -4,6 +4,7 @@ import { WardrobeButton } from "./wardrobe";
 
 interface RoomSummaryProps {
   roomCode: string;
+  localRoom?: boolean;
   names: string[];
   canStart?: boolean;
   requiredPlayerCount?: number;
@@ -21,6 +22,7 @@ interface RoomSummaryProps {
 
 export function RoomSummary({
   roomCode,
+  localRoom = false,
   names,
   canStart = false,
   requiredPlayerCount = 0,
@@ -59,10 +61,10 @@ export function RoomSummary({
         </button>
       )}
       <div className="room-summary-code">
-        <span>INVITE CODE / 招待コード</span>
-        <strong>{roomCode}</strong>
+        <span>{localRoom ? "MATCH LOBBY / 待機室" : "INVITE CODE / 招待コード"}</span>
+        <strong>{localRoom ? "検証ルーム" : roomCode}</strong>
       </div>
-      {!onClose && (
+      {!onClose && !localRoom && (
         <>
           <button
             className="invite-link-button"

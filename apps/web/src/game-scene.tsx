@@ -94,7 +94,9 @@ interface GameSceneProps {
   showDevObstacles?: boolean;
   devComCount?: number;
   devMatchPhase?: string | undefined;
-  devTeamOffset?: number;
+  devTeams?: readonly ("A" | "B")[];
+  devSpeakerIndex?: number | undefined;
+  devAccessory?: PlayerAccessory;
   devTeam: "A" | "B";
   devAreaMultiplier?: number;
   devCanPaint?: boolean;
@@ -129,7 +131,9 @@ export function GameScene({
   showDevObstacles = true,
   devComCount = 0,
   devMatchPhase,
-  devTeamOffset = 0,
+  devTeams = [],
+  devSpeakerIndex,
+  devAccessory = "none",
   devTeam,
   devAreaMultiplier = 1,
   devCanPaint = true,
@@ -145,6 +149,16 @@ export function GameScene({
   const reactionInputs = useRef<
     { level: ReactionLevel; at: number; traceKey?: string }[]
   >([]);
+  const devRosterTeam = (index: number) =>
+    devTeams[index] ?? (index % 2 === 0 ? "A" : "B");
+  const devSpawn = (index: number) => {
+    const team = devRosterTeam(index);
+    let slot = 0;
+    for (let i = 0; i < index; i++) {
+      if (devRosterTeam(i) === team) slot++;
+    }
+    return teamStartPosition(team, slot, (devComCount + 1) / 2);
+  };
   const devColor = useRef(colorA);
   devColor.current = devTeam === "A" ? colorA : colorB;
   const devOwnPaint = useRef<(x: number, z: number) => boolean>(() => false);
@@ -615,6 +629,13 @@ export function GameScene({
         room={roomRef.current}
         devMode={devMode}
         devAnchor={devAnchor}
+        devPresenter={
+          devMatchPhase === "playing" && devSpeakerIndex !== undefined
+            ? devSpeakerIndex === 0
+              ? "local"
+              : devSpawn(devSpeakerIndex)
+            : undefined
+        }
         colorA={colorA}
         colorB={colorB}
       />
@@ -638,32 +659,28 @@ export function GameScene({
           obstacles={showDevObstacles}
           devColor={devColor}
           color={devTeam === "A" ? colorA : colorB}
+          accessory={devAccessory}
           devTeam={activeDevTeam}
           areaMultiplier={activeDevAreaMultiplier}
           canPaint={activeDevCanPaint}
           canMove={activeDevCanMove}
-          startPosition={devMatchPhase ? teamStartPosition(devTeamOffset % 2 === 0 ? "A" : "B", 0, (devComCount + 1) / 2) : undefined}
+          startPosition={devMatchPhase ? devSpawn(0) : undefined}
           phase={devMatchPhase}
         />
       )}
       {devMode &&
         Array.from({ length: devComCount }, (_, index) => {
           const rosterIndex = index + 1;
-          const team = (rosterIndex + devTeamOffset) % 2 === 0 ? "A" : "B";
+          const team = devRosterTeam(rosterIndex);
           const angle = (index / Math.max(devComCount, 1)) * Math.PI * 2;
           const lineup = devMatchPhase === "countdown" || devMatchPhase === "playing" || devMatchPhase === "result";
-          const slot = Array.from({ length: rosterIndex + 1 }, (_, playerIndex) => playerIndex)
-            .filter((playerIndex) => (playerIndex + devTeamOffset) % 2 === (rosterIndex + devTeamOffset) % 2).length - 1;
-          const start = teamStartPosition(team, slot, (devComCount + 1) / 2);
+          const start = devSpawn(rosterIndex);
           return (
             <group
               key={index}
               position={lineup ? [start.x, 0, start.z] : [Math.cos(angle) * 5, 0, Math.sin(angle) * 5]}
             >
-              <mesh castShadow receiveShadow position-y={0.5}>
-                <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
-                <meshStandardMaterial color={team === "A" ? colorA : colorB} roughness={0.45} metalness={0.1} />
-              </mesh>
+              <PlayerCube color={team === "A" ? colorA : colorB} />
               <Html position={[0, 1.55, 0]} center zIndexRange={[2, 0]} style={{ pointerEvents: "none" }}>
                 <span className="player-gamertag" style={{ borderColor: team === "A" ? colorA : colorB }}>COM {index + 1}</span>
               </Html>
@@ -742,6 +759,7 @@ function orbitPlayer(camera: THREE.Camera, position: THREE.Vector3, yaw: number,
 }
 
 function DevPlayer({
+  accessory,
   controls,
   ownPaint,
   color,
@@ -764,6 +782,7 @@ function DevPlayer({
   canPaint: MutableRefObject<boolean>;
   canMove: MutableRefObject<boolean>;
   startPosition: { x: number; z: number; yaw: number } | undefined;
+  accessory: PlayerAccessory;
   phase: string | undefined;
 }) {
   const group = useRef<THREE.Group>(null);
@@ -1093,10 +1112,7 @@ function DevPlayer({
           side={THREE.DoubleSide}
         />
       </mesh>
-      <mesh ref={appearance.body} castShadow receiveShadow position-y={0.5}>
-        <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
+      <PlayerCube bodyRef={appearance.body} color={color} accessory={accessory} />
       <mesh
         ref={appearance.ripple}
         visible={false}

@@ -44,6 +44,7 @@ export function SpeakerSpotlight({
   room,
   devMode,
   devAnchor,
+  devPresenter,
   colorA,
   colorB,
 }: {
@@ -51,6 +52,7 @@ export function SpeakerSpotlight({
   devMode: boolean;
   /** Dev character position (used for the preview). */
   devAnchor: MutableRefObject<{ x: number; z: number; height: number }>;
+  devPresenter?: "local" | { x: number; z: number } | undefined;
   colorA: string;
   colorB: string;
 }) {
@@ -67,7 +69,7 @@ export function SpeakerSpotlight({
   const geometry = useMemo(() => new THREE.SphereGeometry(1, 10, 8), []);
   const colors = useRef({ colorA, colorB });
   colors.current = { colorA, colorB };
-  const active = devMode ? preview : speakerId !== null;
+  const active = devMode ? preview || devPresenter !== undefined : speakerId !== null;
 
   // Who is presenting right now (network matches).
   useEffect(() => {
@@ -169,7 +171,10 @@ export function SpeakerSpotlight({
     if (!g) return;
     // Follow the presenter.
     let anchor: { x: number; z: number; height: number } | null = null;
-    if (devMode && preview) anchor = devAnchor.current;
+    if (devMode && (devPresenter === "local" || (!devPresenter && preview)))
+      anchor = devAnchor.current;
+    else if (devMode && typeof devPresenter === "object")
+      anchor = { x: devPresenter.x, z: devPresenter.z, height: 0 };
     else if (!devMode && speakerId && room) {
       const p = room.state.players.get(speakerId);
       if (p) anchor = { x: p.x, z: p.z, height: 0 };

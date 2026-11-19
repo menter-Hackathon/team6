@@ -1415,6 +1415,14 @@ canvas {
   background: rgba(12, 17, 31, 0.92);
   color: white;
 }
+.dev-match-toolbar--playing {
+  top: auto;
+  left: auto;
+  bottom: 16px;
+  right: 16px;
+  justify-content: flex-end;
+  max-width: min(420px, calc(100% - 32px));
+}
 .dev-match-toolbar button,
 .dev-match-toolbar select {
   cursor: pointer;

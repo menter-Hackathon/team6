@@ -8,6 +8,7 @@ export type PopupScene = "lobby" | "countdown" | "turn" | "result";
 interface ProgressionPopupProps {
   scene: PopupScene;
   preview?: boolean;
+  localRoom?: boolean;
   roomCode?: string;
   players?: { displayName: string; ready: boolean }[];
   isHost?: boolean;
@@ -29,6 +30,7 @@ interface ProgressionPopupProps {
 export function ProgressionPopup({
   scene,
   preview = false,
+  localRoom = false,
   roomCode = "ABCD12",
   players = [],
   isHost = false,
@@ -120,7 +122,7 @@ export function ProgressionPopup({
           <>
             <span className="lobby-kicker">MATCH LOBBY ／ 01</span>
             <h2 id="progression-title">入室待ち</h2>
-            <div className="progression-code">
+            {!localRoom && <div className="progression-code">
               <div>
                 <span>INVITE CODE / 招待コード</span>
                 <strong>{roomCode}</strong>
@@ -131,8 +133,8 @@ export function ProgressionPopup({
               >
                 {copied ? "コピー済み ✓" : "コピー"}
               </button>
-            </div>
-            {!preview && (
+            </div>}
+            {!preview && !localRoom && (
               <button className="invite-link-button" onClick={() => void copyInviteLink()}>
                 参加リンクをコピー <span aria-hidden="true">↗</span>
               </button>

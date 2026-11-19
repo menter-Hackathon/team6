@@ -44,11 +44,12 @@ export function useReactionClassification(
   registeredUserNames: readonly string[] = [],
   roomId?: string,
   turnIndex?: number,
+  localTopic?: string,
 ) {
   // During a turn the server swaps in the current speaker's entered story as the source (D-090).
   const roomField = () => ({
     ...(roomId ? { roomId } : {}),
-    ...(turnIndex !== undefined ? { turnIndex } : {}),
+    ...(roomId && turnIndex !== undefined ? { turnIndex } : {}),
   });
   const client = useRef(createReactionClient(API));
   const stream = useRef(new AizuchiStream());
@@ -93,7 +94,7 @@ export function useReactionClassification(
     if (!active.current || seen.current.has(id)) return;
     const pair = reactionRequestSchema.safeParse({
       reaction: text,
-      source: sourceRef.current,
+      source: localTopic ?? sourceRef.current,
       userNames: userNamesRef.current,
       ...roomField(),
     });
@@ -232,7 +233,7 @@ export function useReactionClassification(
     if (!active.current) return;
     const pair = reactionRequestSchema.safeParse({
       reaction: text,
-      source: sourceRef.current,
+      source: localTopic ?? sourceRef.current,
       userNames: userNamesRef.current,
       ...roomField(),
     });
@@ -322,7 +323,7 @@ export function useReactionClassification(
       }
       const pair = reactionRequestSchema.safeParse({
         reaction: text,
-        source: sourceRef.current,
+        source: localTopic ?? sourceRef.current,
         userNames: userNamesRef.current,
         ...roomField(),
       });
@@ -369,7 +370,7 @@ export function useReactionClassification(
       window.removeEventListener("local-transcript", transcript);
       window.removeEventListener("pagehide", abort);
     };
-  }, [enabled, roomId, turnIndex]);
+  }, [enabled, roomId, turnIndex, localTopic]);
   return {
     phase,
     source,
