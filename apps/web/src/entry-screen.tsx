@@ -1,3 +1,4 @@
+import { ROOM_PLAYER_COUNTS, type RoomPlayerCount } from "@gaya/shared";
 import { useState } from "react";
 import "./ink-theme.css";
 
@@ -8,8 +9,8 @@ interface EntryScreenProps {
   onDisplayNameChange: (name: string) => void;
   turnOrder: string;
   onTurnOrderChange: (order: string) => void;
-  devMatch: boolean;
-  onDevMatchChange: (devMatch: boolean) => void;
+  playerCount: RoomPlayerCount;
+  onPlayerCountChange: (count: RoomPlayerCount) => void;
   inviteCode: string;
   onInviteCodeChange: (code: string) => void;
   /** Opened from an invite link: start on the join form with the code filled in. */
@@ -89,13 +90,22 @@ export function EntryScreen(props: EntryScreenProps) {
                 <option value="random">全員ランダム</option>
               </select>
             </label>
-            <label className="ink-entry-check">
-              <input
-                type="checkbox"
-                checked={props.devMatch}
-                onChange={(event) => props.onDevMatchChange(event.target.checked)}
-              />
-              <span>開発者モード（2人から試合を始められる）</span>
+            <label>
+              <span>プレイ人数</span>
+              <select
+                aria-label="プレイ人数"
+                value={props.playerCount}
+                onChange={(event) => {
+                  const count = ROOM_PLAYER_COUNTS.find(
+                    (option) => String(option) === event.target.value,
+                  );
+                  if (count !== undefined) props.onPlayerCountChange(count);
+                }}
+              >
+                {ROOM_PLAYER_COUNTS.map((count) => (
+                  <option key={count} value={count}>{count}人</option>
+                ))}
+              </select>
             </label>
             <div className="ink-entry-actions">
               <button type="button" className="ink-link" onClick={() => setStep("choose")}>

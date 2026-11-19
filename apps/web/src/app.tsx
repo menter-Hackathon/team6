@@ -10,6 +10,7 @@ import {
   TURN_INTRO_MS,
   type SpecialShape,
   type PlayerAccessory,
+  type RoomPlayerCount,
   speakerTeamAreaMultiplier,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
@@ -77,7 +78,7 @@ export function App() {
     new URLSearchParams(location.search).has("room"),
   );
   const [turnOrder, setTurnOrder] = useState("alternating");
-  const [devMatch, setDevMatch] = useState(false);
+  const [roomPlayerCount, setRoomPlayerCount] = useState<RoomPlayerCount>(4);
   const [speakerPreview, setSpeakerPreview] = useState(false);
   const [roomCode, setRoomCode] = useState("");
   // A story belongs to one room; start fresh when the room changes.
@@ -105,6 +106,19 @@ export function App() {
     setDevTeam(teams[0] ?? "A");
   }, []);
 
+  const resetRoom = () => {
+    if (document.pointerLockElement) document.exitPointerLock();
+    closeWardrobe();
+    roomRef.current = null;
+    setGameState(null);
+    setPlayerIds([]);
+    setRoomCode("");
+    setInviteCode("");
+    setFromInviteLink(false);
+    setPanelsHidden(false);
+    setConnectionState("disconnected");
+  };
+
   const connect = async (create: boolean) => {
     if (!SERVER_URL) {
       setErrorMessage(
@@ -121,7 +135,7 @@ export function App() {
         ? await client.create<GameState>(GAME_ROOM_NAME, {
             displayName,
             turnOrder,
-            devMatch,
+            playerCount: roomPlayerCount,
           })
         : await client.joinById<GameState>(inviteCode.trim().toUpperCase(), {
             displayName,
@@ -137,6 +151,7 @@ export function App() {
       history.replaceState(null, "", url);
       setConnectionState("connected");
       const syncPlayerIds = (state: GameState) => {
+        if (roomRef.current !== joinedRoom) return;
         setPlayerIds(Array.from(state.players.keys()));
         setGameState(state);
         if (state.phase !== "lobby") closeWardrobe();
@@ -144,11 +159,10 @@ export function App() {
       joinedRoom.onStateChange(syncPlayerIds);
       syncPlayerIds(initialState);
       joinedRoom.onLeave(() => {
-        setConnectionState("disconnected");
-        roomRef.current = null;
-        closeWardrobe();
+        if (roomRef.current === joinedRoom) resetRoom();
       });
       joinedRoom.onError(() => {
+        if (roomRef.current !== joinedRoom) return;
         setConnectionState("error");
         closeWardrobe();
       });
@@ -192,31 +206,33 @@ export function App() {
   };
 
   const leaveRoom = () => {
-    closeWardrobe();
-    if (roomRef.current) void roomRef.current.leave();
-    roomRef.current = null;
-    setGameState(null);
-    setPlayerIds([]);
-    setRoomCode("");
-    setConnectionState("disconnected");
+    const room = roomRef.current;
+    resetRoom();
+    if (room) void room.leave();
   };
 
   const players = gameState ? Array.from(gameState.players.values()) : [];
   const localPlayer = gameState?.players.get(roomRef.current?.sessionId ?? "");
+  const canDissolve =
+    connectionState === "connected" &&
+    gameState?.phase !== "closed" &&
+    Boolean(localPlayer && localPlayer.id === gameState?.hostId);
+  const dissolveRoom = () => roomRef.current?.send("dissolve-room");
   const showWardrobe =
     wardrobeOpen &&
     !devMode &&
     connectionState === "connected" &&
     gameState?.phase === "lobby" &&
     Boolean(localPlayer);
+  const targetPlayerCount = gameState?.targetPlayerCount ?? 0;
   const canStart =
     gameState?.hostId === roomRef.current?.sessionId &&
-    canStartWithPlayers(players.length, gameState?.devMatch ?? false) &&
+    canStartWithPlayers(players.length, gameState?.devMatch ?? false, targetPlayerCount) &&
     (gameState?.replayPlayerCount === 0 || players.length === gameState?.replayPlayerCount) &&
     players.every((player) => player.ready);
   const canReplay =
     gameState?.hostId === roomRef.current?.sessionId &&
-    canStartWithPlayers(players.length, gameState?.devMatch ?? false) &&
+    canStartWithPlayers(players.length, gameState?.devMatch ?? false, targetPlayerCount) &&
     players.filter((player) => player.team === "A").length === players.length / 2 &&
     players.filter((player) => player.team === "B").length === players.length / 2;
   const devLobby = devMode && devMatchActive && devMatchPhase === "lobby";
@@ -289,12 +305,17 @@ export function App() {
         <button className="hud-dev-button" onClick={toggleDevMode}>
           {devMode ? "検証モードを終了" : "操作を検証"}
         </button>
+        {canDissolve && (
+          <button type="button" className="hud-dev-button" onClick={dissolveRoom}>
+            ルームを解散
+          </button>
+        )}
         <div className={`status status--${devMatchActive ? "connected" : connectionState}`}>
           <span />
           {devMatchActive
             ? `検証ルーム · ${devMatchCount}人`
             : connectionState === "connected"
-            ? `接続中 · ${playerIds.length}/8人`
+            ? `接続中 · ${playerIds.length}/${targetPlayerCount || 8}人`
             : connectionState === "connecting"
               ? "サーバーへ接続中"
               : connectionState === "error"
@@ -318,8 +339,8 @@ export function App() {
           onDisplayNameChange={setDisplayName}
           turnOrder={turnOrder}
           onTurnOrderChange={setTurnOrder}
-          devMatch={devMatch}
-          onDevMatchChange={setDevMatch}
+          playerCount={roomPlayerCount}
+          onPlayerCountChange={setRoomPlayerCount}
           inviteCode={inviteCode}
           onInviteCodeChange={(code) => {
             setInviteCode(code);
@@ -693,6 +714,7 @@ export function App() {
               isReady={localPlayer?.ready ?? false}
               canStart={canStart}
               requiredPlayerCount={gameState.replayPlayerCount}
+              targetPlayerCount={targetPlayerCount}
               onOpenWardrobe={openWardrobe}
               onClose={() => setShowTopicPopup(false)}
               onReady={() => {
@@ -713,6 +735,7 @@ export function App() {
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
               requiredPlayerCount={gameState.replayPlayerCount}
+              targetPlayerCount={targetPlayerCount}
               onOpenWardrobe={openWardrobe}
               canStart={canStart}
               {...(gameState.hostId === roomRef.current?.sessionId
@@ -750,7 +773,7 @@ export function App() {
                 episodeDone={localPlayer?.hasEpisode ?? false}
                 isReady={localPlayer?.ready ?? false}
                 readyCount={players.filter((player) => player.ready).length}
-                playerCount={Math.max(gameState.replayPlayerCount, players.length)}
+                playerCount={Math.max(targetPlayerCount, gameState.replayPlayerCount, players.length)}
                 onReady={() => roomRef.current?.send("ready", !localPlayer?.ready)}
               />
             </>
@@ -770,7 +793,7 @@ export function App() {
               }
               onReshuffle={() => roomRef.current?.send("reshuffle-teams")}
               onReturnToLobby={() => roomRef.current?.send("return-to-lobby")}
-              canStart={players.length === gameState.speakerOrder.length && (gameState.replayPlayerCount === 0 || players.length === gameState.replayPlayerCount)}
+              canStart={canStart && players.length === gameState.speakerOrder.length && (gameState.replayPlayerCount === 0 || players.length === gameState.replayPlayerCount)}
               onStart={() => roomRef.current?.send("start")}
             />
           )}
@@ -812,6 +835,7 @@ export function App() {
               colorB={gameState.colorB}
               {...(roomRef.current ? { room: roomRef.current } : {})}
               {...(canReplay ? { onReplay: () => roomRef.current?.send("replay") } : {})}
+              {...(canDissolve ? { onDissolve: dissolveRoom } : {})}
               onClose={leaveRoom}
             />
           )}

@@ -15,6 +15,7 @@ interface ProgressionPopupProps {
   isReady?: boolean;
   canStart?: boolean;
   requiredPlayerCount?: number;
+  targetPlayerCount?: number;
 
   onOpenWardrobe?: () => void;
 
@@ -37,6 +38,7 @@ export function ProgressionPopup({
   isReady = false,
   canStart = false,
   requiredPlayerCount = 0,
+  targetPlayerCount = 0,
 
   onOpenWardrobe,
 
@@ -142,7 +144,7 @@ export function ProgressionPopup({
             {linkCopyMessage && <p className="lobby-copy-status" role="status">{linkCopyMessage}</p>}
             {onOpenWardrobe && <WardrobeButton onClick={onOpenWardrobe} />}
             <div className="lobby-readiness">
-              <p className="lobby-ready-count">準備完了 <strong>{readyCount} / {Math.max(requiredPlayerCount, players.length)}</strong></p>
+              <p className="lobby-ready-count">準備完了 <strong>{readyCount} / {Math.max(targetPlayerCount, requiredPlayerCount, players.length)}</strong></p>
             {requiredPlayerCount > players.length && (
               <p className="lobby-replay-waiting" role="status">
                 再戦にはあと{requiredPlayerCount - players.length}人の入室が必要です
@@ -162,7 +164,9 @@ export function ProgressionPopup({
                   !canStart
                     ? requiredPlayerCount > 0
                       ? `${requiredPlayerCount}人全員が揃って準備完了すると開始できます`
-                      : "4・6・8人で全員が準備すると開始できます"
+                      : targetPlayerCount > 0
+                        ? `${targetPlayerCount}人全員が揃って準備完了すると開始できます`
+                        : "4・6・8人で全員が準備すると開始できます"
                     : undefined
                 }
                 onClick={onStart}
@@ -187,6 +191,8 @@ export function ProgressionPopup({
                     !canStart
                       ? requiredPlayerCount > 0
                         ? `${requiredPlayerCount}人全員が揃って準備完了すると開始できます`
+                        : targetPlayerCount > 0
+                        ? `${targetPlayerCount}人全員が揃って準備完了すると開始できます`
                         : "4・6・8人で全員が準備すると開始できます"
                       : undefined
                   }

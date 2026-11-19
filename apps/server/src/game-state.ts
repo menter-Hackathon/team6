@@ -37,6 +37,7 @@ export class GameState extends Schema {
   @type("float64") countdownEndsAt = 0;
   @type("uint8") talkDuration = PRESENTATION_SECONDS;
   @type("uint8") replayPlayerCount = 0;
+  @type("uint8") targetPlayerCount = 0;
   /** Developer-mode room: matches may start with 2 players. */
   @type("boolean") devMatch = false;
   @type(["string"]) speakerOrder = new ArraySchema<string>();

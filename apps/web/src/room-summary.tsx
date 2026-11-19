@@ -8,6 +8,7 @@ interface RoomSummaryProps {
   names: string[];
   canStart?: boolean;
   requiredPlayerCount?: number;
+  targetPlayerCount?: number;
   onStart?: () => void;
   onClose?: () => void;
   onOpenWardrobe?: () => void;
@@ -26,6 +27,7 @@ export function RoomSummary({
   names,
   canStart = false,
   requiredPlayerCount = 0,
+  targetPlayerCount = 0,
   onStart,
   onClose,
   onOpenWardrobe,
@@ -106,6 +108,7 @@ export function RoomSummary({
         <button
           className="room-summary-start"
           disabled={!canStart}
+          title={!canStart && targetPlayerCount > 0 ? `${targetPlayerCount}人全員の準備完了が必要です` : undefined}
           onClick={onStart}
         >
           チーム決めへ

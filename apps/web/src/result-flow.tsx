@@ -13,6 +13,7 @@ interface ResultFlowProps {
   room?: Room<GameState>;
   onClose?: () => void;
   onReplay?: () => void;
+  onDissolve?: () => void;
 }
 
 export function ResultFlow({
@@ -25,6 +26,7 @@ export function ResultFlow({
   room,
   onClose,
   onReplay,
+  onDissolve,
 }: ResultFlowProps) {
   const [stage, setStage] = useState<
     "finish" | "curtain" | "suspense" | "revealed"
@@ -103,10 +105,11 @@ export function ResultFlow({
             colorA={colorA}
             colorB={colorB}
           />
-          {onReplay ? (
+          {onReplay || onDissolve ? (
             <div className="result-screen-actions">
-              <button onClick={onReplay}>もう一度遊ぶ</button>
-              <button onClick={onClose}>{room ? "ルームを退出" : "検証を終了"}</button>
+              {onReplay && <button onClick={onReplay}>もう一度遊ぶ</button>}
+              {onClose && <button onClick={onClose}>{room ? "ルームを退出" : "検証を終了"}</button>}
+              {onDissolve && <button onClick={onDissolve}>ルームを解散</button>}
             </div>
           ) : preview ? (
             <div className="result-screen-actions">

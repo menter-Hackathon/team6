@@ -66,6 +66,10 @@ export class GameRoom extends Room<{ state: GameState }> {
     const settings = roomOptionsSchema.parse(options);
     this.roomId = randomBytes(4).toString("hex").toUpperCase();
     this.setState(new GameState());
+    if (settings.playerCount !== undefined) {
+      this.maxClients = settings.playerCount;
+      this.state.targetPlayerCount = settings.playerCount;
+    }
     this.state.turnOrder = settings.turnOrder;
     this.state.talkDuration = settings.talkDuration;
     this.state.devMatch = settings.devMatch;
@@ -209,6 +213,12 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (payload && !this.episodes.has(client.sessionId)) return;
       player.ready = payload;
     });
+    this.onMessage("dissolve-room", (client) => {
+      if (client.sessionId !== this.state.hostId || this.state.phase === "closed")
+        return;
+      this.state.phase = "closed";
+      void this.disconnect();
+    });
     this.onMessage("team-color", (client, payload: unknown) => {
       if (
         this.state.phase !== "team_selection" ||
@@ -253,7 +263,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         return;
       const players = Array.from(this.state.players.values());
       if (
-        !canStartWithPlayers(players.length, this.state.devMatch) ||
+        !canStartWithPlayers(players.length, this.state.devMatch, this.state.targetPlayerCount) ||
         (this.state.replayPlayerCount > 0 &&
           players.length !== this.state.replayPlayerCount) ||
         players.some((player) => !player.ready)
@@ -300,7 +310,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         return;
       const players = Array.from(this.state.players.values());
       if (
-        !canStartWithPlayers(players.length, this.state.devMatch) ||
+        !canStartWithPlayers(players.length, this.state.devMatch, this.state.targetPlayerCount) ||
         players.filter((player) => player.team === "A").length !==
           players.length / 2 ||
         players.filter((player) => player.team === "B").length !==
@@ -349,7 +359,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         return;
       const players = Array.from(this.state.players.values());
       if (
-        !canStartWithPlayers(players.length, this.state.devMatch) ||
+        !canStartWithPlayers(players.length, this.state.devMatch, this.state.targetPlayerCount) ||
         (this.state.replayPlayerCount > 0 &&
           players.length !== this.state.replayPlayerCount) ||
         players.some((player) => !player.ready) ||
