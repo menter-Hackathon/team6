@@ -10,7 +10,6 @@ import {
   TURN_INTRO_MS,
   type SpecialShape,
   speakerTeamAreaMultiplier,
-  PRESENTATION_SECONDS,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
 import { GameScene } from "./game-scene";
@@ -77,7 +76,6 @@ export function App() {
     new URLSearchParams(location.search).has("room"),
   );
   const [turnOrder, setTurnOrder] = useState("alternating");
-  const [talkDuration, setTalkDuration] = useState(PRESENTATION_SECONDS);
   const [devMatch, setDevMatch] = useState(false);
   const [speakerPreview, setSpeakerPreview] = useState(false);
   const [roomCode, setRoomCode] = useState("");
@@ -120,7 +118,6 @@ export function App() {
         ? await client.create<GameState>(GAME_ROOM_NAME, {
             displayName,
             turnOrder,
-            talkDuration,
             devMatch,
           })
         : await client.joinById<GameState>(inviteCode.trim().toUpperCase(), {
@@ -299,8 +296,6 @@ export function App() {
           onDisplayNameChange={setDisplayName}
           turnOrder={turnOrder}
           onTurnOrderChange={setTurnOrder}
-          talkDuration={talkDuration}
-          onTalkDurationChange={setTalkDuration}
           devMatch={devMatch}
           onDevMatchChange={setDevMatch}
           inviteCode={inviteCode}
