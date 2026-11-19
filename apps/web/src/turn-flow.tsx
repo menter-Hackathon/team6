@@ -61,7 +61,12 @@ export function TurnFlow({
     <>
       {topic && (
         <section className="turn-topic" aria-label="このターンの話題">
-          <span className="turn-topic-label">このターンの話題</span>
+          <div className="turn-topic-heading">
+            <span className="turn-topic-label">このターンの話題</span>
+            <strong className="turn-topic-speaker">
+              {isYourTurn ? "あなたのターン" : `${speakerName}さんのターン`}
+            </strong>
+          </div>
           <p tabIndex={0}>{topic}</p>
         </section>
       )}

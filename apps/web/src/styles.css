@@ -1177,10 +1177,21 @@ kbd {
   color: #f5f1e7;
   box-shadow: 5px 6px 0 #090913a8;
 }
+.turn-topic-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+}
 .turn-topic-label {
   color: #ff90b9;
   font-size: 11px;
   font-weight: 800;
+}
+.turn-topic-speaker {
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .turn-topic p {
   max-height: min(7em, 20dvh);
