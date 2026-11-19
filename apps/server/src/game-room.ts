@@ -59,7 +59,7 @@ export class GameRoom extends Room<{ state: GameState }> {
   private readonly specialShapes = new Map<string, SpecialShape>();
   private readonly dives = new Map<string, DiveState>();
   private turnTimer: ReturnType<typeof setInterval> | undefined;
-  /** Entered stories by session id (D-090). Server memory only; never synced. */
+  /** Entered stories by session id. Only the current turn's topic is synced. */
   private readonly episodes = new Map<string, string>();
 
   override onCreate(options: unknown): void {
@@ -71,7 +71,7 @@ export class GameRoom extends Room<{ state: GameState }> {
     this.state.devMatch = settings.devMatch;
     registerEpisodeSource(
       this.roomId,
-      () => this.currentEpisode(),
+      () => this.state.turnTopic,
       () => this.state.phase === "playing" ? this.state.turnIndex : undefined,
     );
     this.setPatchRate(1000 / SERVER_TICK_RATE);
@@ -315,6 +315,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.state.scoreA = 0;
       this.state.scoreB = 0;
       this.state.turnIndex = 0;
+      this.state.turnTopic = "";
       this.state.turnEndsAt = 0;
       this.state.countdownEndsAt = 0;
       this.state.replayPlayerCount = players.length;
@@ -459,6 +460,7 @@ export class GameRoom extends Room<{ state: GameState }> {
     unregisterEpisodeSource(this.roomId);
     this.episodes.clear();
     this.state.phase = "closed";
+    this.state.turnTopic = "";
   }
 
   private sendPaintSnapshot(client: Client): void {
@@ -474,13 +476,6 @@ export class GameRoom extends Room<{ state: GameState }> {
     const a = players.filter((player) => player.team === "A");
     const b = players.filter((player) => player.team === "B");
     return a.flatMap((player, index) => [player, b[index]!]);
-  }
-
-  /** The current speaker's entered story, used as the source for others' gaya. */
-  private currentEpisode(): string {
-    if (this.state.phase !== "playing" || this.state.turnIndex === 0) return "";
-    const speaker = this.state.speakerOrder[this.state.turnIndex - 1];
-    return speaker ? (this.episodes.get(speaker) ?? "") : "";
   }
 
   private assignTeams(players: PlayerState[]): void {
@@ -539,12 +534,15 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.state.scoreA = scoreA;
       this.state.scoreB = scoreB;
       this.state.phase = "result";
+      this.state.turnTopic = "";
       this.state.turnEndsAt = 0;
       if (this.turnTimer) clearInterval(this.turnTimer);
       return;
     }
     this.state.turnEndsAt =
       Date.now() + TURN_INTRO_MS + this.state.talkDuration * 1000;
+    const speaker = this.state.speakerOrder[this.state.turnIndex];
+    this.state.turnTopic = speaker ? (this.episodes.get(speaker) ?? "") : "";
     this.state.turnIndex += 1;
   }
 

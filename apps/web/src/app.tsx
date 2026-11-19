@@ -766,6 +766,7 @@ export function App() {
                 gameState.speakerOrder[gameState.turnIndex - 1] ===
                 roomRef.current?.sessionId
               }
+              topic={gameState.turnTopic}
               turnNumber={gameState.turnIndex}
               turnCount={gameState.speakerOrder.length}
               endsAt={gameState.turnEndsAt}

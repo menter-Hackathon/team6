@@ -31,6 +31,7 @@ export interface GameState {
   colorB: string;
   turnOrder: string;
   turnIndex: number;
+  turnTopic: string;
   turnEndsAt: number;
   countdownEndsAt: number;
   talkDuration: number;

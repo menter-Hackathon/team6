@@ -3,6 +3,7 @@ import { PRESENTATION_SECONDS, TURN_INTRO_MS } from "@gaya/shared";
 
 interface TurnFlowProps {
   speakerName: string;
+  topic?: string;
   isYourTurn: boolean;
   turnNumber: number;
   turnCount: number;
@@ -14,6 +15,7 @@ interface TurnFlowProps {
 
 export function TurnFlow({
   speakerName,
+  topic,
   isYourTurn,
   turnNumber,
   turnCount,
@@ -57,6 +59,12 @@ export function TurnFlow({
 
   return (
     <>
+      {topic && (
+        <section className="turn-topic" aria-label="このターンの話題">
+          <span className="turn-topic-label">このターンの話題</span>
+          <p tabIndex={0}>{topic}</p>
+        </section>
+      )}
       {stage !== "timer" && (
         <div className="progression-backdrop progression-turn-backdrop">
           <section

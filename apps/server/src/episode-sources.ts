@@ -1,6 +1,6 @@
 /**
  * Where the reaction API finds the current speaker's entered story (D-090).
- * Rooms register a getter; the story text stays on the server and is never broadcast.
+ * Rooms register getters for the active turn and its shared topic.
  */
 const sources = new Map<
   string,

@@ -17,7 +17,7 @@ export class PlayerState extends Schema {
   @type("boolean") dive = false;
   @type("boolean") submerged = false;
   @type("uint32") lastProcessedInput = 0;
-  /** Whether this player has entered their story; the text itself stays on the server. */
+  /** Whether this player has entered their story; only the active turn’s story is shared. */
   @type("boolean") hasEpisode = false;
   @type("string") accessory: PlayerAccessory = "none";
 }
@@ -32,6 +32,7 @@ export class GameState extends Schema {
   @type("string") colorB = "#37d9ff";
   @type("string") turnOrder = "alternating";
   @type("uint32") turnIndex = 0;
+  @type("string") turnTopic = "";
   @type("float64") turnEndsAt = 0;
   @type("float64") countdownEndsAt = 0;
   @type("uint8") talkDuration = PRESENTATION_SECONDS;
