@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { SpeechModelChoice } from "./protocol";
 import { useTranscription } from "./use-transcription";
 import { useBrowserTranscription } from "./use-browser-transcription";
@@ -16,6 +16,8 @@ export function TranscriptionPanel({
   alignLeft = false,
   turnIndex,
   localTopic,
+  onMicrophoneChange,
+  microphoneRef,
 }: {
   userNames?: readonly string[];
   /** Joined room; lets the server use the current speaker's story as the source. */
@@ -23,6 +25,8 @@ export function TranscriptionPanel({
   alignLeft?: boolean;
   turnIndex?: number | undefined;
   localTopic?: string | undefined;
+  onMicrophoneChange: (state: { listening: boolean; changing: boolean }) => void;
+  microphoneRef: Ref<{ start: () => void }>;
 }) {
   const [open, setOpen] = useState(false);
   const judge = useReactionClassification(true, userNames, roomId, turnIndex, localTopic);
@@ -102,14 +106,30 @@ export function TranscriptionPanel({
   const microphoneOn = speech.listening || speech.starting;
   const microphoneStopping = external && browser.stopping;
   const microphoneUnavailable = speech.phase !== "ready" || speech.pending >= 3;
+  const microphoneChanging = speech.starting || microphoneStopping;
+  useLayoutEffect(() => {
+    onMicrophoneChange({ listening: speech.listening, changing: microphoneChanging });
+  }, [onMicrophoneChange, speech.listening, microphoneChanging]);
+
+  const startMicrophone = () => {
+    if (microphoneOn || microphoneStopping) return;
+    if (microphoneUnavailable) {
+      if (document.pointerLockElement) void document.exitPointerLock();
+      setOpen(true);
+      return;
+    }
+    if (judge.phase !== "ready") void judge.prepare();
+    void speech.start();
+  };
+  useImperativeHandle(microphoneRef, () => ({ start: startMicrophone }));
+
   const toggleMicrophone = () => {
     if (microphoneOn) {
       if (speech.starting && external) browser.cancel();
       else speech.stop();
       return;
     }
-    if (judge.phase !== "ready") void judge.prepare();
-    void speech.start();
+    startMicrophone();
   };
 
   return (

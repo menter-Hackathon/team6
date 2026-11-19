@@ -29,6 +29,9 @@ export interface DevMatchTurn {
 }
 
 interface Props {
+  microphoneListening: boolean;
+  microphoneChanging: boolean;
+  onStartMicrophone: () => void;
   cells: React.RefObject<Uint8Array | null>;
   colorA: string;
   colorB: string;
@@ -42,6 +45,9 @@ interface Props {
 }
 
 export function DevMatchFlow({
+  microphoneListening,
+  microphoneChanging,
+  onStartMicrophone,
   cells,
   colorA,
   colorB,
@@ -155,7 +161,7 @@ export function DevMatchFlow({
     setPhase("team_selection");
   };
   const toggleReady = () => {
-    if (!episode.savedText) return;
+    if (!ready && (!episode.savedText || !microphoneListening)) return;
     setReady(!ready);
     if (!ready) setShowLobby(false);
   };
@@ -253,6 +259,9 @@ export function DevMatchFlow({
               setEpisode((draft) => ({ ...draft, text }))
             }
             episodeDone={Boolean(episode.savedText)}
+            microphoneListening={microphoneListening}
+            microphoneChanging={microphoneChanging}
+            onStartMicrophone={onStartMicrophone}
             isReady={ready}
             readyCount={count - Number(!ready)}
             playerCount={count}

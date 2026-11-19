@@ -13,6 +13,7 @@ interface ProgressionPopupProps {
   players?: { displayName: string; ready: boolean }[];
   isHost?: boolean;
   isReady?: boolean;
+  microphoneListening?: boolean;
   canStart?: boolean;
   requiredPlayerCount?: number;
   targetPlayerCount?: number;
@@ -36,6 +37,7 @@ export function ProgressionPopup({
   players = [],
   isHost = false,
   isReady = false,
+  microphoneListening = true,
   canStart = false,
   requiredPlayerCount = 0,
   targetPlayerCount = 0,
@@ -179,6 +181,8 @@ export function ProgressionPopup({
               <button
                 className="lobby-ready-button"
                 aria-pressed={isReady}
+                disabled={!isReady && !microphoneListening}
+                title={!isReady && !microphoneListening ? "マイクをオンにしてください" : undefined}
                 onClick={onReady}
               >
                 {isReady ? "準備を取り消す ✓" : "準備OKにする"}

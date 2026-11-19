@@ -372,37 +372,55 @@
   cursor: not-allowed;
 }
 .lobby-hud-actions button small,
-.lobby-hud-episode span {
+.lobby-hud-episode span,
+.lobby-hud-microphone span {
   font-size: 12px;
   font-weight: 800;
   opacity: 0.8;
 }
-.lobby-hud-episode {
+.lobby-hud-episode,
+.lobby-hud-microphone {
   background: #fff;
 }
-.lobby-hud-episode strong {
+.lobby-hud-episode strong,
+.lobby-hud-microphone strong {
   padding: 3px 10px;
   border-radius: 999px;
   background: var(--ink-night);
   color: var(--ink-yellow);
   font-size: 13px;
 }
-.lobby-hud-episode.is-done strong {
+.lobby-hud-episode.is-done strong,
+.lobby-hud-microphone.is-done strong {
   background: var(--ink-lime);
   color: var(--ink-shadow);
 }
 .lobby-hud-ready { background: var(--ink-pink); }
+.lobby-hud-actions .lobby-hud-microphone.is-done {
+  cursor: default;
+  filter: none;
+  opacity: 1;
+}
 .lobby-hud-ready[aria-pressed="true"] { background: var(--ink-lime); }
 .lobby-hud-actions .lobby-hud-banner {
   display: grid;
   justify-items: start;
   gap: 2px;
+  padding: 10px 18px;
+  border: 3px solid var(--ink-shadow);
   background: var(--ink-night);
   color: var(--ink-yellow);
   border-radius: 999px 999px 999px 10px;
+  box-shadow: 4px 5px 0 var(--ink-shadow);
   animation: ink-pulse 1.6s ease-in-out infinite;
 }
-.lobby-hud-banner small { color: #fff; opacity: 0.85; }
+.lobby-hud-banner ul {
+  margin: 0;
+  padding-inline-start: 1.25em;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
 @keyframes ink-pulse {
   50% { transform: translateY(-2px) rotate(-1deg); }
 }
@@ -528,10 +546,10 @@
 /* Keep the waiting-room card clear of the HUD on the right. */
 .progression-backdrop.progression-backdrop--lobby { padding-right: 340px; }
 @media (max-width: 760px) {
-  .progression-backdrop.progression-backdrop--lobby { padding-right: 20px; padding-bottom: 230px; }
+  .progression-backdrop.progression-backdrop--lobby { padding-right: 20px; padding-bottom: 300px; }
 }
 @media (max-width: 600px) {
-  .lobby-hud-colors { top: auto; bottom: 230px; right: 16px; flex-wrap: wrap; max-width: 200px; }
+  .lobby-hud-colors { top: auto; bottom: 310px; right: 16px; flex-wrap: wrap; max-width: 200px; }
   .lobby-hud-actions { right: 16px; bottom: 16px; }
 }
 

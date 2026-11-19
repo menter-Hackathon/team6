@@ -46,6 +46,10 @@ export function App() {
   const captureMode = new URLSearchParams(location.search).has("capture");
   const [panelsHidden, setPanelsHidden] = useState(false);
   const [showDevObstacles, setShowDevObstacles] = useState(false);
+  const [{ listening: microphoneListening, changing: microphoneChanging }, setMicrophoneState] =
+    useState({ listening: false, changing: false });
+  const microphoneRef = useRef<{ start: () => void }>(null);
+  const startMicrophone = () => microphoneRef.current?.start();
   const [autoFire, setAutoFire] = useState(!captureMode);
   // D-086: the star/heart picker stays hidden; the special always lands as ink.
   const specialShape: SpecialShape = "ink";
@@ -213,6 +217,11 @@ export function App() {
 
   const players = gameState ? Array.from(gameState.players.values()) : [];
   const localPlayer = gameState?.players.get(roomRef.current?.sessionId ?? "");
+  const toggleReady = () => {
+    if (!localPlayer || (!localPlayer.ready && (!microphoneListening || !localPlayer.hasEpisode)))
+      return;
+    roomRef.current?.send("ready", !localPlayer.ready);
+  };
   const canDissolve =
     connectionState === "connected" &&
     gameState?.phase !== "closed" &&
@@ -276,6 +285,8 @@ export function App() {
           </div>
           <div className="hud-actions">
             <TranscriptionPanel
+              onMicrophoneChange={setMicrophoneState}
+              microphoneRef={microphoneRef}
               turnIndex={
                 devMode
                   ? devMatchTurn?.turnNumber
@@ -628,6 +639,9 @@ export function App() {
         {devLobby && <LobbyColorButtons color={devPracticeColor} onSelect={setDevPracticeColor} />}
         {devMode && devMatchActive && (
           <DevMatchFlow
+            microphoneListening={microphoneListening}
+            microphoneChanging={microphoneChanging}
+            onStartMicrophone={startMicrophone}
             cells={devPaintCells}
             colorA={devColorA}
             colorB={devColorB}
@@ -689,6 +703,7 @@ export function App() {
               ]}
               isHost
               isReady={previewReady}
+              microphoneListening={microphoneListening}
               speakerName="メンターA"
               onClose={() => setPreviewPopup(null)}
               onReady={() => setPreviewReady(true)}
@@ -728,11 +743,6 @@ export function App() {
               targetPlayerCount={targetPlayerCount}
               onOpenWardrobe={openWardrobe}
               onClose={() => setShowTopicPopup(false)}
-              onReady={() => {
-                const nextReady = !localPlayer?.ready;
-                roomRef.current?.send("ready", nextReady);
-                if (nextReady) setShowTopicPopup(false);
-              }}
               {...(gameState.hostId === roomRef.current?.sessionId
                 ? { onStart: () => roomRef.current?.send("prepare-teams") }
                 : {})}
@@ -782,10 +792,13 @@ export function App() {
                 episodeInput={episodeInput}
                 onSelectTopic={(text) => setEpisodeDraft((draft) => ({ ...draft, text }))}
                 episodeDone={localPlayer?.hasEpisode ?? false}
+                microphoneListening={microphoneListening}
+                microphoneChanging={microphoneChanging}
+                onStartMicrophone={startMicrophone}
                 isReady={localPlayer?.ready ?? false}
                 readyCount={players.filter((player) => player.ready).length}
                 playerCount={Math.max(targetPlayerCount, gameState.replayPlayerCount, players.length)}
-                onReady={() => roomRef.current?.send("ready", !localPlayer?.ready)}
+                onReady={toggleReady}
               />
             </>
           )}
