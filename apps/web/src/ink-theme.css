@@ -485,7 +485,7 @@
   font-size: 13px;
   font-weight: 1000;
 }
-.lobby-hud-topics button {
+.lobby-hud-topics > div button {
   width: 32px;
   height: 32px;
   border: 2px solid var(--ink-shadow);
@@ -501,13 +501,24 @@
   padding: 0;
   list-style: none;
 }
-.lobby-hud-topics li {
+.lobby-hud-topics li button {
+  display: block;
+  width: 100%;
   padding: 7px 12px;
   border: 2px solid var(--ink-shadow);
   border-radius: 12px;
   background: #fff;
+  color: var(--ink-shadow);
+  font: inherit;
   font-size: 13px;
   font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+.lobby-hud-topics li button:hover { background: #fff4ca; }
+.lobby-hud-topics li button:focus-visible {
+  outline: 2px solid var(--ink-shadow);
+  outline-offset: 2px;
 }
 .lobby-hud-dialog .episode-input label { font-size: 16px; font-weight: 1000; }
 .lobby-hud-dialog .episode-input textarea {

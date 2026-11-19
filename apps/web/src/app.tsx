@@ -714,6 +714,7 @@ export function App() {
               />
               <LobbyActions
                 episodeInput={episodeInput}
+                onSelectTopic={(text) => setEpisodeDraft((draft) => ({ ...draft, text }))}
                 episodeDone={localPlayer?.hasEpisode ?? false}
                 isReady={localPlayer?.ready ?? false}
                 readyCount={players.filter((player) => player.ready).length}

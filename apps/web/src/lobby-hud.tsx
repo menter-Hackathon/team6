@@ -29,6 +29,7 @@ export function LobbyColorButtons({
 interface LobbyActionsProps {
   /** The story field; rendered inside the dialog. */
   episodeInput: ReactNode;
+  onSelectTopic: (topic: string) => void;
   episodeDone: boolean;
   isReady: boolean;
   readyCount: number;
@@ -43,6 +44,7 @@ interface LobbyActionsProps {
  */
 export function LobbyActions({
   episodeInput,
+  onSelectTopic,
   episodeDone,
   isReady,
   readyCount,
@@ -110,7 +112,11 @@ export function LobbyActions({
               </div>
               <ul>
                 {topics.map((topic) => (
-                  <li key={topic}>{topic}</li>
+                  <li key={topic}>
+                    <button type="button" onClick={() => onSelectTopic(topic)}>
+                      {topic}
+                    </button>
+                  </li>
                 ))}
               </ul>
             </div>
