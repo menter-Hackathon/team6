@@ -163,8 +163,6 @@ export function TranscriptionPanel({
             inMatch ? "speech-panel speech-panel--match" : "speech-panel"
           }
           aria-label="音声の文字起こし"
-          onKeyDown={(event) => event.stopPropagation()}
-          onKeyUp={(event) => event.stopPropagation()}
         >
           <header className="speech-heading">
             <h2>音声の文字起こし</h2>

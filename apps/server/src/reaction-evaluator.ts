@@ -5,6 +5,7 @@ import {
 } from "./aizuchi-splitter.js";
 import { memoizeAsync } from "./memoize-async.js";
 import { resolve } from "node:path";
+import { Worker, parentPort, workerData } from "node:worker_threads";
 import {
   reactionLevelSchema,
   type ReactionLevel,
@@ -25,7 +26,7 @@ export class ReactionEvaluator {
   private tail: Promise<unknown> = Promise.resolve();
   private pending = 0;
   constructor(
-    private readonly load: () => Promise<Evaluate> = loadEvaluator,
+    private readonly load: () => Promise<Evaluate> = loadInWorker,
     private readonly split: (
       text: string,
     ) => Promise<string[] | null> = splitAizuchiReaction,
@@ -103,10 +104,20 @@ export class ReactionEvaluator {
         signal?.throwIfAborted();
         await this.prepare();
         signal?.throwIfAborted();
-        const result = await this.evaluatePair!({
-          source: pair.source,
-          reaction: pair.reaction,
-        });
+        let result: Awaited<ReturnType<Evaluate>>;
+        try {
+          result = await this.evaluatePair!({
+            source: pair.source,
+            reaction: pair.reaction,
+          });
+        } catch (error) {
+          if (error instanceof ReactionWorkerExitError) {
+            this.state = "error";
+            this.loading = undefined;
+            this.evaluatePair = undefined;
+          }
+          throw error;
+        }
         signal?.throwIfAborted();
         return reactionLevelSchema.parse(result.level);
       })
@@ -120,6 +131,86 @@ export class ReactionEvaluator {
     return task;
   }
 }
+
+class ReactionWorkerExitError extends Error {}
+
+async function loadInWorker(): Promise<Evaluate> {
+  const worker = import.meta.url.endsWith(".ts")
+    ? new Worker(
+        `const { tsImport } = await import(${JSON.stringify(import.meta.resolve("tsx/esm/api"))});
+         await tsImport(${JSON.stringify(import.meta.url)}, import.meta.url);`,
+        { eval: true, workerData: "reaction-model", execArgv: [] },
+      )
+    : new Worker(new URL(import.meta.url), { workerData: "reaction-model" });
+
+  type Reply = { ok: true; level?: unknown } | { ok: false };
+  let failed = false;
+  let receive: ((reply: Reply) => void) | undefined;
+  let rejectPending: ((error: Error) => void) | undefined;
+  const fail = () => {
+    failed = true;
+    rejectPending?.(new ReactionWorkerExitError("Reaction worker exited"));
+  };
+  worker.on("error", fail);
+  worker.on("exit", fail);
+  worker.on("message", (reply: Reply) => receive?.(reply));
+
+  // The evaluator queues calls, so the worker has at most one outstanding reply.
+  const request = (pair?: Pair): Promise<Reply> =>
+    new Promise((accept, reject) => {
+      if (failed) {
+        reject(new ReactionWorkerExitError("Reaction worker exited"));
+        return;
+      }
+      worker.ref();
+      const clear = () => {
+        receive = undefined;
+        rejectPending = undefined;
+        worker.unref();
+      };
+      receive = (reply) => {
+        clear();
+        accept(reply);
+      };
+      rejectPending = (error) => {
+        clear();
+        reject(error);
+      };
+      if (pair) worker.postMessage(pair);
+    });
+
+  try {
+    if (!(await request()).ok) throw new Error("Reaction model unavailable");
+  } catch (error) {
+    void worker.terminate();
+    throw error;
+  }
+
+  return async (pair) => {
+    const reply = await request(pair);
+    if (!reply.ok) throw new Error("Reaction inference failed");
+    return { level: reply.level };
+  };
+}
+
+if (workerData === "reaction-model" && parentPort) {
+  const port = parentPort;
+  void loadEvaluator().then(
+    (evaluate) => {
+      port.on("message", async (pair: Pair) => {
+        try {
+          const { level } = await evaluate(pair);
+          port.postMessage({ ok: true, level });
+        } catch {
+          port.postMessage({ ok: false });
+        }
+      });
+      port.postMessage({ ok: true });
+    },
+    () => port.postMessage({ ok: false }),
+  );
+}
+
 async function loadEvaluator(): Promise<Evaluate> {
   const { initProximity, initExampleModels, evaluate } =
     await import("reaction-evaluator");
