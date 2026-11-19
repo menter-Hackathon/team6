@@ -7,6 +7,29 @@ export const reactionLevelSchema = z.enum([
   "除外",
 ]);
 export type ReactionLevel = z.infer<typeof reactionLevelSchema>;
+export const IMMEDIATE_AIZUCHI = [
+  "なるほど",
+  "なになに",
+  "何何",
+  "何々",
+  "確かに",
+  "たしかに",
+  "流石",
+  "さすが",
+  "知らなかった",
+  "しらなかった",
+  "すごい",
+  "凄い",
+  "せんすある",
+  "そうなんだ",
+] as const;
+export function isHaiAizuchi(text: string): boolean {
+  const compact = text
+    .normalize("NFKC")
+    .replace(/ハイ/gu, "はい")
+    .replace(/[\s、。,.!?…・wW笑]/gu, "");
+  return /^(?:はい[ー~〜]*)+$/u.test(compact);
+}
 export const EPISODE_MAX_LENGTH = 2000;
 /** The story a player will tell, entered before the match (D-090). Empty clears it. */
 export const episodeSchema = z.string().trim().max(EPISODE_MAX_LENGTH);

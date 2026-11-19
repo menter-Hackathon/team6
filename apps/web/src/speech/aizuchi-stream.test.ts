@@ -97,8 +97,20 @@ it("keeps utterances independent and releases data on close", () => {
   expect(stream.emitted("a")).toEqual([]);
 });
 it("chooses the fastest path only for complete common words", () => {
-  expect(immediateAizuchiText("ハイ、はいはい！")).toBe(true);
+  expect(immediateAizuchiText("ハイ、はいはい！")).toBe(false);
   expect(immediateAizuchiText("なるほどなるほど")).toBe(true);
   expect(immediateAizuchiText("なるほ")).toBe(false);
   expect(immediateAizuchiText("はい、違うよ")).toBe(false);
+  expect(immediateAizuchiText("何々？たしかに")).toBe(true);
+  expect(immediateAizuchiText("確かに明日のバイトは忙しい")).toBe(false);
+});
+
+it("deduplicates aizuchi when the final transcript switches to kanji", () => {
+  const stream = new AizuchiStream();
+  const text = "たしかに";
+  stream.commit("a", stream.preview("a")!, text, decision(text));
+  expect(stream.seal("a", "確かに！")).toEqual({
+    parts: [{ text, level: "短い相槌" }],
+    remaining: "",
+  });
 });

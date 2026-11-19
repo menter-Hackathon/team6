@@ -240,6 +240,8 @@ export { specialOutline } from "./special-outline.js";
 export { reactionInkPattern, type ReactionInkDrop } from "./reaction-ink.js";
 export {
   EPISODE_MAX_LENGTH,
+  IMMEDIATE_AIZUCHI,
+  isHaiAizuchi,
   episodeSchema,
   reactionLevelSchema,
   reactionRequestSchema,

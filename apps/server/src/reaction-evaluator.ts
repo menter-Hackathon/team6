@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import { Worker, parentPort, workerData } from "node:worker_threads";
 import {
   reactionLevelSchema,
+  isHaiAizuchi,
   type ReactionLevel,
   type ReactionDecision,
   type ReactionSegment,
@@ -15,6 +16,9 @@ import {
 
 type Pair = { source: string; reaction: string; userNames?: readonly string[] };
 type Evaluate = (pair: Pair) => Promise<{ level: unknown }>;
+// Let a weak connection reach the normal-ink tier without lowering the
+// library's threshold for a confident match.
+const MIN_TOPIC_RELEVANCE_FOR_INK = 0.28;
 export type EvaluatorState = "idle" | "loading" | "ready" | "error";
 export class EvaluatorBusyError extends Error {}
 
@@ -33,11 +37,12 @@ export class ReactionEvaluator {
   ) {}
   async classify(pair: Pair, signal?: AbortSignal): Promise<ReactionDecision> {
     signal?.throwIfAborted();
+    if (isHaiAizuchi(pair.reaction)) return { level: "迷い" };
+    if (isImmediateAizuchi(pair.reaction))
+      return { level: "短い相槌", streamable: true };
     const parts = await this.split(pair.reaction);
     if (!parts || parts.length < 2) {
-      const level = isImmediateAizuchi(pair.reaction)
-        ? "短い相槌"
-        : await this.evaluate(pair, signal);
+      const level = await this.evaluate(pair, signal);
       return {
         level,
         ...(level === "短い相槌" && (await isKnownAizuchi(pair.reaction))
@@ -46,13 +51,20 @@ export class ReactionEvaluator {
       };
     }
     const segments: ReactionSegment[] = [];
-    for (const text of parts)
-      segments.push({
-        text,
-        level: isImmediateAizuchi(text)
-          ? "短い相槌"
-          : await this.evaluate({ ...pair, reaction: text }, signal),
-      });
+    for (const text of parts) {
+      if (isHaiAizuchi(text)) {
+        const previous = segments.at(-1);
+        if (previous && isHaiAizuchi(previous.text)) previous.text += text;
+        else segments.push({ text, level: "迷い" });
+      } else {
+        segments.push({
+          text,
+          level: isImmediateAizuchi(text)
+            ? "短い相槌"
+            : await this.evaluate({ ...pair, reaction: text }, signal),
+        });
+      }
+    }
     // level stays for older clients; current clients always consume each segment independently.
     return {
       level: segments[0]!.level,
@@ -220,9 +232,9 @@ if (workerData === "reaction-model" && parentPort) {
 }
 
 async function loadEvaluator(): Promise<Evaluate> {
-  const { initProximity, initExampleModels, evaluate } =
+  const { initProximity, initExampleModels, evaluate, models, THRESHOLDS } =
     await import("reaction-evaluator");
-  // The library picks the model (Ruri v3 30m q8, D-088); keep its thresholds as supplied.
+  // The library picks the model (Ruri v3 30m q8, D-088).
   const analyzer = await initProximity({
     cacheDir: process.env.MODEL_CACHE_DIR ?? resolve(".cache/reaction-models"),
   });
@@ -232,10 +244,19 @@ async function loadEvaluator(): Promise<Evaluate> {
   await initExampleModels();
   await splitAizuchiReaction("");
   await analyzer.embed("なるほど"); // Warm the first inference before live speech reaches the classifier.
+  const matchModels = {
+    ...models,
+    async relatesToSource(pair: Pair) {
+      const score = await models.relatesToSource(pair);
+      return score >= MIN_TOPIC_RELEVANCE_FOR_INK
+        ? Math.max(score, THRESHOLDS.relatesToSource.unsure)
+        : score;
+    },
+  };
   const cached = memoizeAsync(
     async (key) => {
       const [source, reaction] = JSON.parse(key) as [string, string];
-      const decision = await evaluate({ source, reaction });
+      const decision = await evaluate({ source, reaction }, matchModels);
       if (
         !source.trim() ||
         decision.level === "除外" ||
@@ -243,8 +264,8 @@ async function loadEvaluator(): Promise<Evaluate> {
       )
         return decision;
 
-      // Stock phrases have no relevance judgment. Content uses the same
-      // thresholds the library already applies to long reactions.
+      // Stock phrases have no relevance judgment. Apply the topic rule to
+      // short content as well as the long reactions the library checks.
       const relevance = decision.judgments.relatesToSource;
       if (relevance === "no") return { level: "除外" };
       if (relevance === "unsure") return { level: "迷い" };

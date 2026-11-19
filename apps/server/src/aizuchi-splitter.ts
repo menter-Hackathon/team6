@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
+import { IMMEDIATE_AIZUCHI } from "@gaya/shared";
 import type { ExampleModel } from "reaction-evaluator";
 
+const immediatePhrases = new Set<string>(IMMEDIATE_AIZUCHI);
 type Dictionary = { whole: Set<string>; pieces: string[] };
 interface Tokenizer {
   split: (text: string) => string[] | null;
@@ -26,7 +28,7 @@ export function isImmediateAizuchi(text: string) {
     .trim()
     .replace(/[ァ-ヶ]/gu, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
     .replace(/[\s!?。、.,~〜ー…・wW笑]+$/u, "");
-  return canonical === "はい" || canonical === "なるほど";
+  return immediatePhrases.has(canonical);
 }
 async function load(): Promise<Tokenizer> {
   const entry = import.meta.resolve("reaction-evaluator");
@@ -49,7 +51,7 @@ async function load(): Promise<Tokenizer> {
     ...model.positives.map((example) => example.text),
     ...library.STOCK_PHRASES,
     "はい",
-    "なるほど",
+    ...IMMEDIATE_AIZUCHI,
   ]);
   const repeated = (text: string): string[] | null => {
     const value = canonicalAizuchi(text);
