@@ -1,4 +1,5 @@
 import type { MapSchema } from "@colyseus/schema";
+import type { PlayerAccessory } from "@gaya/shared";
 
 export interface PlayerState {
   id: string;
@@ -15,6 +16,7 @@ export interface PlayerState {
   submerged: boolean;
   lastProcessedInput: number;
   hasEpisode: boolean;
+  accessory: PlayerAccessory;
 }
 
 export interface GameState {

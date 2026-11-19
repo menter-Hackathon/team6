@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { GAME_START_COUNTDOWN_SECONDS, pickRandomTopics } from "@gaya/shared";
 import { PracticeColorPicker } from "./practice-color-picker";
+import { WardrobeButton } from "./wardrobe";
 
 export type PopupScene = "lobby" | "countdown" | "turn" | "result";
 
@@ -15,6 +16,7 @@ interface ProgressionPopupProps {
   requiredPlayerCount?: number;
   practiceColor?: string;
   onPracticeColorSelect?: (color: string) => void;
+  onOpenWardrobe?: () => void;
   speakerName?: string;
   turnNumber?: number;
   turnCount?: number;
@@ -37,6 +39,7 @@ export function ProgressionPopup({
   requiredPlayerCount = 0,
   practiceColor = "#ff4f8b",
   onPracticeColorSelect,
+  onOpenWardrobe,
   speakerName = "プレイヤー",
   turnNumber = 1,
   turnCount = 4,
@@ -179,6 +182,7 @@ export function ProgressionPopup({
                 </button>
               )}
             </div>
+            {onOpenWardrobe && <WardrobeButton onClick={onOpenWardrobe} />}
             <div className="lobby-extras">
               <div className="lobby-topic-box" aria-label="話す話題">
                 <div className="lobby-topic-box-header">

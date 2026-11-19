@@ -1,5 +1,5 @@
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
-import { PRESENTATION_SECONDS } from "@gaya/shared";
+import { PRESENTATION_SECONDS, type PlayerAccessory } from "@gaya/shared";
 
 export class PlayerState extends Schema {
   @type("string") id = "";
@@ -17,6 +17,7 @@ export class PlayerState extends Schema {
   @type("uint32") lastProcessedInput = 0;
   /** Whether this player has entered their story; the text itself stays on the server. */
   @type("boolean") hasEpisode = false;
+  @type("string") accessory: PlayerAccessory = "none";
 }
 
 export class GameState extends Schema {

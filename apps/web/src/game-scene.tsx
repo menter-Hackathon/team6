@@ -37,6 +37,7 @@ import {
   rasterizePaintStroke,
   type PaintStroke,
   type MoveInput,
+  type PlayerAccessory,
   type SpecialShape,
   NEON_COLORS,
   practiceColorOwner,
@@ -49,6 +50,7 @@ import { AIZUCHI_MOTION_SECONDS, AIZUCHI_LAND_TIME } from "./aizuchi-motion";
 import { useAizuchiAppearance } from "./use-aizuchi-appearance";
 import { INK_GLOSS, makeInkRelief, useInkEnvironment } from "./ink-material";
 import { useSpecialAppearance } from "./special-appearance";
+import { PlayerCube } from "./player-cube";
 import { InkEffects, INK_SETTLE_SECONDS } from "./ink-effects";
 import { currentInkVoice } from "./speech/voice-feedback";
 import {
@@ -92,6 +94,7 @@ interface GameSceneProps {
   devPaintCells: MutableRefObject<Uint8Array | null>;
   specialShape: SpecialShape;
   autoFire?: boolean;
+  controlsPaused?: boolean;
   colorA?: string | undefined;
   colorB?: string | undefined;
 }
@@ -126,6 +129,7 @@ export function GameScene({
   devPaintCells,
   specialShape,
   autoFire = false,
+  controlsPaused = false,
   colorA = "#ff4f8b",
   colorB = "#37d9ff",
 }: GameSceneProps) {
@@ -144,6 +148,8 @@ export function GameScene({
   activeDevCanPaint.current = devCanPaint;
   const activeDevCanMove = useRef(devCanMove);
   activeDevCanMove.current = devCanMove;
+  const inputPaused = useRef(controlsPaused);
+  inputPaused.current = controlsPaused;
   const controls = useRef<ControlState>({
     keys: new Set(),
     firing: false,
@@ -161,6 +167,7 @@ export function GameScene({
 
   useEffect(() => {
     const activateSpecial = () => {
+      if (inputPaused.current) return;
       if (devMode) {
         if (!activeDevCanPaint.current) return;
         if (controls.current.specialTime < 0) {
@@ -177,7 +184,7 @@ export function GameScene({
     };
     window.addEventListener("activate-special", activateSpecial);
     const enqueueReaction = (level: ReactionLevel, traceKey?: string) => {
-      if (reactionEffect(level) && reactionInputs.current.length < 32)
+      if (!inputPaused.current && reactionEffect(level) && reactionInputs.current.length < 32)
         reactionInputs.current.push({
           level,
           at: performance.now(),
@@ -207,6 +214,7 @@ export function GameScene({
     window.addEventListener("classified-reaction", classified);
     window.addEventListener("reset-reaction-input", resetReactions);
     const onKeyDown = (event: KeyboardEvent) => {
+      if (inputPaused.current) return;
       if (
         !document.pointerLockElement &&
         event.target instanceof HTMLElement &&
@@ -304,6 +312,7 @@ export function GameScene({
     };
     const onPointerDown = (event: PointerEvent) => {
       if (
+        !inputPaused.current &&
         event.button === 0 &&
         event.isPrimary &&
         event.target instanceof HTMLCanvasElement
@@ -319,13 +328,14 @@ export function GameScene({
       if (!document.pointerLockElement) onBlur();
     };
     const onMouseMove = (event: MouseEvent) => {
-      if (document.pointerLockElement || controls.current.firing) {
+      if (!inputPaused.current && (document.pointerLockElement || controls.current.firing)) {
         controls.current.yaw = rotateYaw(controls.current.yaw, event.movementX);
         controls.current.pitch = rotatePitch(controls.current.pitch, event.movementY);
       }
     };
     const onClick = (event: MouseEvent) => {
       if (
+        !inputPaused.current &&
         event.target instanceof HTMLCanvasElement &&
         (devMode || roomRef.current?.state.phase === "playing" || roomRef.current?.state.phase === "lobby")
       ) {
@@ -367,6 +377,15 @@ export function GameScene({
   }, [devMode, roomRef, specialShape]);
 
   useEffect(() => {
+    if (!controlsPaused) return;
+    controls.current.keys.clear();
+    controls.current.firing = false;
+    controls.current.tapPending = false;
+    for (const reaction of reactionInputs.current.splice(0))
+      finishTrace(reaction.traceKey);
+  }, [controlsPaused]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
       const room = roomRef.current;
       if (!room || (room.state.phase !== "playing" && room.state.phase !== "lobby")) return;
@@ -406,6 +425,7 @@ export function GameScene({
       AIZUCHI_MOTION_SECONDS,
       aizuchiTime.current + Math.min(delta, 0.05),
     );
+    if (inputPaused.current) return;
     const networkPlayer = roomRef.current?.state.players.get(
       roomRef.current.sessionId,
     );
@@ -630,6 +650,7 @@ export function GameScene({
           local={playerId === localId}
           roomRef={roomRef}
           controls={controls}
+          accessory={roomRef.current?.state.players.get(playerId)?.accessory ?? "none"}
           color={
             roomRef.current?.state.phase === "lobby"
               ? (roomRef.current?.state.players.get(playerId)?.practiceColor ??
@@ -1442,6 +1463,7 @@ interface PlayerProps {
   displayName: string;
   local: boolean;
   color: string;
+  accessory: PlayerAccessory;
   roomRef: MutableRefObject<Room<GameState> | null>;
   controls: MutableRefObject<ControlState>;
 }
@@ -1451,6 +1473,7 @@ function Player({
   displayName,
   local,
   color,
+  accessory,
   roomRef,
   controls,
 }: PlayerProps) {
@@ -1547,7 +1570,7 @@ function Player({
       {displayName && (
         <Html
           center
-          position={[0, 1.55, 0]}
+          position={[0, accessory === "none" ? 1.55 : 1.82, 0]}
           zIndexRange={[2, 0]}
           style={{ pointerEvents: "none" }}
         >
@@ -1556,10 +1579,7 @@ function Player({
           </span>
         </Html>
       )}
-      <mesh ref={appearance.body} castShadow receiveShadow position-y={0.5}>
-        <boxGeometry args={[PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE]} />
-        <meshStandardMaterial color={color} roughness={0.45} metalness={0.1} />
-      </mesh>
+      <PlayerCube bodyRef={appearance.body} color={color} accessory={accessory} />
       <mesh
         ref={appearance.ripple}
         visible={false}

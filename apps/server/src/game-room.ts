@@ -22,6 +22,7 @@ import {
   roomOptionsSchema,
   teamColorRequestSchema,
   practiceColorSchema,
+  playerAccessorySchema,
   practiceColorOwner,
   advanceJump,
   type MoveInput,
@@ -200,6 +201,12 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (!parsed.success) return;
       const player = this.state.players.get(client.sessionId);
       if (player) player.practiceColor = parsed.data;
+    });
+    this.onMessage("accessory", (client, payload: unknown) => {
+      if (this.state.phase !== "lobby") return;
+      const parsed = playerAccessorySchema.safeParse(payload);
+      const player = this.state.players.get(client.sessionId);
+      if (parsed.success && player) player.accessory = parsed.data;
     });
     this.onMessage("prepare-teams", (client) => {
       if (

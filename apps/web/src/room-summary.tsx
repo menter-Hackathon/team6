@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { PracticeColorPicker } from "./practice-color-picker";
+import { WardrobeButton } from "./wardrobe";
 
 interface RoomSummaryProps {
   roomCode: string;
@@ -11,6 +12,7 @@ interface RoomSummaryProps {
   onClose?: () => void;
   practiceColor?: string;
   onPracticeColorSelect?: (color: string) => void;
+  onOpenWardrobe?: () => void;
   ready?: boolean;
   readyCount?: number;
   onReady?: () => void;
@@ -27,6 +29,7 @@ export function RoomSummary({
   onClose,
   practiceColor = "#ff4f8b",
   onPracticeColorSelect,
+  onOpenWardrobe,
   ready = false,
   readyCount = 0,
   onReady,
@@ -77,6 +80,7 @@ export function RoomSummary({
           <li key={index}>{name}</li>
         ))}
       </ul>
+      {onOpenWardrobe && <WardrobeButton onClick={onOpenWardrobe} />}
       <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
       {episodeInput}
       {requiredPlayerCount > names.length && (
