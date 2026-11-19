@@ -387,10 +387,6 @@ export function App() {
           >
             箱の前へ移動
           </button>
-          <button onClick={(event)=>{
-            window.dispatchEvent(new Event("dev-table-start"));
-            event.currentTarget.blur();
-          }}>テーブルの前へ移動</button>
           <p className="dev-obstacle-note">
             布を通常インクで塗り、Shift＋テーブル方向への移動で天板に登れます。布・天板にも塗りが残ります。
           </p>

@@ -772,16 +772,9 @@ function DevPlayer({
       fallSpeed.current = 0;
       climbingWall.current = null;
     };
-    const tableReset=()=>{
-      reset();
-      if(group.current)group.current.position.set(8,0,4);
-      controls.current.position={x:8,z:4};
-    };
     window.addEventListener("dev-obstacle-start", reset);
-    window.addEventListener("dev-table-start",tableReset);
     return () => {
       window.removeEventListener("dev-obstacle-start",reset);
-      window.removeEventListener("dev-table-start",tableReset);
     };
   }, [controls]);
   const diveState = useRef<DiveState>({
