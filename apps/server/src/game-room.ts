@@ -1,6 +1,11 @@
 import { Client, Room } from "@colyseus/core";
 import { randomBytes } from "node:crypto";
 import {
+  wallInkMarks,
+  tableInkMarks,
+  TableInkState,
+  moveOnTables,
+  tableFloorHeight,
   talkDurationSchema,
   GAME_START_COUNTDOWN_SECONDS,
   TURN_INTRO_MS,
@@ -8,7 +13,7 @@ import {
   specialRequestSchema,
   type SpecialShape,
   SERVER_TICK_RATE,
-  STARTABLE_PLAYER_COUNTS,
+  canStartWithPlayers,
   joinOptionsSchema,
   moveInputSchema,
   paintRequestSchema,
@@ -45,6 +50,9 @@ export class GameRoom extends Room<{ state: GameState }> {
   override maxClients = 8;
   private readonly movementInputs = new Map<string, MoveInput>();
   private readonly paint = new PaintField();
+  private wallPaint: PaintStroke[] = [];
+  private tablePaint: PaintStroke[] = [];
+  private readonly tableInk = new TableInkState();
   private readonly lastPaint = new Map<string, number>();
   private readonly lastReactionPaint = new Map<string, number>();
   private readonly specialShapes = new Map<string, SpecialShape>();
@@ -58,6 +66,8 @@ export class GameRoom extends Room<{ state: GameState }> {
     this.roomId = randomBytes(4).toString("hex").toUpperCase();
     this.setState(new GameState());
     this.state.turnOrder = settings.turnOrder;
+    this.state.talkDuration = settings.talkDuration;
+    this.state.devMatch = settings.devMatch;
     registerEpisodeSource(this.roomId, () => this.currentEpisode());
     this.setPatchRate(1000 / SERVER_TICK_RATE);
     this.setSimulationInterval(
@@ -66,7 +76,8 @@ export class GameRoom extends Room<{ state: GameState }> {
     );
 
     this.onMessage("move", (client, payload: unknown) => {
-      if (this.state.phase !== "playing" && this.state.phase !== "lobby") return;
+      if (this.state.phase !== "playing" && this.state.phase !== "lobby")
+        return;
       const result = moveInputSchema.safeParse(payload);
       if (!result.success) return;
 
@@ -106,10 +117,13 @@ export class GameRoom extends Room<{ state: GameState }> {
       const stroke: PaintStroke = {
         revision: this.paint.revision + 1,
         actorId: client.sessionId,
+        height: player.height,
         x: player.x,
         z: player.z,
         yaw: player.yaw,
-        ...(parsed.data.kind === "ink" ? { pitch: parsed.data.pitch ?? 0 } : {}),
+        ...(parsed.data.kind === "ink"
+          ? { pitch: parsed.data.pitch ?? 0 }
+          : {}),
         team: player.team === "B" ? "B" : "A",
         ...(practice ? { practiceColor: player.practiceColor } : {}),
         kind: parsed.data.kind,
@@ -122,6 +136,15 @@ export class GameRoom extends Room<{ state: GameState }> {
         areaMultiplier: this.paintAreaMultiplier(player),
       };
       this.paint.apply(stroke);
+      if (wallInkMarks(stroke).length) {
+        this.wallPaint.push(stroke);
+        if (this.wallPaint.length > 4096) this.wallPaint.shift();
+      }
+      if (tableInkMarks(stroke).length) {
+        this.tablePaint.push(stroke);
+        this.tableInk.apply(stroke);
+        if (this.tablePaint.length > 4096) this.tablePaint.shift();
+      }
       if (!practice) {
         this.state.scoreA = this.paint.counts[1]!;
         this.state.scoreB = this.paint.counts[2]!;
@@ -149,7 +172,8 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.dives.delete(client.sessionId);
     });
     this.onMessage("jump", (client) => {
-      if (this.state.phase !== "lobby" && this.state.phase !== "playing") return;
+      if (this.state.phase !== "lobby" && this.state.phase !== "playing")
+        return;
       const player = this.state.players.get(client.sessionId);
       if (!player || player.jumpTime >= 0 || player.specialTime >= 0) return;
       player.jumpTime = 0;
@@ -169,11 +193,16 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (parsed.data) this.episodes.set(client.sessionId, parsed.data);
       else this.episodes.delete(client.sessionId);
       player.hasEpisode = parsed.data.length > 0;
+      // Clearing the episode also clears readiness (ready requires an episode).
+      if (!player.hasEpisode) player.ready = false;
     });
     this.onMessage("ready", (client, payload: unknown) => {
       if (this.state.phase !== "lobby" || typeof payload !== "boolean") return;
       const player = this.state.players.get(client.sessionId);
-      if (player) player.ready = payload;
+      if (!player) return;
+      // A player can get ready only after entering the episode they will tell.
+      if (payload && !this.episodes.has(client.sessionId)) return;
+      player.ready = payload;
     });
     this.onMessage("team-color", (client, payload: unknown) => {
       if (
@@ -190,7 +219,11 @@ export class GameRoom extends Room<{ state: GameState }> {
       else this.state.colorB = color;
     });
     this.onMessage("talk-duration", (client, payload: unknown) => {
-      if (this.state.phase !== "team_selection" || client.sessionId !== this.state.hostId) return;
+      if (
+        this.state.phase !== "team_selection" ||
+        client.sessionId !== this.state.hostId
+      )
+        return;
       const parsed = talkDurationSchema.safeParse(payload);
       if (parsed.success) this.state.talkDuration = parsed.data;
     });
@@ -209,20 +242,28 @@ export class GameRoom extends Room<{ state: GameState }> {
         return;
       const players = Array.from(this.state.players.values());
       if (
-        !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
-        (this.state.replayPlayerCount > 0 && players.length !== this.state.replayPlayerCount) ||
+        !canStartWithPlayers(players.length, this.state.devMatch) ||
+        (this.state.replayPlayerCount > 0 &&
+          players.length !== this.state.replayPlayerCount) ||
         players.some((player) => !player.ready)
       )
         return;
       this.paint.reset();
+      this.tablePaint = [];
+      this.wallPaint = [];
+      this.tableInk.clear();
       this.broadcast("paint-snapshot", {
         revision: this.paint.revision,
         data: deflateSync(this.paint.cells).toString("base64"),
+        tablePaint: this.tablePaint,
+        wallPaint: this.wallPaint,
       });
       this.assignTeams(players);
       players.forEach((player) => {
         player.specialTime = -1;
         player.jumpTime = -1;
+        player.height = 0;
+        player.climbing = false;
         player.dive = false;
         player.submerged = false;
       });
@@ -236,18 +277,29 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (
         client.sessionId !== this.state.hostId ||
         this.state.phase !== "team_selection"
-      ) return;
+      )
+        return;
       this.assignTeams(Array.from(this.state.players.values()));
     });
     this.onMessage("replay", (client) => {
-      if (client.sessionId !== this.state.hostId || this.state.phase !== "result") return;
+      if (
+        client.sessionId !== this.state.hostId ||
+        this.state.phase !== "result"
+      )
+        return;
       const players = Array.from(this.state.players.values());
       if (
-        !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
-        players.filter((player) => player.team === "A").length !== players.length / 2 ||
-        players.filter((player) => player.team === "B").length !== players.length / 2
-      ) return;
+        !canStartWithPlayers(players.length, this.state.devMatch) ||
+        players.filter((player) => player.team === "A").length !==
+          players.length / 2 ||
+        players.filter((player) => player.team === "B").length !==
+          players.length / 2
+      )
+        return;
       this.paint.reset();
+      this.tablePaint = [];
+      this.wallPaint = [];
+      this.tableInk.clear();
       this.lastPaint.clear();
       this.state.scoreA = 0;
       this.state.scoreB = 0;
@@ -258,11 +310,17 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.broadcast("paint-snapshot", {
         revision: this.paint.revision,
         data: deflateSync(this.paint.cells).toString("base64"),
+        tablePaint: this.tablePaint,
+        wallPaint: this.wallPaint,
       });
       this.state.phase = "team_selection";
     });
     this.onMessage("return-to-lobby", (client) => {
-      if (client.sessionId !== this.state.hostId || this.state.phase !== "team_selection") return;
+      if (
+        client.sessionId !== this.state.hostId ||
+        this.state.phase !== "team_selection"
+      )
+        return;
       this.state.phase = "lobby";
       this.state.replayPlayerCount = 0;
       this.state.speakerOrder.clear();
@@ -279,26 +337,43 @@ export class GameRoom extends Room<{ state: GameState }> {
         return;
       const players = Array.from(this.state.players.values());
       if (
-        !STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) ||
-        (this.state.replayPlayerCount > 0 && players.length !== this.state.replayPlayerCount) ||
+        !canStartWithPlayers(players.length, this.state.devMatch) ||
+        (this.state.replayPlayerCount > 0 &&
+          players.length !== this.state.replayPlayerCount) ||
         players.some((player) => !player.ready) ||
-        players.filter((player) => player.team === "A").length !== players.length / 2 ||
-        players.filter((player) => player.team === "B").length !== players.length / 2
-      ) return;
+        players.filter((player) => player.team === "A").length !==
+          players.length / 2 ||
+        players.filter((player) => player.team === "B").length !==
+          players.length / 2
+      )
+        return;
       this.state.replayPlayerCount = 0;
       this.paint.reset();
+      this.tablePaint = [];
+      this.wallPaint = [];
+      this.tableInk.clear();
       this.lastPaint.clear();
       const teams = {
-        A: Array.from(this.state.players.values()).filter((player) => player.team === "A"),
-        B: Array.from(this.state.players.values()).filter((player) => player.team === "B"),
+        A: Array.from(this.state.players.values()).filter(
+          (player) => player.team === "A",
+        ),
+        B: Array.from(this.state.players.values()).filter(
+          (player) => player.team === "B",
+        ),
       };
       this.state.players.forEach((player, sessionId) => {
         const team = player.team === "B" ? "B" : "A";
-        const position = teamStartPosition(team, teams[team].indexOf(player), teams[team].length);
+        const position = teamStartPosition(
+          team,
+          teams[team].indexOf(player),
+          teams[team].length,
+        );
         player.x = position.x;
         player.z = position.z;
         player.yaw = position.yaw;
         player.jumpTime = -1;
+        player.height = 0;
+        player.climbing = false;
         player.specialTime = -1;
         player.dive = false;
         player.submerged = false;
@@ -310,9 +385,12 @@ export class GameRoom extends Room<{ state: GameState }> {
       this.broadcast("paint-snapshot", {
         revision: this.paint.revision,
         data: deflateSync(this.paint.cells).toString("base64"),
+        tablePaint: this.tablePaint,
+        wallPaint: this.wallPaint,
       });
       this.state.phase = "countdown";
-      this.state.countdownEndsAt = Date.now() + GAME_START_COUNTDOWN_SECONDS * 1000;
+      this.state.countdownEndsAt =
+        Date.now() + GAME_START_COUNTDOWN_SECONDS * 1000;
       setTimeout(() => {
         if (this.state.phase !== "countdown") return;
         this.state.phase = "playing";
@@ -376,6 +454,8 @@ export class GameRoom extends Room<{ state: GameState }> {
     client.send("paint-snapshot", {
       revision: this.paint.revision,
       data: deflateSync(this.paint.cells).toString("base64"),
+      tablePaint: this.tablePaint,
+      wallPaint: this.wallPaint,
     });
   }
 
@@ -404,11 +484,19 @@ export class GameRoom extends Room<{ state: GameState }> {
       shuffled.forEach((player, index) => {
         player.team = index < shuffled.length / 2 ? "A" : "B";
       });
-    } while (shuffled.length > 1 && players.map((player) => player.team).join("") === previous);
-    const order = this.state.turnOrder === "random"
-      ? shuffled
-      : this.alternatingOrder(shuffled);
-    this.state.speakerOrder.splice(0, this.state.speakerOrder.length, ...order.map((player) => player.id));
+    } while (
+      shuffled.length > 1 &&
+      players.map((player) => player.team).join("") === previous
+    );
+    const order =
+      this.state.turnOrder === "random"
+        ? shuffled
+        : this.alternatingOrder(shuffled);
+    this.state.speakerOrder.splice(
+      0,
+      this.state.speakerOrder.length,
+      ...order.map((player) => player.id),
+    );
   }
 
   private isSpeaker(sessionId: string): boolean {
@@ -485,10 +573,20 @@ export class GameRoom extends Room<{ state: GameState }> {
             team: player.team === "B" ? "B" : "A",
             ...(practice ? { practiceColor: player.practiceColor } : {}),
             kind: "slam",
+            height: player.height,
             specialShape: this.specialShapes.get(sessionId) ?? "ink",
             areaMultiplier: this.paintAreaMultiplier(player),
           };
           this.paint.apply(stroke);
+          if (wallInkMarks(stroke).length) {
+            this.wallPaint.push(stroke);
+            if (this.wallPaint.length > 4096) this.wallPaint.shift();
+          }
+          if (tableInkMarks(stroke).length) {
+            this.tablePaint.push(stroke);
+            this.tableInk.apply(stroke);
+            if (this.tablePaint.length > 4096) this.tablePaint.shift();
+          }
           if (!practice) {
             this.state.scoreA = this.paint.counts[1]!;
             this.state.scoreB = this.paint.counts[2]!;
@@ -505,33 +603,63 @@ export class GameRoom extends Room<{ state: GameState }> {
       const before = updateDiveState(
         previous,
         diveRequested,
-        this.paint.fullyOwnedAt(player.x, player.z, team),
+        this.tableInk.ownsAt(
+          player.x,
+          player.z,
+          player.height,
+          practice ? player.practiceColor : player.team,
+        ) ?? this.paint.fullyOwnedAt(player.x, player.z, team),
         0,
         team,
       );
-      const next = movePlayer(
+      const target = movePlayer(
         player,
         input,
         dt,
         movementSpeed(diveRequested, before.submerged),
+        false,
       );
+      const next = moveOnTables(
+        player,
+        target,
+        diveRequested,
+        dt,
+        (table, x, y, surface) =>
+          this.tableInk.owns(
+            table,
+            x,
+            y,
+            surface,
+            practice ? player.practiceColor : player.team,
+          ),
+      );
+      player.height = next.height;
+      player.climbing = next.climbing;
       const after = updateDiveState(
         before,
         diveRequested,
-        this.paint.fullyOwnedAt(next.x, next.z, team),
+        next.climbing ||
+          (this.tableInk.ownsAt(
+            next.x,
+            next.z,
+            next.height,
+            practice ? player.practiceColor : player.team,
+          ) ??
+            this.paint.fullyOwnedAt(next.x, next.z, team)),
         dt,
         team,
       );
       this.dives.set(sessionId, after);
       player.dive = diveRequested;
-      player.submerged = after.submerged;
+      player.submerged = after.submerged || next.climbing;
       const distance = Math.hypot(next.x - player.x, next.z - player.z);
       const fromX = player.x,
         fromZ = player.z;
       player.x = next.x;
       player.z = next.z;
       if (
-        !diveRequested &&
+        (!diveRequested || tableFloorHeight(next.x, next.z, next.height) > 0) &&
+        !next.climbing &&
         player.jumpTime < 0 &&
         distance > 0.001 &&
         (this.state.phase === "playing" || practice) &&
@@ -548,9 +676,15 @@ export class GameRoom extends Room<{ state: GameState }> {
           team: player.team === "B" ? "B" : "A",
           ...(practice ? { practiceColor: player.practiceColor } : {}),
           kind: "footprint",
+          height: player.height,
           areaMultiplier: this.paintAreaMultiplier(player),
         };
         this.paint.apply(footprint);
+        if (tableInkMarks(footprint).length) {
+          this.tablePaint.push(footprint);
+          this.tableInk.apply(footprint);
+          if (this.tablePaint.length > 4096) this.tablePaint.shift();
+        }
         if (!practice) {
           this.state.scoreA = this.paint.counts[1]!;
           this.state.scoreB = this.paint.counts[2]!;

@@ -1,3 +1,5 @@
+import { wallInkHit } from "./classroom-walls.js";
+import { tableInkHit, tableInkMarks } from "./table-ink.js";
 import { reactionInkPattern } from "./reaction-ink.js";
 import {
   isInkVariant,
@@ -239,6 +241,7 @@ export function rasterizePaintStroke(
   stroke: PaintStroke,
   put: (x: number, y: number) => void,
 ): void {
+  if (wallInkHit(stroke) || tableInkHit(stroke) || ((stroke.height??0)>=1.57 && tableInkMarks(stroke).length)) return;
   const n = PAINT_GRID_SIZE,
     scaleX = n / (FIELD_HALF_WIDTH * 2),
     scaleZ = n / (FIELD_HALF_DEPTH * 2);

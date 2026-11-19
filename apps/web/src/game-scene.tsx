@@ -1,3 +1,8 @@
+import { StageCapture } from "./stage-capture";
+import { ClassroomWallInk } from "./classroom-wall-ink";
+import { localTableInk } from "./table-ink-state";
+import { ClassroomTables } from "./classroom-tables";
+import { Classroom } from "./classroom";
 import {
   obstacleMove,
   obstacleFloor,
@@ -15,6 +20,8 @@ import {
   reactionForKey,
   reactionResponseSchema,
   type ReactionLevel,
+  moveOnTables,
+  tableFloorHeight,
   FIELD_HALF_WIDTH,
   FIELD_HALF_DEPTH,
   advanceSpecial,
@@ -49,6 +56,7 @@ import { AIZUCHI_MOTION_SECONDS, AIZUCHI_LAND_TIME } from "./aizuchi-motion";
 import { useAizuchiAppearance } from "./use-aizuchi-appearance";
 import { INK_GLOSS, makeInkRelief, useInkEnvironment } from "./ink-material";
 import { useSpecialAppearance } from "./special-appearance";
+import { SpeakerSpotlight } from "./speaker-spotlight";
 import { InkEffects, INK_SETTLE_SECONDS } from "./ink-effects";
 import { currentInkVoice } from "./speech/voice-feedback";
 import {
@@ -158,6 +166,17 @@ export function GameScene({
     sequence: 0,
     latestInput: { sequence: 0, x: 0, z: 0, yaw: 0, dive: false },
   });
+  // The dev character, as an anchor for the presenter-effect preview.
+  const devAnchor = useMemo(
+    () => ({
+      get current() {
+        const c = controls.current;
+        return { x: c.position.x, z: c.position.z, height: c.height };
+      },
+      set current(_value) {},
+    }),
+    [],
+  );
 
   useEffect(() => {
     const activateSpecial = () => {
@@ -551,24 +570,34 @@ export function GameScene({
   });
 
   const localId = roomRef.current?.sessionId;
+  const capture = new URLSearchParams(location.search).get("capture");
 
   return (
     <>
-      <color attach="background" args={["#ebece5"]} />
-      <fog attach="fog" args={["#ebece5", 24, 55]} />
-      <hemisphereLight args={["#ffffff", "#8e9c86", 2.7]} />
+      <color attach="background" args={["#f0f1ef"]} />
+      {!capture && <fog attach="fog" args={["#f0f1ef", 65, 110]} />}
+      <hemisphereLight args={["#ffffff", "#b6bcbc", 2.7]} />
       <directionalLight
         castShadow
         intensity={3}
         position={[8, 14, 5]}
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-18}
-        shadow-camera-right={18}
-        shadow-camera-top={18}
-        shadow-camera-bottom={-18}
+        shadow-camera-left={-FIELD_HALF_DEPTH - 4}
+        shadow-camera-right={FIELD_HALF_DEPTH + 4}
+        shadow-camera-top={FIELD_HALF_DEPTH + 4}
+        shadow-camera-bottom={-FIELD_HALF_DEPTH - 4}
         shadow-normalBias={0.03}
       />
 
+      <ClassroomWallInk room={roomRef.current} devMode={devMode} colorA={colorA} colorB={colorB} canPaint={devCanPaint} />
+      <ClassroomTables room={roomRef.current} devMode={devMode} colorA={colorA} colorB={colorB} canPaint={devCanPaint} />
+      <SpeakerSpotlight
+        room={roomRef.current}
+        devMode={devMode}
+        devAnchor={devAnchor}
+        colorA={colorA}
+        colorB={colorB}
+      />
       {devMode && showDevObstacles && (
         <DevObstacles colorA={colorA} colorB={colorB} canPaint={devCanPaint} />
       )}
@@ -581,7 +610,8 @@ export function GameScene({
         colorA={colorA}
         colorB={colorB}
       />
-      {devMode && (
+      {capture && <StageCapture colors={capture === "white" ? 0 : capture === "4" ? 4 : 2} />}
+      {devMode && !capture && (
         <DevPlayer
           controls={controls}
           ownPaint={devOwnPaint}
@@ -743,7 +773,9 @@ function DevPlayer({
       climbingWall.current = null;
     };
     window.addEventListener("dev-obstacle-start", reset);
-    return () => window.removeEventListener("dev-obstacle-start", reset);
+    return () => {
+      window.removeEventListener("dev-obstacle-start",reset);
+    };
   }, [controls]);
   const diveState = useRef<DiveState>({
     submerged: false,
@@ -836,7 +868,7 @@ function DevPlayer({
     const before = updateDiveState(
       diveState.current,
       dive,
-      obstacles
+      localTableInk.ownsAt(object.position.x,object.position.z,object.position.y,devColor.current) ?? (obstacles
         ? surfacePaintOwned(
             object.position.x,
             object.position.z,
@@ -844,7 +876,7 @@ function DevPlayer({
             devColor.current,
             ownPaint.current,
           )
-        : ownPaint.current(object.position.x, object.position.z),
+        : ownPaint.current(object.position.x, object.position.z)),
       0,
       devTeam.current === "A" ? 1 : 2,
     );
@@ -862,6 +894,15 @@ function DevPlayer({
       -FIELD_HALF_DEPTH + 0.5,
       FIELD_HALF_DEPTH - 0.5,
     );
+    const tableMove = moveOnTables(
+      { x: oldX, z: oldZ, height: previousY },
+      { x: object.position.x, z: object.position.z },
+      dive && !specialActive, Math.min(delta,0.05),
+      (table,x,y,surface)=>localTableInk.owns(table,x,y,surface,devColor.current),
+    );
+    if (controls.current.jumpTime < 0) object.position.y = tableMove.height;
+    object.position.x = tableMove.x;
+    object.position.z = tableMove.z;
     if (obstacles) {
       const resolved = obstacleMove(
         oldX,
@@ -902,14 +943,15 @@ function DevPlayer({
       object.position.x = previous.x + previous.nx * 0.53;
       object.position.z = previous.z + previous.nz * 0.53;
     }
-    const candidateFloor = obstacles
-      ? obstacleFloor(object.position.x, object.position.z)
-      : 0;
+    const candidateFloor = Math.max(
+      obstacles ? obstacleFloor(object.position.x,object.position.z) : 0,
+      tableFloorHeight(object.position.x,object.position.z,object.position.y),
+    );
     const floor =
       previousY >= candidateFloor - 0.02 || object.position.y >= candidateFloor
         ? candidateFloor
         : 0;
-    if (!specialActive && !climbing && !mantled) {
+    if (!specialActive && !climbing && !mantled && !tableMove.climbing) {
       if (controls.current.jumpTime >= 0) {
         if (object.position.y <= floor && object.position.y < previousY) {
           object.position.y = floor;
@@ -933,7 +975,7 @@ function DevPlayer({
     diveState.current = updateDiveState(
       before,
       dive,
-      obstacles
+      localTableInk.ownsAt(object.position.x,object.position.z,object.position.y,devColor.current) ?? (obstacles
         ? surfacePaintOwned(
             object.position.x,
             object.position.z,
@@ -941,20 +983,20 @@ function DevPlayer({
             devColor.current,
             ownPaint.current,
           )
-        : ownPaint.current(object.position.x, object.position.z),
+        : ownPaint.current(object.position.x, object.position.z)),
       Math.min(delta, 0.1),
       devTeam.current === "A" ? 1 : 2,
     );
     const nowSubmerged = diveState.current.submerged;
-    const onObstacleTop =
-      obstacles &&
-      Math.abs(object.position.y - BOX_HEIGHT) < 0.02 &&
-      obstacleFloor(object.position.x, object.position.z) === BOX_HEIGHT;
+    const onObstacleTop = tableFloorHeight(object.position.x,object.position.z,object.position.y)>0 || (
+      obstacles && Math.abs(object.position.y-BOX_HEIGHT)<0.02 && obstacleFloor(object.position.x,object.position.z)===BOX_HEIGHT
+    );
     if (
       (!dive || onObstacleTop) &&
       canPaint.current &&
       !specialActive &&
       !climbingWall.current &&
+      !tableMove.climbing &&
       controls.current.jumpTime < 0 &&
       Math.hypot(object.position.x - oldX, object.position.z - oldZ) > 0.001
     ) {
@@ -975,7 +1017,7 @@ function DevPlayer({
         }),
       );
     }
-    appearance.update(dive, nowSubmerged, delta);
+    appearance.update(dive, nowSubmerged || tableMove.climbing, delta);
     if (climbingWall.current) {
       if (appearance.body.current) appearance.body.current.visible = false;
       if (appearance.ripple.current) appearance.ripple.current.visible = false;
@@ -1073,6 +1115,7 @@ function Field({
   colorA: string;
   colorB: string;
 }) {
+  const captureMode = new URLSearchParams(location.search).has("capture");
   const canvas = useMemo(() => {
     const element = document.createElement("canvas");
     element.width = element.height = PAINT_GRID_SIZE;
@@ -1129,7 +1172,7 @@ function Field({
         parseInt(colors.current.colorB.slice(index, index + 2), 16),
       );
       const rgb =
-        practice && !devMode && practiceRgb[team - 1]
+        practice && (!devMode || captureMode) && practiceRgb[team - 1]
           ? practiceRgb[team - 1]!
           : team === 1
             ? currentA
@@ -1374,11 +1417,11 @@ function Field({
       <primitive object={effects.group} />
       <mesh receiveShadow rotation-x={-Math.PI / 2} position-y={-0.25}>
         <planeGeometry args={[200, 200]} />
-        <meshStandardMaterial color="#e0e3da" roughness={0.85} />
+        <meshStandardMaterial color="#e7e9e6" roughness={0.85} />
       </mesh>
       <mesh receiveShadow rotation-x={-Math.PI / 2}>
         <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
-        <meshStandardMaterial color="#f7f8ee" roughness={0.65} />
+        <meshStandardMaterial color="#f7f7f5" roughness={0.65} />
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position-y={0.018}>
         <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
@@ -1394,11 +1437,11 @@ function Field({
       {/* The underside is visible only to a camera below the floor. */}
       <mesh rotation-x={-Math.PI / 2} position-y={-0.25}>
         <planeGeometry args={[200, 200]} />
-        <meshBasicMaterial color="#e0e3da" side={THREE.BackSide} transparent opacity={0.12} depthWrite={false} />
+        <meshBasicMaterial color="#e7e9e6" side={THREE.BackSide} transparent opacity={0.12} depthWrite={false} />
       </mesh>
       <mesh rotation-x={-Math.PI / 2}>
         <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
-        <meshBasicMaterial color="#f7f8ee" side={THREE.BackSide} transparent opacity={0.2} depthWrite={false} />
+        <meshBasicMaterial color="#f7f7f5" side={THREE.BackSide} transparent opacity={0.2} depthWrite={false} />
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position-y={0.018}>
         <planeGeometry args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]} />
@@ -1409,30 +1452,14 @@ function Field({
         args={[FIELD_HALF_WIDTH * 2, FIELD_HALF_DEPTH * 2]}
         cellSize={1}
         cellThickness={0.6}
-        cellColor="#e0e4d9"
+        cellColor="#e6e8e5"
         sectionSize={4}
         sectionThickness={1.2}
-        sectionColor="#d0d7c7"
-        fadeDistance={36}
+        sectionColor="#dce0dc"
+        fadeDistance={80}
         infiniteGrid={false}
       />
-      {[
-        [0, 0, -FIELD_HALF_DEPTH],
-        [0, 0, FIELD_HALF_DEPTH],
-        [-FIELD_HALF_WIDTH, 0, 0],
-        [FIELD_HALF_WIDTH, 0, 0],
-      ].map((position, index) => (
-        <mesh key={index} position={position as [number, number, number]}>
-          <boxGeometry
-            args={
-              index < 2
-                ? [FIELD_HALF_WIDTH * 2, 0.3, 0.25]
-                : [0.25, 0.3, FIELD_HALF_DEPTH * 2]
-            }
-          />
-          <meshStandardMaterial color="#d5dccc" />
-        </mesh>
-      ))}
+      <Classroom />
     </group>
   );
 }
@@ -1510,8 +1537,12 @@ function Player({
           : DISC_SPEED
         : PLAYER_SPEED;
       if (!specialActive && (phase === "playing" || phase === "lobby")) {
-        predicted.current.x += input.x * scale * speed * delta;
-        predicted.current.z += input.z * scale * speed * delta;
+        const next = moveOnTables({...predicted.current, height:player.height}, {
+          x: THREE.MathUtils.clamp(predicted.current.x + input.x * scale * speed * Math.min(delta,0.1),-FIELD_HALF_WIDTH+0.5,FIELD_HALF_WIDTH-0.5),
+          z: THREE.MathUtils.clamp(predicted.current.z + input.z * scale * speed * Math.min(delta,0.1),-FIELD_HALF_DEPTH+0.5,FIELD_HALF_DEPTH-0.5),
+        }, input.dive, delta, (table,x,y,surface)=>localTableInk.owns(table,x,y,surface,color));
+        predicted.current.x = next.x;
+        predicted.current.z = next.z;
       } else {
         predicted.current.set(player.x, 0, player.z);
       }
@@ -1521,9 +1552,10 @@ function Player({
       if (error > 2.5) predicted.current.copy(cameraTarget);
       else predicted.current.lerp(cameraTarget, 1 - Math.exp(-delta * 4));
       object.position.copy(predicted.current);
-      object.position.y = jumpHeight(jumpTime);
+      object.position.y = player.height + jumpHeight(jumpTime);
       object.rotation.y = toModelRotation(controls.current.yaw);
 
+      controls.current.height = player.height;
       controls.current.position = {
         x: object.position.x,
         z: object.position.z,
@@ -1533,7 +1565,7 @@ function Player({
     } else {
       cameraTarget.set(player.x, 0, player.z);
       object.position.lerp(cameraTarget, 1 - Math.exp(-delta * 10));
-      object.position.y = jumpHeight(jumpTime);
+      object.position.y = player.height + jumpHeight(jumpTime);
       object.rotation.y = THREE.MathUtils.lerp(
         object.rotation.y,
         toModelRotation(player.yaw),

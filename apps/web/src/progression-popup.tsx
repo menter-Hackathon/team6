@@ -1,6 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { GAME_START_COUNTDOWN_SECONDS, pickRandomTopics } from "@gaya/shared";
-import { PracticeColorPicker } from "./practice-color-picker";
+import { useEffect, useState } from "react";
+import { GAME_START_COUNTDOWN_SECONDS } from "@gaya/shared";
 
 export type PopupScene = "lobby" | "countdown" | "turn" | "result";
 
@@ -13,8 +12,6 @@ interface ProgressionPopupProps {
   isReady?: boolean;
   canStart?: boolean;
   requiredPlayerCount?: number;
-  practiceColor?: string;
-  onPracticeColorSelect?: (color: string) => void;
   speakerName?: string;
   turnNumber?: number;
   turnCount?: number;
@@ -22,8 +19,6 @@ interface ProgressionPopupProps {
   onReady?: () => void;
   onStart?: () => void;
   onClose?: () => void;
-  /** The story field (D-090), shown under the talk topics in the lobby. */
-  episodeInput?: ReactNode;
 }
 
 export function ProgressionPopup({
@@ -35,8 +30,6 @@ export function ProgressionPopup({
   isReady = false,
   canStart = false,
   requiredPlayerCount = 0,
-  practiceColor = "#ff4f8b",
-  onPracticeColorSelect,
   speakerName = "プレイヤー",
   turnNumber = 1,
   turnCount = 4,
@@ -44,13 +37,9 @@ export function ProgressionPopup({
   onReady,
   onStart,
   onClose,
-  episodeInput,
 }: ProgressionPopupProps) {
   const [secondsLeft, setSecondsLeft] = useState(GAME_START_COUNTDOWN_SECONDS);
   const [countdownRun, setCountdownRun] = useState(0);
-  const [topicSuggestions, setTopicSuggestions] = useState<string[]>(() =>
-    pickRandomTopics(3),
-  );
   const [copied, setCopied] = useState(false);
   const [linkCopyMessage, setLinkCopyMessage] = useState("");
 
@@ -77,10 +66,6 @@ export function ProgressionPopup({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [preview, onClose]);
-
-  const shuffleSuggestions = () => {
-    setTopicSuggestions((prev) => pickRandomTopics(3, prev));
-  };
 
   const copyCode = async () => {
     try {
@@ -158,8 +143,29 @@ export function ProgressionPopup({
               ))}
             </ul>
             </div>
+            {!preview && isHost && onStart && (
+              <button
+                className="progression-primary lobby-start-button"
+                disabled={!canStart}
+                title={
+                  !canStart
+                    ? requiredPlayerCount > 0
+                      ? `${requiredPlayerCount}人全員が揃って準備完了すると開始できます`
+                      : "4・6・8人で全員が準備すると開始できます"
+                    : undefined
+                }
+                onClick={onStart}
+              >
+                チーム決めへ
+              </button>
+            )}
+            {preview && (
             <div className="progression-actions">
-              <button className="lobby-ready-button" aria-pressed={isReady} onClick={onReady}>
+              <button
+                className="lobby-ready-button"
+                aria-pressed={isReady}
+                onClick={onReady}
+              >
                 {isReady ? "準備を取り消す ✓" : "準備OKにする"}
               </button>
               {isHost && (
@@ -179,19 +185,7 @@ export function ProgressionPopup({
                 </button>
               )}
             </div>
-            <div className="lobby-extras">
-              <div className="lobby-topic-box" aria-label="話す話題">
-                <div className="lobby-topic-box-header">
-                  <span>トークのお題</span>
-                  <button type="button" className="lobby-topic-shuffle" onClick={shuffleSuggestions} aria-label="別の話題を表示">↻</button>
-                </div>
-                <ul className="lobby-topic-list">
-                  {topicSuggestions.map((topic) => <li key={topic}>{topic}</li>)}
-                </ul>
-              </div>
-              {episodeInput}
-              <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
-            </div>
+            )}
           </>
         )}
         {scene === "countdown" && (

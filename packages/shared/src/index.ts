@@ -25,8 +25,8 @@ export function practiceColorOwner(color: string): number {
 }
 export const SERVER_TICK_RATE = 30;
 export const INPUT_SEND_RATE = 30;
-export const FIELD_HALF_WIDTH = 12;
-export const FIELD_HALF_DEPTH = 24;
+export const FIELD_HALF_WIDTH = 21;
+export const FIELD_HALF_DEPTH = 40;
 export const PLAYER_SPEED = 5;
 export const DIVE_SPEED = PLAYER_SPEED * 1.5;
 export const DISC_SPEED = PLAYER_SPEED;
@@ -67,9 +67,21 @@ export const talkDurationSchema = z.number().int().refine(
 export const GAME_START_COUNTDOWN_SECONDS = 7;
 export const TURN_INTRO_MS = 2650;
 export const STARTABLE_PLAYER_COUNTS = [4, 6, 8] as const;
+/** Developer-mode rooms may also start with 2 players (1 vs 1) for testing (D-041). */
+export const DEV_STARTABLE_PLAYER_COUNTS = [2, 4, 6, 8] as const;
+export function canStartWithPlayers(count: number, devMatch: boolean): boolean {
+  const allowed: readonly number[] = devMatch
+    ? DEV_STARTABLE_PLAYER_COUNTS
+    : STARTABLE_PLAYER_COUNTS;
+  return allowed.includes(count);
+}
 export const roomOptionsSchema = z.object({
   displayName: z.string().trim().min(1).max(20),
   turnOrder: z.enum(["alternating", "random"]).default("alternating"),
+  /** Seconds per speaker, chosen when the room is created (still adjustable in team selection). */
+  talkDuration: talkDurationSchema.default(PRESENTATION_SECONDS),
+  /** Developer mode: allow a 2-player (1 vs 1) match for testing. */
+  devMatch: z.boolean().default(false),
 });
 export const joinOptionsSchema = roomOptionsSchema.pick({ displayName: true });
 export type TurnOrder = z.infer<typeof roomOptionsSchema>["turnOrder"];
@@ -140,6 +152,7 @@ export type PaintStroke = {
   revision: number;
   /** Server-generated actor for cosmetic response motion. */
   actorId?: string;
+  height?: number;
   /** Server-generated start of a continuous walking segment. */
   fromX?: number;
   fromZ?: number;
@@ -212,3 +225,12 @@ export {
   drawNextTopic,
   type PresentationTopic,
 } from "./topics.js";
+
+export { CLASSROOM_TABLES, TABLE_WIDTH, TABLE_DEPTH, TABLE_HEIGHT, TABLE_RADIUS, moveAroundTables } from "./classroom-tables.js";
+
+export { tableInkHit, tableInkMarks, type TableInkMark } from "./table-ink.js";
+
+export { tableFloorHeight, moveOnTables } from "./classroom-tables.js";
+export { TableInkState } from "./table-ink.js";
+
+export { CLASSROOM_HEIGHT, wallInkHit, wallInkMarks } from "./classroom-walls.js";
