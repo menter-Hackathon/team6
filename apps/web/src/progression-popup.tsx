@@ -1,5 +1,7 @@
+import { WardrobeButton } from "./wardrobe";
 import { useEffect, useState } from "react";
 import { GAME_START_COUNTDOWN_SECONDS } from "@gaya/shared";
+
 
 export type PopupScene = "lobby" | "countdown" | "turn" | "result";
 
@@ -12,6 +14,9 @@ interface ProgressionPopupProps {
   isReady?: boolean;
   canStart?: boolean;
   requiredPlayerCount?: number;
+
+  onOpenWardrobe?: () => void;
+
   speakerName?: string;
   turnNumber?: number;
   turnCount?: number;
@@ -30,6 +35,9 @@ export function ProgressionPopup({
   isReady = false,
   canStart = false,
   requiredPlayerCount = 0,
+
+  onOpenWardrobe,
+
   speakerName = "プレイヤー",
   turnNumber = 1,
   turnCount = 4,
@@ -186,6 +194,7 @@ export function ProgressionPopup({
               )}
             </div>
             )}
+            {onOpenWardrobe && <WardrobeButton onClick={onOpenWardrobe} />}
           </>
         )}
         {scene === "countdown" && (

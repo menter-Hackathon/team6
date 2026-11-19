@@ -28,6 +28,7 @@ import {
 import { TeamSelection } from "./team-selection";
 import { TranscriptionPanel } from "./speech/transcription-panel";
 import { TeamColorPicker } from "./team-color-picker";
+import { Wardrobe } from "./wardrobe";
 import { DevMatchFlow, type DevMatchPhase, type DevMatchTurn } from "./dev-match-flow";
 
 type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
@@ -91,6 +92,12 @@ export function App() {
   const [devMatchPhase, setDevMatchPhase] = useState<DevMatchPhase>("lobby");
   const [devTeamOffset, setDevTeamOffset] = useState(0);
   const [showTopicPopup, setShowTopicPopup] = useState(true);
+  const [wardrobeOpen, setWardrobeOpen] = useState(false);
+  const openWardrobe = () => {
+    if (document.pointerLockElement) document.exitPointerLock();
+    setWardrobeOpen(true);
+  };
+  const closeWardrobe = useCallback(() => setWardrobeOpen(false), []);
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
   const syncDevTeamOffset = useCallback((offset: number) => {
     setDevTeamOffset(offset);
@@ -132,14 +139,19 @@ export function App() {
       const syncPlayerIds = (state: GameState) => {
         setPlayerIds(Array.from(state.players.keys()));
         setGameState(state);
+        if (state.phase !== "lobby") closeWardrobe();
       };
       joinedRoom.onStateChange(syncPlayerIds);
       syncPlayerIds(initialState);
       joinedRoom.onLeave(() => {
         setConnectionState("disconnected");
         roomRef.current = null;
+        closeWardrobe();
       });
-      joinedRoom.onError(() => setConnectionState("error"));
+      joinedRoom.onError(() => {
+        setConnectionState("error");
+        closeWardrobe();
+      });
     } catch (error) {
       console.error(error);
       setErrorMessage(
@@ -155,6 +167,7 @@ export function App() {
   }, []);
 
   const toggleDevMode = () => {
+    closeWardrobe();
     const next = !devMode;
     if (next && roomRef.current) {
       void roomRef.current.leave();
@@ -179,6 +192,7 @@ export function App() {
   };
 
   const leaveRoom = () => {
+    closeWardrobe();
     if (roomRef.current) void roomRef.current.leave();
     roomRef.current = null;
     setGameState(null);
@@ -189,6 +203,12 @@ export function App() {
 
   const players = gameState ? Array.from(gameState.players.values()) : [];
   const localPlayer = gameState?.players.get(roomRef.current?.sessionId ?? "");
+  const showWardrobe =
+    wardrobeOpen &&
+    !devMode &&
+    connectionState === "connected" &&
+    gameState?.phase === "lobby" &&
+    Boolean(localPlayer);
   const canStart =
     gameState?.hostId === roomRef.current?.sessionId &&
     canStartWithPlayers(players.length, gameState?.devMatch ?? false) &&
@@ -488,6 +508,7 @@ export function App() {
               devMode={devMode}
               showDevObstacles={showDevObstacles}
               autoFire={autoFire}
+              controlsPaused={showWardrobe}
               devComCount={devMatchActive ? devMatchCount - 1 : 0}
               devMatchPhase={devMatchActive ? devMatchPhase : undefined}
               devTeamOffset={devTeamOffset}
@@ -646,6 +667,9 @@ export function App() {
               isReady={localPlayer?.ready ?? false}
               canStart={canStart}
               requiredPlayerCount={gameState.replayPlayerCount}
+              practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
+              onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
+              onOpenWardrobe={openWardrobe}
               onClose={() => setShowTopicPopup(false)}
               onReady={() => {
                 const nextReady = !localPlayer?.ready;
@@ -665,12 +689,21 @@ export function App() {
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
               requiredPlayerCount={gameState.replayPlayerCount}
+              onOpenWardrobe={openWardrobe}
               canStart={canStart}
               {...(gameState.hostId === roomRef.current?.sessionId
                 ? { onStart: () => roomRef.current?.send("prepare-teams") }
                 : {})}
             />
           )}
+        {showWardrobe && localPlayer && (
+          <Wardrobe
+            color={localPlayer.practiceColor}
+            equipped={localPlayer.accessory}
+            onEquip={(accessory) => roomRef.current?.send("accessory", accessory)}
+            onClose={closeWardrobe}
+          />
+        )}
         {!devMode &&
           connectionState === "connected" &&
           gameState?.phase === "lobby" && (

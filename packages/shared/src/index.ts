@@ -2,6 +2,39 @@ import { z } from "zod";
 import { INK_VARIANT_COUNT } from "./ink-outline.js";
 
 export const GAME_ROOM_NAME = "game";
+export const playerAccessorySchema = z.enum([
+  "none",
+  "sunglasses",
+  "glasses",
+  "santa-hat",
+  "straw-hat",
+  "cowboy-hat",
+  "eyes",
+  "cat-ears",
+  "tracks",
+  "color-edges",
+  "rgb-edges",
+  "siren",
+  "headphones",
+  "surprised",
+  "rabbit-ears",
+  "halo",
+  "wings",
+  "wrestling-mask",
+  "wind-up-key",
+  "air-horn",
+  "hiking-backpack",
+  "pudding",
+  "duckling",
+  "snorkel",
+  "claw-machine",
+  "exhaust-fan",
+  "toaster",
+  "randoseru",
+  "bamboo-copter",
+  "hachimaki",
+]);
+export type PlayerAccessory = z.infer<typeof playerAccessorySchema>;
 export const NEON_COLORS = [
   { name: "ピンク", hex: "#ff4f8b" },
   { name: "シアン", hex: "#37d9ff" },
