@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { moveInputSchema } from "./index.js";
+import { moveInputSchema, roomOptionsSchema } from "./index.js";
+
+describe("roomOptionsSchema turn order (D-097)", () => {
+  it("defaults to team-alternating order", () => {
+    expect(roomOptionsSchema.parse({ displayName: "たろう" }).turnOrder).toBe(
+      "alternating",
+    );
+  });
+
+  it("rejects the removed all-random order", () => {
+    expect(
+      roomOptionsSchema.safeParse({ displayName: "たろう", turnOrder: "random" }),
+    ).toHaveProperty("success", false);
+  });
+});
 
 describe("moveInputSchema", () => {
   it("accepts a normalized movement input", () => {

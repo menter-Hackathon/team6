@@ -16,6 +16,7 @@ import { TurnFlow } from "./turn-flow";
 import { EpisodeInput, EMPTY_EPISODE_DRAFT } from "./episode-input";
 import { LobbyActions } from "./lobby-hud";
 import { ResultFlow } from "./result-flow";
+import { WaitingRoom } from "./waiting-room";
 
 export type DevMatchPhase =
   "lobby" | "team_selection" | "countdown" | "playing" | "result";
@@ -67,6 +68,7 @@ export function DevMatchFlow({
   const [endsAt, setEndsAt] = useState(0);
   const [resultCells, setResultCells] = useState<Uint8Array | null>(null);
   const [showLobby, setShowLobby] = useState(true);
+  const [episodeOpen, setEpisodeOpen] = useState(false);
   const [episode, setEpisode] = useState(EMPTY_EPISODE_DRAFT);
   const [topics] = useState(() => pickRandomTopics(7));
   const [teams, setTeams] = useState<("A" | "B")[]>([]);
@@ -222,14 +224,22 @@ export function DevMatchFlow({
       {phase === "lobby" && (
         <>
           {showLobby ? (
-            <ProgressionPopup
-              scene="lobby"
-              localRoom
+            <WaitingRoom
+              roomCode="TEST"
               players={players}
-              isHost
+              seatCount={count}
+              requiredPlayerCount={0}
+              episodeDone={Boolean(episode.savedText)}
+              microphoneListening={microphoneListening}
+              microphoneChanging={microphoneChanging}
               isReady={ready}
+              isHost
               canStart={ready}
+              startHint="準備OKにすると開始できます"
+              onOpenEpisode={() => setEpisodeOpen(true)}
               onOpenWardrobe={onOpenWardrobe}
+              onStartMicrophone={onStartMicrophone}
+              onReady={toggleReady}
               onStart={prepareTeams}
               onClose={() => setShowLobby(false)}
             />
@@ -267,6 +277,9 @@ export function DevMatchFlow({
             readyCount={count - Number(!ready)}
             playerCount={count}
             onReady={toggleReady}
+            episodeOpen={episodeOpen}
+            onEpisodeOpenChange={setEpisodeOpen}
+            showControls={!showLobby}
           />
         </>
       )}
