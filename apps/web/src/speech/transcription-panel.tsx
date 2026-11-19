@@ -13,14 +13,14 @@ import "./transcription.css";
 export function TranscriptionPanel({
   userNames = [],
   roomId,
-  inMatch = false,
+  alignLeft = false,
   turnIndex,
   localTopic,
 }: {
   userNames?: readonly string[];
   /** Joined room; lets the server use the current speaker's story as the source. */
   roomId?: string | undefined;
-  inMatch?: boolean;
+  alignLeft?: boolean;
   turnIndex?: number | undefined;
   localTopic?: string | undefined;
 }) {
@@ -37,7 +37,7 @@ export function TranscriptionPanel({
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
-    const hud = panel?.parentElement;
+    const hud = panel?.closest(".hud");
     const viewport = hud?.parentElement?.querySelector(".viewport");
     if (!panel || !hud || !viewport) return;
 
@@ -49,14 +49,14 @@ export function TranscriptionPanel({
     const positionPanel = () => {
       const summaryBounds = summary?.getBoundingClientRect();
       const guideBounds = guide?.getBoundingClientRect();
-      const alignment = inMatch ? guideBounds : summaryBounds;
+      const alignment = alignLeft ? guideBounds : summaryBounds;
       if (!alignment?.width || !guideBounds?.width) {
         delete panel.dataset.positioned;
         return;
       }
 
       const top =
-        (inMatch ? viewport.getBoundingClientRect().top : alignment.bottom) +
+        (alignLeft ? viewport.getBoundingClientRect().top : alignment.bottom) +
         gap;
       const height = guideBounds.top - gap - top;
       if (height < minimumPanelHeight) {
@@ -96,7 +96,7 @@ export function TranscriptionPanel({
       resizeObserver.disconnect();
       viewport.removeEventListener("animationend", positionPanel);
     };
-  }, [open, inMatch]);
+  }, [open, alignLeft]);
 
   const close = () => setOpen(false);
   const microphoneOn = speech.listening || speech.starting;
@@ -164,7 +164,7 @@ export function TranscriptionPanel({
           ref={panelRef}
           id={id}
           className={
-            inMatch ? "speech-panel speech-panel--match" : "speech-panel"
+            alignLeft ? "speech-panel speech-panel--left" : "speech-panel"
           }
           aria-label="音声の文字起こし"
         >

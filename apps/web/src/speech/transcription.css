@@ -1,4 +1,4 @@
-.hud:has(> .speech-panel) {
+.hud:has(.speech-panel) {
   position: relative;
 }
 .hud .speech-toggle {
@@ -210,7 +210,8 @@
   }
 }
 
-.speech-panel--match {
+.speech-panel--left {
+  z-index: 31;
   left: 18px;
   transform: none;
 }

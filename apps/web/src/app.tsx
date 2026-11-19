@@ -236,6 +236,9 @@ export function App() {
     players.filter((player) => player.team === "A").length === players.length / 2 &&
     players.filter((player) => player.team === "B").length === players.length / 2;
   const devLobby = devMode && devMatchActive && devMatchPhase === "lobby";
+  const speechLayoutPhase = devMode
+    ? (devMatchActive ? devMatchPhase : previewPopup === "countdown" ? "countdown" : undefined)
+    : connectionState === "connected" ? gameState?.phase : undefined;
   const showDevWardrobe = devLobby && wardrobeOpen;
   const devSpeakerBlocked =
     devMatchActive && devMatchTurn?.isYourTurn === true;
@@ -266,61 +269,69 @@ export function App() {
   return (
     <main className={`game-shell${captureMode ? " game-shell--capture" : ""}${panelsHidden ? " game-shell--panels-hidden" : ""}`}>
       <header className="hud">
-        <div>
-          <p className="eyebrow">GAYA SPLATOON / PARTY GAME</p>
-          <h1>ガヤでスプラトゥーン</h1>
+        <div className="hud-side">
+          <div>
+            <p className="eyebrow">GAYA SPLATOON / PARTY GAME</p>
+            <h1>ガヤでスプラトゥーン</h1>
+          </div>
+          <div className="hud-actions">
+            <TranscriptionPanel
+              turnIndex={
+                devMode
+                  ? devMatchTurn?.turnNumber
+                  : connectionState === "connected" && gameState?.phase === "playing"
+                    ? gameState.turnIndex || undefined
+                    : undefined
+              }
+              localTopic={devMode ? devMatchTurn?.topic : undefined}
+              alignLeft={
+                speechLayoutPhase === "team_selection" ||
+                speechLayoutPhase === "countdown" ||
+                speechLayoutPhase === "playing"
+              }
+              roomId={
+                connectionState === "connected" && roomCode ? roomCode : undefined
+              }
+              userNames={
+                devMode && devMatchActive
+                  ? Array.from({ length: devMatchCount }, (_, index) => index === 0 ? "あなた" : `COM ${index}`)
+                  : players.length
+                    ? players.map((player) => player.displayName)
+                  : [displayName].filter(Boolean)
+              }
+            />
+            <button
+              type="button"
+              className="hud-dev-button"
+              onClick={(event) => { setPanelsHidden(true); event.currentTarget.blur(); }}
+            >
+              操作パネルを隠す
+            </button>
+          </div>
         </div>
-        <TranscriptionPanel
-          turnIndex={
-            devMode
-              ? devMatchTurn?.turnNumber
-              : connectionState === "connected" && gameState?.phase === "playing"
-                ? gameState.turnIndex || undefined
-                : undefined
-          }
-          localTopic={devMode ? devMatchTurn?.topic : undefined}
-          inMatch={
-            devMode
-              ? devMatchActive && devMatchPhase === "playing"
-              : connectionState === "connected" && gameState?.phase === "playing"
-          }
-          roomId={
-            connectionState === "connected" && roomCode ? roomCode : undefined
-          }
-          userNames={
-            devMode && devMatchActive
-              ? Array.from({ length: devMatchCount }, (_, index) => index === 0 ? "あなた" : `COM ${index}`)
-              : players.length
-                ? players.map((player) => player.displayName)
-              : [displayName].filter(Boolean)
-          }
-        />
-        <button
-          type="button"
-          className="hud-dev-button"
-          onClick={(event) => { setPanelsHidden(true); event.currentTarget.blur(); }}
-        >
-          操作パネルを隠す
-        </button>
-        <button className="hud-dev-button" onClick={toggleDevMode}>
-          {devMode ? "検証モードを終了" : "操作を検証"}
-        </button>
-        {canDissolve && (
-          <button type="button" className="hud-dev-button" onClick={dissolveRoom}>
-            ルームを解散
-          </button>
-        )}
-        <div className={`status status--${devMatchActive ? "connected" : connectionState}`}>
-          <span />
-          {devMatchActive
-            ? `検証ルーム · ${devMatchCount}人`
-            : connectionState === "connected"
-            ? `接続中 · ${playerIds.length}/${targetPlayerCount || 8}人`
-            : connectionState === "connecting"
-              ? "サーバーへ接続中"
-              : connectionState === "error"
-                ? "接続失敗"
-                : "ルーム未参加"}
+        <div className="hud-side hud-side--right">
+          <div className="hud-actions">
+            <button className="hud-dev-button" onClick={toggleDevMode}>
+              {devMode ? "検証モードを終了" : "操作を検証"}
+            </button>
+            {canDissolve && (
+              <button type="button" className="hud-dev-button" onClick={dissolveRoom}>
+                ルームを解散
+              </button>
+            )}
+          </div>
+          <div className={`status status--${devMatchActive ? "connected" : connectionState}`}>
+            <span />
+            {devMatchActive
+              ? `検証ルーム · ${devMatchCount}人`
+              : connectionState === "connected"
+              ? `接続中 · ${playerIds.length}/${targetPlayerCount || 8}人`
+              : connectionState === "connecting"
+                ? "サーバーへ接続中"
+                : connectionState === "error"
+                  ? "接続失敗"
+                  : "ルーム未参加"}
+          </div>
         </div>
       </header>
       {panelsHidden && !captureMode && (
