@@ -21,6 +21,18 @@ export const playerAccessorySchema = z.enum([
   "halo",
   "wings",
   "wrestling-mask",
+  "wind-up-key",
+  "air-horn",
+  "hiking-backpack",
+  "pudding",
+  "duckling",
+  "snorkel",
+  "claw-machine",
+  "exhaust-fan",
+  "toaster",
+  "randoseru",
+  "bamboo-copter",
+  "hachimaki",
 ]);
 export type PlayerAccessory = z.infer<typeof playerAccessorySchema>;
 export const NEON_COLORS = [

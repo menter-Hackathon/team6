@@ -1478,6 +1478,7 @@ function Player({
   controls,
 }: PlayerProps) {
   const group = useRef<THREE.Group>(null);
+  const accessoryJumpTime = useRef(-1);
   const predicted = useRef(new THREE.Vector3());
   const appearance = useDiveAppearance();
   const specialAppearance = useSpecialAppearance();
@@ -1507,6 +1508,7 @@ function Player({
         Math.min(delta, 0.1),
       );
     const jumpTime = local ? controls.current.jumpTime : player.jumpTime;
+    accessoryJumpTime.current = jumpTime;
     const diving =
       !specialActive &&
       jumpTime < 0 &&
@@ -1579,7 +1581,12 @@ function Player({
           </span>
         </Html>
       )}
-      <PlayerCube bodyRef={appearance.body} color={color} accessory={accessory} />
+      <PlayerCube
+        bodyRef={appearance.body}
+        color={color}
+        accessory={accessory}
+        jumpTime={accessoryJumpTime}
+      />
       <mesh
         ref={appearance.ripple}
         visible={false}

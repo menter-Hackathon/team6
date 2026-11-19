@@ -29,6 +29,22 @@ const ITEMS = {
   tracks: { name: "キャタピラ", icon: "⚙️", category: "body" },
   "color-edges": { name: "カラーエッジ", icon: "◇", category: "body" },
   "rgb-edges": { name: "ゲーミングエッジ", icon: "🌈", category: "body" },
+  "wind-up-key": { name: "ゼンマイねじ", icon: "🔑", category: "body" },
+  "air-horn": { name: "エアホーン", icon: "📣", category: "body" },
+  "hiking-backpack": { name: "登山リュック", icon: "🎒", category: "body" },
+  pudding: { name: "プリン", icon: "🍮", category: "head" },
+  duckling: { name: "アヒルの子", icon: "🐤", category: "head" },
+  snorkel: { name: "シュノーケル", icon: "🤿", category: "face" },
+  "claw-machine": {
+    name: "UFOキャッチャー",
+    icon: "🦾",
+    category: "head",
+  },
+  "exhaust-fan": { name: "換気扇", icon: "🌀", category: "body" },
+  toaster: { name: "トースター", icon: "🍞", category: "body" },
+  randoseru: { name: "ランドセル", icon: "🏫", category: "body" },
+  "bamboo-copter": { name: "タケコプター", icon: "🌀", category: "head" },
+  hachimaki: { name: "はちまき", icon: "🎌", category: "head" },
 } as const satisfies Record<
   PlayerAccessory,
   { name: string; icon: string; category: string }
@@ -42,6 +58,12 @@ const CATEGORIES = [
 ] as const;
 
 const ACCESSORIES = Object.keys(ITEMS) as PlayerAccessory[];
+const REAR_ACCESSORIES = new Set<PlayerAccessory>([
+  "wind-up-key",
+  "hiking-backpack",
+  "exhaust-fan",
+  "randoseru",
+]);
 
 function FitPreviewCamera() {
   const { camera, size } = useThree();
@@ -76,7 +98,7 @@ export function Wardrobe({
   const [draft, setDraft] = useState(equipped);
   const [category, setCategory] =
     useState<(typeof CATEGORIES)[number]["id"]>("all");
-  const [turned, setTurned] = useState(false);
+  const [turned, setTurned] = useState(() => REAR_ACCESSORIES.has(equipped));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
 
@@ -156,7 +178,10 @@ export function Wardrobe({
               intensity={1.6}
               color="#73f3ee"
             />
-            <group rotation-y={turned ? Math.PI : 0}>
+            <group
+              rotation-y={turned ? Math.PI : 0}
+              position-y={draft === "claw-machine" ? 0.12 : 0}
+            >
               <PlayerCube color={color} accessory={draft} />
             </group>
             <mesh position-y={-0.028}>
@@ -221,6 +246,7 @@ export function Wardrobe({
                 className="wardrobe-item"
                 aria-pressed={draft === id}
                 onClick={() => {
+                  if (draft !== id) setTurned(REAR_ACCESSORIES.has(id));
                   setDraft(id);
                   setError(false);
                 }}
