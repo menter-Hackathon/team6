@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   DIVE_SPEED,
+  NEON_COLORS,
   PLAYER_SPEED,
+  practiceColorOwner,
   updateDiveState,
   type DiveState,
 } from "./index.js";
@@ -21,6 +23,19 @@ describe("ink diving", () => {
     expect(updateDiveState(gap, true, true, 0.05, 1).gapSeconds).toBeCloseTo(
       0.28,
     );
+  });
+  it.each(NEON_COLORS)("supports diving in $name practice ink", ({ hex }) => {
+    const owner = practiceColorOwner(hex);
+    const inInk = updateDiveState(idle, true, true, 0.05, owner);
+    expect(inInk.submerged).toBe(true);
+    expect(updateDiveState(idle, true, false, 0.05, owner).submerged).toBe(
+      false,
+    );
+
+    const otherOwner = owner === 1 ? 2 : 1;
+    expect(
+      updateDiveState(inInk, true, false, 0.05, otherOwner).submerged,
+    ).toBe(false);
   });
   it("clears the allowance on release, team change, or invalid team", () => {
     const state = updateDiveState(idle, true, true, 0.05, 1);

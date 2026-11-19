@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { TALK_DURATION_OPTIONS } from "@gaya/shared";
 import "./ink-theme.css";
 
 type Step = "choose" | "create" | "join";
@@ -9,8 +8,6 @@ interface EntryScreenProps {
   onDisplayNameChange: (name: string) => void;
   turnOrder: string;
   onTurnOrderChange: (order: string) => void;
-  talkDuration: number;
-  onTalkDurationChange: (seconds: number) => void;
   devMatch: boolean;
   onDevMatchChange: (devMatch: boolean) => void;
   inviteCode: string;
@@ -81,22 +78,6 @@ export function EntryScreen(props: EntryScreenProps) {
                 }
               />
             </label>
-            <fieldset className="ink-entry-durations">
-              <legend>1人あたりの発表時間</legend>
-              <div>
-                {TALK_DURATION_OPTIONS.map((seconds) => (
-                  <button
-                    key={seconds}
-                    type="button"
-                    aria-pressed={props.talkDuration === seconds}
-                    onClick={() => props.onTalkDurationChange(seconds)}
-                  >
-                    {seconds}
-                    <small>秒</small>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
             <label>
               <span>発表順</span>
               <select

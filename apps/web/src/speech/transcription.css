@@ -1,75 +1,86 @@
-.speech-toggle {
-  border: 1px solid #6b7897;
-  border-radius: 10px;
-  background: #25334b;
-  color: #fff;
-  padding: 9px 13px;
-  cursor: pointer;
+.hud:has(> .speech-panel) {
+  position: relative;
+}
+.hud .speech-toggle {
+  margin-left: 0;
   white-space: nowrap;
-  font-size: 13px;
+}
+.hud .speech-toggle[aria-expanded="true"] {
+  background: var(--ink-cyan);
+  border-color: var(--ink-cyan);
+  color: var(--ink-shadow);
 }
 .speech-panel {
-  position: fixed;
+  position: absolute;
+  box-sizing: border-box;
   z-index: 25;
-  bottom: 20px;
-  left: 20px;
-  width: min(390px, calc(100vw - 40px));
-  max-height: calc(100dvh - 120px);
+  top: calc(100% + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(390px, calc(100% - 36px));
+  max-height: calc(100dvh - 140px);
   overflow: auto;
-  border: 1px solid #52607a;
-  border-radius: 18px;
-  background: #141d2cf5;
-  color: #eff5ff;
-  padding: 20px;
-  box-shadow: 0 15px 60px #0006;
-  backdrop-filter: blur(16px);
+  border: 3px solid #ff4f8b;
+  background: #f7f3e9;
+  color: #17131d;
+  padding: 0 14px 14px;
+  box-shadow:
+    5px 6px 0 #17131d,
+    10px 11px 0 #37d9ff;
   font-size: 13px;
   text-align: left;
 }
 .speech-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
-}
-.speech-heading p {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: #a7dfcb;
-  margin: 0 0 5px;
+  margin: 0 -14px;
+  padding: 7px 12px;
+  border-bottom: 2px solid #17131d;
+  background: #fff238;
 }
 .speech-panel h2 {
-  font-size: 20px;
+  font-size: 15px;
+  font-weight: 1000;
   margin: 0;
 }
 .speech-panel h3 {
   font-size: 12px;
   margin: 0;
 }
-.speech-panel button,
-.speech-file {
+.speech-panel button {
   font: inherit;
-  border: 1px solid #5c6d8b;
-  border-radius: 9px;
+  border: 2px solid var(--ink-shadow);
+  border-radius: 0;
   padding: 9px 12px;
-  background: #334760;
-  color: #fff;
+  background: #fff;
+  color: var(--ink-shadow);
+  font-weight: 800;
   cursor: pointer;
+}
+.speech-panel :is(button, select, summary, input, textarea):focus-visible {
+  outline: 3px solid #b61d5f;
+  outline-offset: 2px;
 }
 .speech-panel button:disabled {
   opacity: 0.45;
   cursor: default;
 }
 .speech-panel .speech-close {
-  padding: 0 6px;
-  font-size: 24px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 19px;
   line-height: 1;
-  border: 0;
-  background: none;
 }
-.speech-note,
-.speech-footnote {
-  color: #acb9ce;
+.speech-note {
+  color: #4c4655;
   font-size: 11px;
   line-height: 1.7;
   margin: 12px 0;
@@ -81,14 +92,14 @@
 }
 .speech-setup span {
   font-size: 11px;
-  color: #acb9ce;
+  color: #4c4655;
 }
 .speech-panel progress,
 .speech-panel meter {
   display: block;
   width: 100%;
   height: 10px;
-  accent-color: #80e3bd;
+  accent-color: var(--ink-lime);
 }
 .speech-panel .speech-secondary {
   background: transparent;
@@ -100,30 +111,11 @@
   margin: 16px 0 12px;
 }
 .speech-actions button {
-  background: #237452;
-  border-color: #459d79;
+  background: var(--ink-lime);
+  box-shadow: 3px 4px 0 var(--ink-shadow);
 }
 .speech-actions .speech-stop {
-  background: #833f58;
-  border-color: #b96587;
-}
-.speech-file {
-  position: relative;
-  overflow: hidden;
-  background: transparent;
-  font-size: 12px;
-}
-.speech-file input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  width: 100%;
-  height: 100%;
-  cursor: pointer;
-}
-.speech-file:has(input:disabled) {
-  opacity: 0.45;
-  cursor: default;
+  background: var(--ink-pink);
 }
 .speech-state {
   display: flex;
@@ -139,19 +131,20 @@
   border-radius: 50%;
 }
 .speech-state .speech-live {
-  background: #80e3bd;
-  box-shadow: 0 0 10px #80e3bd66;
+  background: var(--ink-lime);
+  box-shadow: 0 0 10px #a6f23a66;
 }
 .speech-feedback {
   min-height: 22px;
-  color: #b9e9d7;
+  color: #4c4655;
   font-size: 12px;
   line-height: 1.7;
 }
 .speech-error {
-  color: #ffc4cd;
+  color: #791536;
+  background: #ffe3eb;
   padding: 9px 12px;
-  border: 1px solid #92536a;
+  border: 1px solid #ad405f;
   border-radius: 8px;
   font-size: 12px;
   line-height: 1.7;
@@ -163,9 +156,6 @@
   margin-top: 14px;
 }
 .speech-results-heading button {
-  border: 0;
-  background: none;
-  color: #9fb2ce;
   font-size: 10px;
   padding: 6px;
 }
@@ -180,9 +170,9 @@
 }
 .speech-results li {
   padding: 12px;
-  border: 1px solid #34465f;
+  border: 2px solid var(--ink-shadow);
   border-radius: 10px;
-  background: #1b2b41;
+  background: #fff;
 }
 .speech-results p {
   margin: 0 0 7px;
@@ -190,38 +180,31 @@
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
-.speech-results small {
-  font-size: 10px;
-  color: #9badc8;
-}
-.speech-empty {
-  padding: 22px 0;
-  color: #8f9eb6;
-  font-size: 12px;
-  text-align: center;
-}
-.speech-footnote {
-  font-size: 10px;
-  border-top: 1px solid #35445d;
-  padding-top: 10px;
-  margin-bottom: 0;
+@media (max-width: 1100px) {
+  .speech-panel {
+    max-height: calc(65dvh - 125px);
+  }
+  .game-shell:has(.speech-panel) .controls {
+    max-height: 31dvh;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .game-shell:has(.speech-panel) .controls-details {
+    overflow-y: auto;
+  }
 }
 @media (max-width: 600px) {
-  .speech-panel {
-    left: 10px;
-    bottom: 10px;
-    width: calc(100vw - 20px);
-    max-height: calc(100dvh - 90px);
-    padding: 16px;
-  }
-  .speech-toggle {
-    font-size: 11px;
-    padding: 7px;
-  }
   .hud {
     flex-wrap: wrap;
     gap: 9px;
   }
+}
+
+.speech-panel[data-between-lobby-panels] {
+  top: var(--speech-top);
+  left: var(--speech-left);
+  width: var(--speech-width);
+  max-height: var(--speech-height);
+  transform: none;
 }
 
 .speech-model {
@@ -232,23 +215,22 @@
 }
 .speech-model select {
   width: 100%;
-  border: 1px solid #5c6d8b;
-  border-radius: 9px;
+  border: 2px solid var(--ink-shadow);
+  border-radius: 0;
   padding: 9px;
-  background: #25334b;
-  color: #fff;
+  background: #fff;
+  color: var(--ink-shadow);
 }
 
 .speech-live-text {
   margin-top: 12px;
   padding: 12px;
-  border: 1px solid #6d9d8c;
-  background: #203d39;
-  border-radius: 10px;
+  border: 2px solid var(--ink-shadow);
+  background: #e1faff;
   min-height: 82px;
 }
 .speech-live-text small {
-  color: #a7dfcb;
+  color: #284958;
   font-size: 10px;
 }
 .speech-live-text p {
@@ -256,12 +238,12 @@
   font-size: 16px;
   line-height: 1.65;
   overflow-wrap: anywhere;
-  color: #fff;
+  color: var(--ink-shadow);
 }
 
 .speech-options {
   margin: 10px 0;
-  color: #b4c8de;
+  color: #4c4655;
   font-size: 12px;
 }
 .speech-options summary {
@@ -271,23 +253,22 @@
 
 .speech-privacy {
   padding: 12px;
-  border: 1px solid #a89159;
-  border-radius: 10px;
-  background: #403b2a;
-  color: #f2e6bd;
+  border: 2px solid var(--ink-shadow);
+  background: #fff4ca;
+  color: var(--ink-shadow);
   font-size: 11px;
   line-height: 1.7;
 }
 .speech-privacy p {
-  margin: 7px 0;
+  margin: 0 0 6px;
 }
 .speech-privacy a {
-  color: #c4ddff;
+  color: #174f68;
   text-decoration: underline;
 }
 
 .reaction-classification {
-  border-top: 1px solid #52637b;
+  border-top: 1px solid var(--ink-shadow);
   margin-top: 14px;
   padding-top: 12px;
 }
@@ -295,29 +276,17 @@
 .reaction-classification textarea {
   width: 100%;
   box-sizing: border-box;
-  color: #fff;
-  background: #25334b;
-  border: 1px solid #5c6d8b;
+  color: var(--ink-shadow);
+  background: #fff;
+  border: 2px solid var(--ink-shadow);
   border-radius: 8px;
   padding: 9px;
   font: inherit;
 }
-.reaction-classification button {
-  border: 1px solid #709e91;
-  color: white;
-  background: #326553;
-  border-radius: 8px;
-  padding: 9px 12px;
-  cursor: pointer;
-}
-.reaction-classification button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
 .reaction-last-result {
   margin: 10px 0;
   padding: 10px;
-  background: #203d39;
+  background: #e1faff;
   border-radius: 8px;
 }
 .reaction-last-result p {
@@ -358,7 +327,7 @@
   list-style: none;
   padding: 0 0 0 8px;
   margin: 7px 0;
-  border-left: 2px solid #6d9d8c;
+  border-left: 2px solid var(--ink-shadow);
 }
 .speech-segment-results li {
   display: flex;

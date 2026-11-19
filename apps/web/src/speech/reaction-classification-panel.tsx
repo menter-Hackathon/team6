@@ -16,18 +16,13 @@ export function ReactionClassificationPanel({
   return (
     <section className="reaction-classification" aria-label="発話の判定と塗り">
       <h3>判定 → 塗り</h3>
-      <p className="speech-note">
-        1 長い文章 · 2 短い相槌 · 3 迷い · 除外は発射なし
-      </p>
-      <div role="status" className="speech-feedback">
-        {judge.phase === "loading"
-          ? "判定モデルを準備中…（初回は約1.1GBを取得）"
-          : judge.pending
-            ? `判定中… ${judge.pending}件`
-            : judge.phase === "ready"
-              ? "判定の準備OK · 相槌は途中認識から塗ります"
-              : "判定モデルを準備してください。音声の確定時にも自動で準備します。"}
-      </div>
+      {(judge.phase === "loading" || judge.pending > 0) && (
+        <div role="status" className="speech-feedback">
+          {judge.phase === "loading"
+            ? "判定モデルを準備中…（初回は約1.1GBを取得）"
+            : `判定中… ${judge.pending}件`}
+        </div>
+      )}
       {judge.phase !== "ready" && (
         <button
           className="speech-secondary"
@@ -76,7 +71,7 @@ export function ReactionClassificationPanel({
         </ol>
       )}
       <details className="speech-options">
-        <summary>元の話・ユーザーネーム・文字で試す</summary>
+        <summary>判定の検証設定</summary>
         <label className="speech-model">
           元の話（任意）
           <textarea
@@ -100,11 +95,6 @@ export function ReactionClassificationPanel({
             placeholder="例：たろう、花子（改行やカンマで区切る）"
           />
         </label>
-        <p className="speech-note">
-          参加者のユーザーネームは自動で使います。名前を含む発言は、長さやモデルの結果にかかわらず「2：短い相槌」にします。
-          {judge.registeredUserNames.filter(Boolean).length > 0 &&
-            ` 参加者名：${judge.registeredUserNames.filter(Boolean).join("、")}`}
-        </p>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -152,12 +142,9 @@ export function ReactionClassificationPanel({
             streamTestId.current = crypto.randomUUID();
           }}
         >
-          途中入力を確定（二重発射しません）
+          途中入力を確定
         </button>
       </details>
-      <p className="speech-note">
-        途中・確定した文字、元の話、ユーザーネームをゲームの判定サーバーへ送ります。短い相槌は最初の1個が認識された時点から塗ります。途中認識が後で修正されても、発射済みの塗りは残ります。判定はNode上で実行し、音声や文章のファイル・ログは保存しません（判定中のメモリ・キャッシュは使用します）。キー1〜4でも演出を確認できます。
-      </p>
     </section>
   );
 }

@@ -138,6 +138,7 @@ export function ProgressionPopup({
               </button>
             )}
             {linkCopyMessage && <p className="lobby-copy-status" role="status">{linkCopyMessage}</p>}
+            {onOpenWardrobe && <WardrobeButton onClick={onOpenWardrobe} />}
             <div className="lobby-readiness">
               <p className="lobby-ready-count">準備完了 <strong>{readyCount} / {Math.max(requiredPlayerCount, players.length)}</strong></p>
             {requiredPlayerCount > players.length && (
@@ -194,7 +195,6 @@ export function ProgressionPopup({
               )}
             </div>
             )}
-            {onOpenWardrobe && <WardrobeButton onClick={onOpenWardrobe} />}
           </>
         )}
         {scene === "countdown" && (

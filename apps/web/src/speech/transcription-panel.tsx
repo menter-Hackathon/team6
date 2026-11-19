@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { SpeechModelChoice } from "./protocol";
 import { useTranscription } from "./use-transcription";
 import { useBrowserTranscription } from "./use-browser-transcription";
@@ -18,7 +18,7 @@ export function TranscriptionPanel({
   /** Joined room; lets the server use the current speaker's story as the source. */
   roomId?: string | undefined;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const judge = useReactionClassification(open, userNames, roomId);
   const local = useTranscription();
   const browser = useBrowserTranscription();
@@ -27,6 +27,68 @@ export function TranscriptionPanel({
   const speech = external ? browser : local;
   const busy = speech.listening || speech.starting || speech.pending > 0;
   const id = useId();
+  const panelRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    const hud = panel?.parentElement;
+    const viewport = hud?.parentElement?.querySelector(".viewport");
+    if (!panel || !hud || !viewport) return;
+
+    const gap = 16;
+    const minimumPanelHeight = 112;
+    let summary: Element | null;
+    let guide: Element | null;
+
+    const positionPanel = () => {
+      const summaryBounds = summary?.getBoundingClientRect();
+      const guideBounds = guide?.getBoundingClientRect();
+      if (!summaryBounds?.width || !guideBounds?.width) {
+        delete panel.dataset.betweenLobbyPanels;
+        return;
+      }
+
+      const top = summaryBounds.bottom + gap;
+      const height = guideBounds.top - gap - top;
+      if (height < minimumPanelHeight) {
+        delete panel.dataset.betweenLobbyPanels;
+        return;
+      }
+
+      const hudBounds = hud.getBoundingClientRect();
+      panel.style.setProperty("--speech-top", `${top - hudBounds.top}px`);
+      panel.style.setProperty(
+        "--speech-left",
+        `${summaryBounds.left - hudBounds.left}px`,
+      );
+      panel.style.setProperty("--speech-width", `${summaryBounds.width}px`);
+      panel.style.setProperty("--speech-height", `${height}px`);
+      panel.dataset.betweenLobbyPanels = "";
+    };
+
+    const resizeObserver = new ResizeObserver(positionPanel);
+    const observePanels = () => {
+      resizeObserver.disconnect();
+      summary = viewport.querySelector(".room-summary");
+      guide = viewport.querySelector(".controls");
+      resizeObserver.observe(hud);
+      resizeObserver.observe(viewport);
+      if (summary) resizeObserver.observe(summary);
+      if (guide) resizeObserver.observe(guide);
+      positionPanel();
+    };
+
+    const mutationObserver = new MutationObserver(observePanels);
+    mutationObserver.observe(viewport, { childList: true });
+    viewport.addEventListener("animationend", positionPanel);
+    observePanels();
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+      viewport.removeEventListener("animationend", positionPanel);
+    };
+  }, [open]);
+
   const close = () => {
     if (external) browser.cancel();
     else local.stop();
@@ -35,9 +97,10 @@ export function TranscriptionPanel({
   return (
     <>
       <button
-        className="speech-toggle"
+        type="button"
+        className="hud-dev-button speech-toggle"
         aria-expanded={open}
-        aria-controls={id}
+        aria-controls={open ? id : undefined}
         onClick={() => {
           if (open) close();
           else {
@@ -50,6 +113,7 @@ export function TranscriptionPanel({
       </button>
       {open && (
         <section
+          ref={panelRef}
           id={id}
           className="speech-panel"
           aria-label="音声の文字起こし"
@@ -57,14 +121,7 @@ export function TranscriptionPanel({
           onKeyUp={(event) => event.stopPropagation()}
         >
           <header className="speech-heading">
-            <div>
-              <p>
-                {external
-                  ? "ブラウザの音声認識 · 日本語"
-                  : "端末内で処理 · API課金なし"}
-              </p>
-              <h2>音声の文字起こし</h2>
-            </div>
+            <h2>音声の文字起こし</h2>
             <button
               className="speech-close"
               aria-label="文字起こしパネルを閉じる"
@@ -73,6 +130,9 @@ export function TranscriptionPanel({
               ×
             </button>
           </header>
+          <p className="speech-note">
+            認識途中の文字と確定した文字をゲームの判定サーバーに送ります。ゲームは音声ファイルを保存しません。
+          </p>
           <label className="speech-model">
             認識方法
             <select
@@ -92,12 +152,8 @@ export function TranscriptionPanel({
           {external ? (
             <>
               <div className="speech-privacy">
-                <strong>音声が外部で処理される場合があります</strong>
                 <p>
-                  Chromeのネットワーク認識では音声をGoogleへ送信します。送信先での保存期間・学習利用の条件は、このAPIでは確認・指定できません。
-                </p>
-                <p>
-                  下の「外部処理でマイクをON」を押すと開始します。このアプリは音声ファイルを保存しません。途中の文字もゲームの判定サーバーで判定し、短い相槌は認識中から塗ります。途中結果が後から変わる場合があります。
+                  ブラウザが音声を外部に送る場合があります。Chromeの外部処理先はGoogleです。送信先での保存期間はブラウザのサービスによります。
                 </p>
                 <a
                   href="https://policies.google.com/terms?hl=ja"
@@ -114,13 +170,7 @@ export function TranscriptionPanel({
                 >
                   プライバシーポリシー
                 </a>
-                <p>
-                  処理先・規約はブラウザにより異なります。Google以外のブラウザ認識サービスの条件は未確認です。
-                </p>
               </div>
-              <p className="speech-note">
-                日本語（ja-JP）で認識します。入力はブラウザの既定のマイクを使います。マイクの変更はブラウザのサイト設定で行ってください。
-              </p>
               {!browser.supported && (
                 <p className="speech-error" role="alert">
                   このブラウザはWeb Speech
@@ -130,9 +180,7 @@ export function TranscriptionPanel({
             </>
           ) : (
             <>
-              <p className="speech-note">
-                音声は端末内で処理します。初回はモデルの準備が必要です。音量バーが声に反応しない場合は入力マイクを確認してください。
-              </p>
+              <p className="speech-note">音声は端末内で処理します。</p>
               <label className="speech-model">
                 入力マイク
                 <select
@@ -172,9 +220,6 @@ export function TranscriptionPanel({
                     <option value="balanced">標準 · Whisper base</option>
                   </select>
                 </label>
-                <p className="speech-note">
-                  速度優先は聞き間違いが増える場合があります。
-                </p>
               </details>
               {local.phase !== "ready" ? (
                 <div className="speech-setup">
@@ -193,9 +238,7 @@ export function TranscriptionPanel({
                         max={100}
                         value={local.progress}
                       />
-                      <span>
-                        {Math.floor(local.progress)}% · 初回は時間がかかります
-                      </span>
+                      <span>{Math.floor(local.progress)}%</span>
                       <button
                         className="speech-secondary"
                         onClick={local.cancel}
@@ -257,21 +300,12 @@ export function TranscriptionPanel({
                 value={local.activity.level}
               />
             )}
-            <p className="speech-note">
-              話している途中から文字を更新します。途中結果は後で修正される場合があります。このアプリは音声ファイルを作成・保存しません。
-            </p>
           </>
-          <div className="speech-feedback" role="status" aria-live="polite">
-            {external && !browser.supported
-              ? "ブラウザ認識を利用できません"
-              : speech.pending
-                ? "文字起こし中…"
-                : speech.phase === "ready"
-                  ? "文字起こしの準備ができています"
-                  : speech.listening
-                    ? "モデルを準備してください"
-                    : "認識モデルを準備するとマイクをONにできます"}
-          </div>
+          {speech.pending > 0 && (
+            <div className="speech-feedback" role="status">
+              文字起こし中…
+            </div>
+          )}
           {speech.error && (
             <p className="speech-error" role="alert">
               {speech.error}
@@ -284,12 +318,7 @@ export function TranscriptionPanel({
             aria-atomic="true"
           >
             <small>認識中 · 途中結果</small>
-            <p>
-              {speech.liveText ||
-                (speech.listening
-                  ? "話しかけてください…"
-                  : "マイクをONにすると、ここに途中の文字が表示されます。")}
-            </p>
+            <p>{speech.liveText || "—"}</p>
           </section>
           <div className="speech-results-heading">
             <h3>文字起こし結果</h3>
@@ -324,22 +353,11 @@ export function TranscriptionPanel({
                       judgment?.state === "done" ? judgment.segments : undefined
                     }
                   />
-                  <small>
-                    {item.engine === "web-speech"
-                      ? "マイク · Web Speech API · 確定結果"
-                      : `マイク · 発話 ${((item.durationMs ?? 0) / 1000).toFixed(1)}秒 · 認識 ${((item.processingMs ?? 0) / 1000).toFixed(1)}秒`}
-                  </small>
                 </li>
               );
             })}
           </ol>
-          {!speech.transcripts.length && (
-            <p className="speech-empty">ここに認識した文章が表示されます。</p>
-          )}
           <ReactionClassificationPanel judge={judge} />
-          <p className="speech-footnote">
-            文字起こしと判定・塗りの接続は実験中です。判定が失敗した場合、未発射の部分は塗りません。
-          </p>
         </section>
       )}
     </>
