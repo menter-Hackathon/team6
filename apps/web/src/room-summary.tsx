@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { PracticeColorPicker } from "./practice-color-picker";
 import { WardrobeButton } from "./wardrobe";
 
 interface RoomSummaryProps {
@@ -10,8 +9,6 @@ interface RoomSummaryProps {
   requiredPlayerCount?: number;
   onStart?: () => void;
   onClose?: () => void;
-  practiceColor?: string;
-  onPracticeColorSelect?: (color: string) => void;
   onOpenWardrobe?: () => void;
   ready?: boolean;
   readyCount?: number;
@@ -29,8 +26,6 @@ export function RoomSummary({
   requiredPlayerCount = 0,
   onStart,
   onClose,
-  practiceColor = "#ff4f8b",
-  onPracticeColorSelect,
   onOpenWardrobe,
   ready = false,
   readyCount = 0,
@@ -84,10 +79,6 @@ export function RoomSummary({
         ))}
       </ul>
       {onOpenWardrobe && <WardrobeButton onClick={onOpenWardrobe} />}
-      <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
-      {onPracticeColorSelect && (
-        <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
-      )}
       {episodeInput}
       {requiredPlayerCount > names.length && (
         <p className="room-summary-waiting" role="status">

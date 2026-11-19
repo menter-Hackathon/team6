@@ -667,8 +667,6 @@ export function App() {
               isReady={localPlayer?.ready ?? false}
               canStart={canStart}
               requiredPlayerCount={gameState.replayPlayerCount}
-              practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
-              onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               onOpenWardrobe={openWardrobe}
               onClose={() => setShowTopicPopup(false)}
               onReady={() => {
