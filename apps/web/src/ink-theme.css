@@ -264,38 +264,99 @@
   font-weight: 800;
 }
 .ink-panel-input::placeholder { color: #a9a9a9; }
-.ink-panel-input:focus-visible,
-.ink-panel-select select:focus-visible {
+.ink-panel-input:focus-visible {
   outline: 3px solid var(--entry-line);
   outline-offset: 2px;
 }
-.ink-panel-options {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
+
+/* Player count: four staggered labels; the chosen one sits on a white ink splat. */
+.ink-count-picker {
+  min-width: 0;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
 }
-.ink-panel-select {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-}
-.ink-panel-select span {
+.ink-count-picker legend {
+  padding: 0;
   color: #fff;
-  font-size: 14px;
+  font-size: clamp(22px, 4vw, 28px);
   font-weight: 900;
   text-shadow: var(--ink-outline);
 }
-.ink-panel-select select {
-  width: 100%;
-  min-height: 46px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 12px;
+.ink-count-options {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: end;
+  gap: 4px;
+  min-height: 92px;
+  padding-top: 14px;
+}
+.ink-count-option {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 56px;
+  cursor: pointer;
+}
+.ink-count-option:nth-child(1) { transform: translateY(10px); }
+.ink-count-option:nth-child(2) { transform: translateY(10px); }
+.ink-count-option:nth-child(3) { transform: translateY(0); }
+.ink-count-option:nth-child(4) { transform: translateY(-22px); }
+.ink-count-option input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.ink-count-option span {
+  position: relative;
+  z-index: 1;
+  color: #fff;
+  font-size: clamp(22px, 4vw, 28px);
+  font-weight: 900;
+  text-shadow: var(--ink-outline);
+  pointer-events: none;
+  transition: transform 0.2s ease;
+}
+.ink-count-option span::before {
+  /* white splat behind the selected count */
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  width: 3.6em;
+  height: 1.9em;
+  border-radius: 54% 46% 50% 50% / 60% 52% 48% 40%;
   background: #fff;
-  color: var(--entry-line);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 800;
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 0.22s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+.ink-count-option span::after {
+  /* two droplets flying off the splat */
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -0.55em;
+  left: -0.9em;
+  width: 0.42em;
+  height: 0.42em;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0.55em -0.1em 0 -0.05em #fff, 2.7em 1.95em 0 -0.04em #fff;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.ink-count-option input:checked + span::before {
+  transform: translate(-50%, -50%) rotate(-4deg) scale(1);
+}
+.ink-count-option input:checked + span::after { opacity: 1; }
+.ink-count-option:hover span { transform: scale(1.08) rotate(-3deg); }
+.ink-count-option input:focus-visible + span {
+  outline: 3px solid var(--entry-line);
+  outline-offset: 10px;
+  border-radius: 8px;
 }
 .ink-panel .ink-entry-error { width: auto; }
 

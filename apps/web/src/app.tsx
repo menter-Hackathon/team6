@@ -82,7 +82,6 @@ export function App() {
   const [fromInviteLink, setFromInviteLink] = useState(() =>
     new URLSearchParams(location.search).has("room"),
   );
-  const [turnOrder, setTurnOrder] = useState("alternating");
   const [roomPlayerCount, setRoomPlayerCount] = useState<RoomPlayerCount>(4);
   const [speakerPreview, setSpeakerPreview] = useState(false);
   const [roomCode, setRoomCode] = useState("");
@@ -140,7 +139,6 @@ export function App() {
       const joinedRoom = create
         ? await client.create<GameState>(GAME_ROOM_NAME, {
             displayName,
-            turnOrder,
             playerCount: roomPlayerCount,
           })
         : await client.joinById<GameState>(inviteCode.trim().toUpperCase(), {
@@ -361,8 +359,6 @@ export function App() {
         <EntryScreen
           displayName={displayName}
           onDisplayNameChange={setDisplayName}
-          turnOrder={turnOrder}
-          onTurnOrderChange={setTurnOrder}
           playerCount={roomPlayerCount}
           onPlayerCountChange={setRoomPlayerCount}
           inviteCode={inviteCode}

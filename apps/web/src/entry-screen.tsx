@@ -7,8 +7,6 @@ type Step = "choose" | "create" | "join";
 interface EntryScreenProps {
   displayName: string;
   onDisplayNameChange: (name: string) => void;
-  turnOrder: string;
-  onTurnOrderChange: (order: string) => void;
   playerCount: RoomPlayerCount;
   onPlayerCountChange: (count: RoomPlayerCount) => void;
   inviteCode: string;
@@ -72,36 +70,23 @@ export function EntryScreen(props: EntryScreenProps) {
         }
       >
         {nameInput(true)}
-        <div className="ink-panel-options">
-          <label className="ink-panel-select">
-            <span>発表順</span>
-            <select
-              aria-label="発表順"
-              value={props.turnOrder}
-              onChange={(event) => props.onTurnOrderChange(event.target.value)}
-            >
-              <option value="alternating">チーム交互</option>
-              <option value="random">全員ランダム</option>
-            </select>
-          </label>
-          <label className="ink-panel-select">
-            <span>プレイ人数</span>
-            <select
-              aria-label="プレイ人数"
-              value={props.playerCount}
-              onChange={(event) => {
-                const count = ROOM_PLAYER_COUNTS.find(
-                  (option) => String(option) === event.target.value,
-                );
-                if (count !== undefined) props.onPlayerCountChange(count);
-              }}
-            >
-              {ROOM_PLAYER_COUNTS.map((count) => (
-                <option key={count} value={count}>{count}人</option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <fieldset className="ink-count-picker">
+          <legend>プレイ人数</legend>
+          <div className="ink-count-options">
+            {ROOM_PLAYER_COUNTS.map((count) => (
+              <label key={count} className="ink-count-option">
+                <input
+                  type="radio"
+                  name="player-count"
+                  value={count}
+                  checked={props.playerCount === count}
+                  onChange={() => props.onPlayerCountChange(count)}
+                />
+                <span>{count}人</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
         {error}
       </InkPanelScreen>
     );

@@ -114,7 +114,8 @@ export function canStartWithPlayers(count: number, devMatch: boolean, target = 0
 export const roomOptionsSchema = z.object({
   displayName: z.string().trim().min(1).max(20),
   playerCount: z.literal(ROOM_PLAYER_COUNTS).optional(),
-  turnOrder: z.enum(["alternating", "random"]).default("alternating"),
+  /** Always team-alternating; the all-random order was removed (D-097). */
+  turnOrder: z.literal("alternating").default("alternating"),
   /** Seconds per speaker, chosen when the room is created (still adjustable in team selection). */
   talkDuration: talkDurationSchema.default(PRESENTATION_SECONDS),
   /** Developer mode: allow a 2-player (1 vs 1) match for testing. */
