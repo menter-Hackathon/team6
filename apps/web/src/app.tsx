@@ -250,6 +250,11 @@ export function App() {
           <h1>ガヤでスプラトゥーン</h1>
         </div>
         <TranscriptionPanel
+          inMatch={
+            devMode
+              ? devMatchActive && devMatchPhase === "playing"
+              : connectionState === "connected" && gameState?.phase === "playing"
+          }
           roomId={
             connectionState === "connected" && roomCode ? roomCode : undefined
           }
