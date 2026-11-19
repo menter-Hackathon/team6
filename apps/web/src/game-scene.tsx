@@ -1168,6 +1168,11 @@ function Field({
   devPaintCells.current = devMode ? cells : null;
   const colors = useRef({ colorA, colorB });
   colors.current = { colorA, colorB };
+  // Match colors are picked in team selection, after the room is joined, so
+  // the cosmetic drops must follow them instead of keeping the lobby defaults.
+  useEffect(() => {
+    effects.setColors(colorA, colorB);
+  }, [effects, colorA, colorB]);
   useEffect(() => {
     if (!room && !devMode) return;
     const ctx = canvas.getContext("2d");
