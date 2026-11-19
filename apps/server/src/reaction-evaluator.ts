@@ -37,7 +37,7 @@ export class ReactionEvaluator {
   ) {}
   async classify(pair: Pair, signal?: AbortSignal): Promise<ReactionDecision> {
     signal?.throwIfAborted();
-    if (isHaiAizuchi(pair.reaction)) return { level: "迷い" };
+    if (isHaiAizuchi(pair.reaction)) return { level: "短い相槌" };
     if (isImmediateAizuchi(pair.reaction))
       return { level: "短い相槌", streamable: true };
     const parts = await this.split(pair.reaction);
@@ -55,7 +55,7 @@ export class ReactionEvaluator {
       if (isHaiAizuchi(text)) {
         const previous = segments.at(-1);
         if (previous && isHaiAizuchi(previous.text)) previous.text += text;
-        else segments.push({ text, level: "迷い" });
+        else segments.push({ text, level: "短い相槌" });
       } else {
         segments.push({
           text,
@@ -69,7 +69,9 @@ export class ReactionEvaluator {
     return {
       level: segments[0]!.level,
       segments,
-      ...(segments.every((part) => part.level === "短い相槌")
+      ...(segments.every(
+        (part) => part.level === "短い相槌" && !isHaiAizuchi(part.text),
+      )
         ? { streamable: true }
         : {}),
     };

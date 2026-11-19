@@ -121,19 +121,19 @@ it("recognizes fixed standalone aizuchi, including transcription variants", asyn
   expect(evaluate).toHaveBeenCalledOnce();
 });
 
-it("uses one normal ink shot for repeated hai and keeps other aizuchi in a mixed set", async () => {
+it("groups repeated hai into one final short aizuchi", async () => {
   const evaluator = new ReactionEvaluator();
   for (const reaction of ["はい！", "はい、はい、はい", "ハイハイ"]) {
     await expect(evaluator.classify({ source: "", reaction })).resolves.toEqual(
-      { level: "迷い" },
+      { level: "短い相槌" },
     );
   }
   await expect(
     evaluator.classify({ source: "", reaction: "はいはい、なるほど" }),
   ).resolves.toEqual({
-    level: "迷い",
+    level: "短い相槌",
     segments: [
-      { text: "はいはい", level: "迷い" },
+      { text: "はいはい", level: "短い相槌" },
       { text: "なるほど", level: "短い相槌" },
     ],
   });
