@@ -1,4 +1,4 @@
-import { DIVE_GAP_SECONDS } from "./index.js";
+import { DIVE_GAP_SECONDS, NEON_COLORS } from "./index.js";
 
 export interface DiveState {
   submerged: boolean;
@@ -14,7 +14,12 @@ export function updateDiveState(
   delta: number,
   team: number,
 ): DiveState {
-  if (!requested || (team !== 1 && team !== 2))
+  if (
+    !requested ||
+    !Number.isInteger(team) ||
+    team < 1 ||
+    team > NEON_COLORS.length
+  )
     return { submerged: false, gapSeconds: 0, team };
   if (owned) return { submerged: true, gapSeconds: DIVE_GAP_SECONDS, team };
   const remaining =
