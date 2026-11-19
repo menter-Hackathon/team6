@@ -3,6 +3,7 @@ import { speakerTeamAreaMultiplier } from "./paint-balance.js";
 
 describe("speaker team paint balance", () => {
   it.each([
+    [1, 1],
     [2, 2],
     [3, 1.5],
     [4, 4 / 3],

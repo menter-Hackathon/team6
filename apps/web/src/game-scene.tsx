@@ -175,7 +175,7 @@ export function GameScene({
     const { phase, speakerOrder, turnIndex } = room.state;
     if (phase === "lobby") return true;
     const speaker = speakerOrder[turnIndex - 1];
-    return phase === "playing" && !!speaker && speaker !== room.sessionId;
+    return phase === "playing" && !!speaker && (speakerOrder.length === 2 || speaker !== room.sessionId);
   }, [devMode, roomRef]);
   const activeDevCanMove = useRef(devCanMove);
   activeDevCanMove.current = devCanMove;

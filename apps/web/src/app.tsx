@@ -250,7 +250,7 @@ export function App() {
     : connectionState === "connected" ? gameState?.phase : undefined;
   const showDevWardrobe = devLobby && wardrobeOpen;
   const devSpeakerBlocked =
-    devMatchActive && devMatchTurn?.isYourTurn === true;
+    devMatchActive && devMatchTurn?.isYourTurn === true && devMatchTurn.count !== 2;
   const devMatchCanPaint =
     !devMatchActive ||
     devMatchPhase === "lobby" ||
