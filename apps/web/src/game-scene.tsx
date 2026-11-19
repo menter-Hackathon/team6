@@ -50,7 +50,7 @@ import {
   practiceColorOwner,
   teamStartPosition,
 } from "@gaya/shared";
-import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
+import { type MutableRefObject, useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { bleedSpecialPaint } from "./paint-bleed";
 import { AIZUCHI_MOTION_SECONDS, AIZUCHI_LAND_TIME } from "./aizuchi-motion";
@@ -168,6 +168,15 @@ export function GameScene({
   activeDevAreaMultiplier.current = devAreaMultiplier;
   const activeDevCanPaint = useRef(devCanPaint);
   activeDevCanPaint.current = devCanPaint;
+  const canPaintNow = useCallback(() => {
+    if (devMode) return activeDevCanPaint.current;
+    const room = roomRef.current;
+    if (!room) return false;
+    const { phase, speakerOrder, turnIndex } = room.state;
+    if (phase === "lobby") return true;
+    const speaker = speakerOrder[turnIndex - 1];
+    return phase === "playing" && !!speaker && speaker !== room.sessionId;
+  }, [devMode, roomRef]);
   const activeDevCanMove = useRef(devCanMove);
   activeDevCanMove.current = devCanMove;
   const inputPaused = useRef(controlsPaused);
@@ -200,9 +209,8 @@ export function GameScene({
 
   useEffect(() => {
     const activateSpecial = () => {
-      if (inputPaused.current) return;
+      if (inputPaused.current || !canPaintNow()) return;
       if (devMode) {
-        if (!activeDevCanPaint.current) return;
         if (controls.current.specialTime < 0) {
           controls.current.specialShape = specialShape;
           controls.current.specialTime = 0;
@@ -217,7 +225,7 @@ export function GameScene({
     };
     window.addEventListener("activate-special", activateSpecial);
     const enqueueReaction = (level: ReactionLevel, traceKey?: string) => {
-      if (!inputPaused.current && reactionEffect(level) && reactionInputs.current.length < 32)
+      if (!inputPaused.current && canPaintNow() && reactionEffect(level) && reactionInputs.current.length < 32)
         reactionInputs.current.push({
           level,
           at: performance.now(),
@@ -316,7 +324,7 @@ export function GameScene({
         )
           return;
         if (devMode && controls.current.specialTime >= 0) return;
-        if (devMode && !activeDevCanPaint.current) return;
+        if (!canPaintNow()) return;
         if (devMode) {
           window.dispatchEvent(
             new CustomEvent("dev-paint", {
@@ -408,7 +416,7 @@ export function GameScene({
       window.removeEventListener("mousemove", onMouseMove);
       document.body.removeEventListener("click", onClick);
     };
-  }, [devMode, roomRef, specialShape]);
+  }, [canPaintNow, devMode, roomRef, specialShape]);
 
   useEffect(() => {
     if (!controlsPaused) return;
@@ -477,6 +485,12 @@ export function GameScene({
         ? "回転ジャンプ中…"
         : `F  必殺技 · ${specialShape === "ink" ? "● インク" : specialShape === "heart" ? "♥ ハート" : "★ スター"}スラム`;
     }
+    if (!canPaintNow()) {
+      control.tapPending = false;
+      for (const reaction of reactionInputs.current.splice(0))
+        finishTrace(reaction.traceKey);
+      return;
+    }
     if (
       specialActive ||
       responseAirborne ||
@@ -526,7 +540,6 @@ export function GameScene({
       (!reactionKind && shotClock.current > 0)
     )
       return;
-    if (devMode && !activeDevCanPaint.current) return;
     const kind = reactionKind ?? "ink";
     if (kind === "reaction-fan") reactionClock.current = REACTION_SHOT_INTERVAL;
     else {
