@@ -6,10 +6,11 @@ import {
   NEON_COLORS,
   PAINT_GRID_SIZE,
   countPaintedCells,
-  STARTABLE_PLAYER_COUNTS,
+  canStartWithPlayers,
   TURN_INTRO_MS,
   type SpecialShape,
   speakerTeamAreaMultiplier,
+  PRESENTATION_SECONDS,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
 import { GameScene } from "./game-scene";
@@ -17,6 +18,8 @@ import { ProgressionPopup, type PopupScene } from "./progression-popup";
 import { TurnFlow } from "./turn-flow";
 import { ResultFlow } from "./result-flow";
 import { RoomSummary } from "./room-summary";
+import { EntryScreen } from "./entry-screen";
+import { LobbyActions, LobbyColorButtons } from "./lobby-hud";
 import {
   EMPTY_EPISODE_DRAFT,
   EpisodeInput,
@@ -39,8 +42,10 @@ const SERVER_URL =
       : "");
 
 export function App() {
-  const [showDevObstacles, setShowDevObstacles] = useState(true);
-  const [autoFire, setAutoFire] = useState(true);
+  const captureMode = new URLSearchParams(location.search).has("capture");
+  const [panelsHidden, setPanelsHidden] = useState(false);
+  const [showDevObstacles, setShowDevObstacles] = useState(false);
+  const [autoFire, setAutoFire] = useState(!captureMode);
   // D-086: the star/heart picker stays hidden; the special always lands as ink.
   const specialShape: SpecialShape = "ink";
   const [episodeDraft, setEpisodeDraft] =
@@ -72,6 +77,9 @@ export function App() {
     new URLSearchParams(location.search).has("room"),
   );
   const [turnOrder, setTurnOrder] = useState("alternating");
+  const [talkDuration, setTalkDuration] = useState(PRESENTATION_SECONDS);
+  const [devMatch, setDevMatch] = useState(false);
+  const [speakerPreview, setSpeakerPreview] = useState(false);
   const [roomCode, setRoomCode] = useState("");
   // A story belongs to one room; start fresh when the room changes.
   useEffect(() => setEpisodeDraft(EMPTY_EPISODE_DRAFT), [roomCode]);
@@ -112,6 +120,8 @@ export function App() {
         ? await client.create<GameState>(GAME_ROOM_NAME, {
             displayName,
             turnOrder,
+            talkDuration,
+            devMatch,
           })
         : await client.joinById<GameState>(inviteCode.trim().toUpperCase(), {
             displayName,
@@ -201,12 +211,12 @@ export function App() {
     Boolean(localPlayer);
   const canStart =
     gameState?.hostId === roomRef.current?.sessionId &&
-    STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) &&
+    canStartWithPlayers(players.length, gameState?.devMatch ?? false) &&
     (gameState?.replayPlayerCount === 0 || players.length === gameState?.replayPlayerCount) &&
     players.every((player) => player.ready);
   const canReplay =
     gameState?.hostId === roomRef.current?.sessionId &&
-    STARTABLE_PLAYER_COUNTS.some((count) => count === players.length) &&
+    canStartWithPlayers(players.length, gameState?.devMatch ?? false) &&
     players.filter((player) => player.team === "A").length === players.length / 2 &&
     players.filter((player) => player.team === "B").length === players.length / 2;
   const devSpeakerBlocked =
@@ -236,7 +246,7 @@ export function App() {
   );
 
   return (
-    <main className="game-shell">
+    <main className={`game-shell${captureMode ? " game-shell--capture" : ""}${panelsHidden ? " game-shell--panels-hidden" : ""}`}>
       <header className="hud">
         <div>
           <p className="eyebrow">GAYA SPLATOON / PARTY GAME</p>
@@ -252,6 +262,13 @@ export function App() {
               : [displayName].filter(Boolean)
           }
         />
+        <button
+          type="button"
+          className="hud-dev-button"
+          onClick={(event) => { setPanelsHidden(true); event.currentTarget.blur(); }}
+        >
+          操作パネルを隠す
+        </button>
         <button className="hud-dev-button" onClick={toggleDevMode}>
           {devMode ? "検証モードを終了" : "操作を検証"}
         </button>
@@ -266,67 +283,37 @@ export function App() {
                 : "ルーム未参加"}
         </div>
       </header>
+      {panelsHidden && !captureMode && (
+        <button
+          type="button"
+          className="panels-restore-button"
+          onClick={(event) => { setPanelsHidden(false); event.currentTarget.blur(); }}
+        >
+          操作パネルを表示
+        </button>
+      )}
 
       {!devMode && connectionState !== "connected" ? (
-        <section className="lobby-panel lobby-panel--entry" aria-label="ルームに参加">
-          <span className="entry-kicker">MATCH ENTRY ／ 01</span>
-          <h2>ルームに参加</h2>
-          <label className="entry-label" htmlFor="entry-name">PLAYER NAME</label>
-          <input
-            id="entry-name"
-            aria-label="表示名"
-            placeholder="表示名"
-            maxLength={20}
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-          />
-          <div className="entry-create">
-          <label className="entry-label" htmlFor="entry-order">発表順</label>
-          <select
-            id="entry-order"
-            aria-label="発表順"
-            value={turnOrder}
-            onChange={(event) => setTurnOrder(event.target.value)}
-          >
-            <option value="alternating">A・B交互に発表</option>
-            <option value="random">完全ランダム</option>
-          </select>
-          <button
-            disabled={!displayName.trim() || connectionState === "connecting"}
-            onClick={() => void connect(true)}
-          >
-            ルームを作る <span aria-hidden="true">↗</span>
-          </button>
-          </div>
-          <div className="entry-divider"><span>OR JOIN</span></div>
-          <label className="entry-label" htmlFor="entry-code">INVITE CODE</label>
-          <input
-            id="entry-code"
-            aria-label="招待コード"
-            placeholder="招待コード"
-            value={inviteCode}
-            onChange={(event) => {
-              setInviteCode(event.target.value);
-              setFromInviteLink(false);
-            }}
-          />
-          {fromInviteLink && inviteCode && (
-            <p>
-              招待コード {inviteCode} を入力済み
-            </p>
-          )}
-          <button
-            disabled={
-              !displayName.trim() ||
-              !inviteCode.trim() ||
-              connectionState === "connecting"
-            }
-            onClick={() => void connect(false)}
-          >
-            {fromInviteLink ? "このルームに参加" : "コードで参加"} <span aria-hidden="true">→</span>
-          </button>
-          {errorMessage && <p role="alert">{errorMessage}</p>}
-        </section>
+        <EntryScreen
+          displayName={displayName}
+          onDisplayNameChange={setDisplayName}
+          turnOrder={turnOrder}
+          onTurnOrderChange={setTurnOrder}
+          talkDuration={talkDuration}
+          onTalkDurationChange={setTalkDuration}
+          devMatch={devMatch}
+          onDevMatchChange={setDevMatch}
+          inviteCode={inviteCode}
+          onInviteCodeChange={(code) => {
+            setInviteCode(code);
+            setFromInviteLink(false);
+          }}
+          fromInviteLink={fromInviteLink}
+          connecting={connectionState === "connecting"}
+          errorMessage={errorMessage}
+          onCreate={() => void connect(true)}
+          onJoin={() => void connect(false)}
+        />
       ) : !devMode &&
         gameState?.phase !== "lobby" &&
         gameState?.phase !== "countdown" &&
@@ -359,13 +346,58 @@ export function App() {
             <h2>開発者用 検証モード</h2>
           </summary>
           <p>サーバーに接続せずに操作を確認できます。</p>
+          <div className="dev-speaker-preview">
+            <strong>発表中の演出</strong>
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !speakerPreview;
+                  setSpeakerPreview(next);
+                  window.dispatchEvent(new CustomEvent("speaker-preview", { detail: next }));
+                }}
+              >
+                {speakerPreview ? "プレビューを止める" : "自分を発表者にする"}
+              </button>
+              <button
+                type="button"
+                disabled={!speakerPreview}
+                onClick={() => window.dispatchEvent(new CustomEvent("speaker-preview-gaya", { detail: "fan" }))}
+              >
+                相槌のガヤ
+              </button>
+              <button
+                type="button"
+                disabled={!speakerPreview}
+                onClick={() => window.dispatchEvent(new CustomEvent("speaker-preview-gaya", { detail: "slam" }))}
+              >
+                長い文章のガヤ
+              </button>
+              <button
+                type="button"
+                disabled={!speakerPreview}
+                onClick={() => {
+                  for (let i = 0; i < 14; i++)
+                    window.setTimeout(
+                      () =>
+                        window.dispatchEvent(
+                          new CustomEvent("speaker-preview-gaya", { detail: i % 4 === 3 ? "slam" : "fan" }),
+                        ),
+                      i * 350,
+                    );
+                }}
+              >
+                ガヤ連打（5秒）
+              </button>
+            </div>
+          </div>
           <label className="dev-obstacle-toggle">
             <input
               type="checkbox"
               checked={showDevObstacles}
               onChange={(event) => setShowDevObstacles(event.target.checked)}
             />
-            障害物を表示（4つの箱）
+            追加の検証用の箱を表示（4つ）
           </label>
           <button
             onClick={(event) => {
@@ -376,7 +408,7 @@ export function App() {
             箱の前へ移動
           </button>
           <p className="dev-obstacle-note">
-            壁を通常インクで塗り、Shift＋壁方向への移動で上に登れます。側面・上面にも塗りが残ります（検証モード限定）。
+            布を通常インクで塗り、Shift＋テーブル方向への移動で天板に登れます。布・天板にも塗りが残ります。
           </p>
           <ul className="dev-controls-list">
             <li>WASD・矢印キー：移動</li>
@@ -492,22 +524,26 @@ export function App() {
           </Suspense>
         </Canvas>
         </div>
+        {devMode && (
+          <>
         <button
-          className="auto-fire-toggle"
-          aria-label="通常インクの常時発射"
-          aria-pressed={autoFire}
-          onClick={() => setAutoFire((active) => !active)}
-        >
-          <span aria-hidden="true">{autoFire ? "●" : "○"}</span>{" "}
-          通常インク常時発射：{autoFire ? "ON" : "OFF"}
-        </button>
-        <button
-          id="special-button"
-          className="special-button"
-          onClick={() => window.dispatchEvent(new Event("activate-special"))}
-        >
-          F 必殺技 · インクスラム
-        </button>
+              className="auto-fire-toggle"
+              aria-label="通常インクの常時発射"
+              aria-pressed={autoFire}
+              onClick={() => setAutoFire((active) => !active)}
+            >
+              <span aria-hidden="true">{autoFire ? "●" : "○"}</span>{" "}
+              通常インク常時発射：{autoFire ? "ON" : "OFF"}
+            </button>
+            <button
+              id="special-button"
+              className="special-button"
+              onClick={() => window.dispatchEvent(new Event("activate-special"))}
+            >
+              F 必殺技 · インクスラム
+            </button>
+          </>
+        )}
         <div className="crosshair" aria-hidden="true" />
         {devMode && (
           <output
@@ -635,7 +671,6 @@ export function App() {
               onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               onOpenWardrobe={openWardrobe}
               onClose={() => setShowTopicPopup(false)}
-              episodeInput={episodeInput}
               onReady={() => {
                 const nextReady = !localPlayer?.ready;
                 roomRef.current?.send("ready", nextReady);
@@ -653,19 +688,9 @@ export function App() {
             <RoomSummary
               roomCode={roomCode}
               names={players.map((player) => player.displayName)}
-              canStart={canStart}
               requiredPlayerCount={gameState.replayPlayerCount}
-              practiceColor={localPlayer?.practiceColor ?? "#ff4f8b"}
-              onPracticeColorSelect={(color) => roomRef.current?.send("practice-color", color)}
               onOpenWardrobe={openWardrobe}
-              ready={localPlayer?.ready ?? false}
-              readyCount={players.filter((player) => player.ready).length}
-              onReady={() => {
-                const nextReady = !localPlayer?.ready;
-                roomRef.current?.send("ready", nextReady);
-                if (!nextReady) setShowTopicPopup(true);
-              }}
-              episodeInput={episodeInput}
+              canStart={canStart}
               {...(gameState.hostId === roomRef.current?.sessionId
                 ? { onStart: () => roomRef.current?.send("prepare-teams") }
                 : {})}
@@ -679,6 +704,24 @@ export function App() {
             onClose={closeWardrobe}
           />
         )}
+        {!devMode &&
+          connectionState === "connected" &&
+          gameState?.phase === "lobby" && (
+            <>
+              <LobbyColorButtons
+                color={localPlayer?.practiceColor ?? "#ff4f8b"}
+                onSelect={(color) => roomRef.current?.send("practice-color", color)}
+              />
+              <LobbyActions
+                episodeInput={episodeInput}
+                episodeDone={localPlayer?.hasEpisode ?? false}
+                isReady={localPlayer?.ready ?? false}
+                readyCount={players.filter((player) => player.ready).length}
+                playerCount={Math.max(gameState.replayPlayerCount, players.length)}
+                onReady={() => roomRef.current?.send("ready", !localPlayer?.ready)}
+              />
+            </>
+          )}
         {!devMode &&
           connectionState === "connected" &&
           gameState?.phase === "team_selection" && (

@@ -18,6 +18,8 @@ interface RoomSummaryProps {
   onReady?: () => void;
   /** The story field (D-090), rendered by the app so its text is shared across views. */
   episodeInput?: ReactNode;
+  /** When set, "ready" stays disabled (e.g. the episode is not written yet). */
+  readyBlockedReason?: string | undefined;
 }
 
 export function RoomSummary({
@@ -34,6 +36,7 @@ export function RoomSummary({
   readyCount = 0,
   onReady,
   episodeInput,
+  readyBlockedReason,
 }: RoomSummaryProps) {
   const [linkCopyMessage, setLinkCopyMessage] = useState("");
   const copyInviteLink = async () => {
@@ -82,6 +85,9 @@ export function RoomSummary({
       </ul>
       {onOpenWardrobe && <WardrobeButton onClick={onOpenWardrobe} />}
       <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
+      {onPracticeColorSelect && (
+        <PracticeColorPicker color={practiceColor} onSelect={onPracticeColorSelect} />
+      )}
       {episodeInput}
       {requiredPlayerCount > names.length && (
         <p className="room-summary-waiting" role="status">
@@ -91,6 +97,8 @@ export function RoomSummary({
       {onReady && (
         <button
           className="room-summary-ready"
+          disabled={!ready && Boolean(readyBlockedReason)}
+          title={!ready ? readyBlockedReason : undefined}
           onClick={onReady}
           aria-label={ready ? "準備を取り消す" : "準備OKにする"}
           aria-pressed={ready}

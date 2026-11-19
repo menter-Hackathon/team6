@@ -67,7 +67,7 @@ describe("INK/PLAY paint geometry", () => {
     expect(paintDisks(stroke)).toEqual(paintDisks({ ...stroke }));
     let count = 0;
     rasterizePaintStroke(
-      { ...stroke, x: FIELD_HALF_WIDTH, z: FIELD_HALF_DEPTH },
+      { ...stroke, kind: "footprint", x: FIELD_HALF_WIDTH, z: FIELD_HALF_DEPTH },
       (x, y) => {
         expect(
           x >= 0 && x < PAINT_GRID_SIZE && y >= 0 && y < PAINT_GRID_SIZE,

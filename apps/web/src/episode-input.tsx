@@ -65,9 +65,6 @@ export function EpisodeInput({
           保存
         </button>
       </div>
-      <p>
-        あなたの発表ターンで、ほかの人のガヤが話に関係あるかの判定に使います。ほかの人には表示されません。
-      </p>
     </div>
   );
 }
