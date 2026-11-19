@@ -69,7 +69,11 @@ export class GameRoom extends Room<{ state: GameState }> {
     this.state.turnOrder = settings.turnOrder;
     this.state.talkDuration = settings.talkDuration;
     this.state.devMatch = settings.devMatch;
-    registerEpisodeSource(this.roomId, () => this.currentEpisode());
+    registerEpisodeSource(
+      this.roomId,
+      () => this.currentEpisode(),
+      () => this.state.phase === "playing" ? this.state.turnIndex : undefined,
+    );
     this.setPatchRate(1000 / SERVER_TICK_RATE);
     this.setSimulationInterval(
       (deltaMilliseconds) => this.update(deltaMilliseconds / 1000),

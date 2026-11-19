@@ -79,7 +79,7 @@ export class ReactionEvaluator {
   }
   evaluate(pair: Pair, signal?: AbortSignal): Promise<ReactionLevel> {
     if (signal?.aborted) return Promise.reject(signal.reason);
-    // User-specified override: a participant's name always takes priority over the model.
+    // User-specified override: a standalone call to a participant is an aizuchi.
     const canonicalName = (value: string) =>
       value
         .normalize("NFKC")
@@ -89,10 +89,18 @@ export class ReactionEvaluator {
           String.fromCharCode(c.charCodeAt(0) - 0x60),
         );
     const text = canonicalName(pair.reaction);
+    const call = text.replace(/[!?。、,.…]+$/u, "").trimEnd();
+    if (call === "えっ") return Promise.resolve("短い相槌");
     if (
       pair.userNames?.some((name) => {
         const normalized = canonicalName(name);
-        return normalized.length > 0 && text.includes(normalized);
+        return (
+          normalized.length > 0 &&
+          (text === normalized ||
+            ["", "さん", "くん", "君", "ちゃん", "先輩"].some(
+              (suffix) => call === normalized + suffix,
+            ))
+        );
       })
     )
       return Promise.resolve("短い相槌");
@@ -227,7 +235,20 @@ async function loadEvaluator(): Promise<Evaluate> {
   const cached = memoizeAsync(
     async (key) => {
       const [source, reaction] = JSON.parse(key) as [string, string];
-      return evaluate({ source, reaction });
+      const decision = await evaluate({ source, reaction });
+      if (
+        !source.trim() ||
+        decision.level === "除外" ||
+        decision.rule === "短い相槌:相槌のセット"
+      )
+        return decision;
+
+      // Stock phrases have no relevance judgment. Content uses the same
+      // thresholds the library already applies to long reactions.
+      const relevance = decision.judgments.relatesToSource;
+      if (relevance === "no") return { level: "除外" };
+      if (relevance === "unsure") return { level: "迷い" };
+      return decision;
     },
     64,
     30_000,

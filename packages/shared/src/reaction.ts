@@ -16,6 +16,7 @@ export const reactionRequestSchema = z.object({
   userNames: z.array(z.string().trim().min(1).max(20)).max(32).default([]),
   /** Lets the server use the current speaker's entered story as the source. */
   roomId: z.string().trim().min(1).max(32).optional(),
+  turnIndex: z.number().int().min(1).max(8).optional(),
 });
 export const reactionSegmentSchema = z.object({
   text: z.string().min(1).max(500),

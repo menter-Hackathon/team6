@@ -30,6 +30,7 @@ interface Job {
   source: string;
   userNames: string[];
   roomId?: string;
+  turnIndex?: number;
 }
 const server =
   import.meta.env.VITE_SERVER_URL ??
@@ -42,12 +43,13 @@ export function useReactionClassification(
   enabled: boolean,
   registeredUserNames: readonly string[] = [],
   roomId?: string,
+  turnIndex?: number,
 ) {
   // During a turn the server swaps in the current speaker's entered story as the source (D-090).
-  const roomIdRef = useRef(roomId);
-  roomIdRef.current = roomId;
-  const roomField = () =>
-    roomIdRef.current ? { roomId: roomIdRef.current } : {};
+  const roomField = () => ({
+    ...(roomId ? { roomId } : {}),
+    ...(turnIndex !== undefined ? { turnIndex } : {}),
+  });
   const client = useRef(createReactionClient(API));
   const stream = useRef(new AizuchiStream());
   const [previewParts, setPreviewParts] = useState<ReactionSegment[]>([]);
@@ -124,6 +126,9 @@ export function useReactionClassification(
       source: pair.data.source,
       userNames: pair.data.userNames,
       ...(pair.data.roomId ? { roomId: pair.data.roomId } : {}),
+      ...(pair.data.turnIndex !== undefined
+        ? { turnIndex: pair.data.turnIndex }
+        : {}),
     });
     setPending(jobs.current.length + Number(busy.current));
     void pump();
@@ -184,6 +189,7 @@ export function useReactionClassification(
           reaction: job.text,
           userNames: job.userNames,
           ...(job.roomId ? { roomId: job.roomId } : {}),
+          ...(job.turnIndex !== undefined ? { turnIndex: job.turnIndex } : {}),
         },
         requestController.signal,
       );
@@ -197,6 +203,10 @@ export function useReactionClassification(
       emit(fresh, job.id, "final");
     } catch (reason) {
       if (active.current && version === generation.current) {
+        if (reason instanceof Error && reason.message === "turn-changed") {
+          updateJudgment(job.id, { state: "cancelled" });
+          return;
+        }
         setError(
           reason instanceof Error && reason.message === "busy"
             ? "判定が混み合っています。未発射の部分は塗りません。"
@@ -359,7 +369,7 @@ export function useReactionClassification(
       window.removeEventListener("local-transcript", transcript);
       window.removeEventListener("pagehide", abort);
     };
-  }, [enabled]);
+  }, [enabled, roomId, turnIndex]);
   return {
     phase,
     source,

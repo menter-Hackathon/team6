@@ -250,6 +250,11 @@ export function App() {
           <h1>ガヤでスプラトゥーン</h1>
         </div>
         <TranscriptionPanel
+          turnIndex={
+            connectionState === "connected" && gameState?.phase === "playing"
+              ? gameState.turnIndex || undefined
+              : undefined
+          }
           inMatch={
             devMode
               ? devMatchActive && devMatchPhase === "playing"

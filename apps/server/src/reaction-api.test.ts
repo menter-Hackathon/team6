@@ -70,7 +70,7 @@ it("accepts usernames from the request and returns aizuchi without a model", asy
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      reaction: "太郎さん、それは本当に大変だったね",
+      reaction: "太郎さん",
       userNames: ["太郎"],
     }),
   });
@@ -133,5 +133,39 @@ it("uses the current speaker's entered story as the source for a room, without r
     });
   } finally {
     unregisterEpisodeSource("ROOM1");
+  }
+});
+
+it("rejects stale requests and results when the active speaker changes", async () => {
+  let turn = 2;
+  const evaluate = vi.fn(async () => {
+    turn++;
+    return { level: "長い文章" };
+  });
+  const api = await serve(new ReactionEvaluator(async () => evaluate));
+  registerEpisodeSource(
+    "ROOM2",
+    () => "駅前で財布をなくした話",
+    () => turn,
+  );
+  try {
+    const post = (turnIndex: number) =>
+      fetch(`${api}/evaluate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reaction: "どこで落としたの？",
+          roomId: "ROOM2",
+          turnIndex,
+        }),
+      });
+    expect((await post(1)).status).toBe(409);
+    expect(evaluate).not.toHaveBeenCalled();
+    const response = await post(2);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ code: "REACTION_TURN_CHANGED" });
+    expect(evaluate).toHaveBeenCalledOnce();
+  } finally {
+    unregisterEpisodeSource("ROOM2");
   }
 });

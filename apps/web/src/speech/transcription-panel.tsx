@@ -14,14 +14,16 @@ export function TranscriptionPanel({
   userNames = [],
   roomId,
   inMatch = false,
+  turnIndex,
 }: {
   userNames?: readonly string[];
   /** Joined room; lets the server use the current speaker's story as the source. */
   roomId?: string | undefined;
   inMatch?: boolean;
+  turnIndex?: number | undefined;
 }) {
   const [open, setOpen] = useState(false);
-  const judge = useReactionClassification(true, userNames, roomId);
+  const judge = useReactionClassification(true, userNames, roomId, turnIndex);
   const local = useTranscription();
   const browser = useBrowserTranscription();
   const [engine, setEngine] = useState("web-speech");

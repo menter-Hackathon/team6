@@ -67,20 +67,31 @@ it("bounds pending work and skips abandoned queued requests", async () => {
   expect(evaluate).toHaveBeenCalledTimes(7);
 });
 
-it("treats an embedded username as aizuchi before exclusions, length checks or model loading", async () => {
+it("treats a standalone name call as aizuchi and evaluates a sentence containing a name", async () => {
   const model = vi.fn(async () => ({ level: "除外" }));
   const load = vi.fn(async () => model);
   const evaluator = new ReactionEvaluator(load);
   await expect(
     evaluator.evaluate({
       source: "",
-      reaction: "太郎さん、それはとても大変だったね",
+      reaction: "太郎さん！",
       userNames: ["花子", "太郎"],
     }),
   ).resolves.toBe("短い相槌");
   expect(load).not.toHaveBeenCalled();
   expect(model).not.toHaveBeenCalled();
   expect(evaluator.state).toBe("idle");
+  await expect(
+    evaluator.evaluate({
+      source: "旅行の話",
+      reaction: "太郎さん、明日のバイト何時から？",
+      userNames: ["太郎"],
+    }),
+  ).resolves.toBe("除外");
+  expect(model).toHaveBeenCalledWith({
+    source: "旅行の話",
+    reaction: "太郎さん、明日のバイト何時から？",
+  });
   await expect(
     evaluator.evaluate({
       source: "",
@@ -94,8 +105,8 @@ it("matches full-width and mixed-case usernames literally, including punctuation
   const load = vi.fn(async () => async () => ({ level: "迷い" }));
   const evaluator = new ReactionEvaluator(load);
   for (const [reaction, name] of [
-    ["ＡＬＩＣＥさんすごい", "Alice"],
-    ["alice、なるほど", "Ａｌｉｃｅ"],
+    ["ＡＬＩＣＥさん", "Alice"],
+    ["alice！", "Ａｌｉｃｅ"],
     ["a.bさん", "a.b"],
   ])
     await expect(
