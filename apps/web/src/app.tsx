@@ -632,7 +632,7 @@ export function App() {
           <span><kbd>クリック</kbd> 視点回転・長押しでインク</span>
           <span><kbd>Shift</kbd> 潜航 <kbd>Space</kbd> ジャンプ</span>
           <span><kbd>Q</kbd> リング <kbd>E</kbd> 直線</span>
-          <span><kbd>F</kbd> インクスラム</span>
+          <span>{devMode ? <kbd>F</kbd> : "長文ガヤで"} インクスラム</span>
           <span><kbd>Esc</kbd> マウス解除</span>
           </div>}
         </aside>

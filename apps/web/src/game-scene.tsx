@@ -260,6 +260,7 @@ export function GameScene({
       const level = reactionForKey(event.code);
       if (
         level &&
+        (devMode || reactionEffect(level) !== "slam") &&
         !event.repeat &&
         !event.ctrlKey &&
         !event.metaKey &&
@@ -269,7 +270,7 @@ export function GameScene({
         enqueueReaction(level);
         return;
       }
-      if (event.code === "KeyF" && !event.repeat) {
+      if (devMode && event.code === "KeyF" && !event.repeat) {
         event.preventDefault();
         activateSpecial();
         return;
