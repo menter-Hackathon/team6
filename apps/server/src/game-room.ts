@@ -102,7 +102,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (
         !parsed.success ||
         !player ||
-        (!practice && this.isSpeaker(client.sessionId)) ||
+        (!practice && this.isPaintBlockedForSpeaker(client.sessionId)) ||
         player.dive ||
         player.specialTime >= 0 ||
         (!practice && player.team !== "A" && player.team !== "B")
@@ -168,7 +168,7 @@ export class GameRoom extends Room<{ state: GameState }> {
       if (!practice && this.state.phase !== "playing") return;
       if (
         !player ||
-        (!practice && this.isSpeaker(client.sessionId)) ||
+        (!practice && this.isPaintBlockedForSpeaker(client.sessionId)) ||
         player.specialTime >= 0 ||
         (!practice && player.team !== "A" && player.team !== "B")
       )
@@ -515,9 +515,10 @@ export class GameRoom extends Room<{ state: GameState }> {
     );
   }
 
-  private isSpeaker(sessionId: string): boolean {
+  private isPaintBlockedForSpeaker(sessionId: string): boolean {
     return (
       this.state.phase === "playing" &&
+      this.state.speakerOrder.length !== 2 &&
       this.state.speakerOrder[this.state.turnIndex - 1] === sessionId
     );
   }
@@ -581,7 +582,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         if (
           special.landed &&
           (this.state.phase === "playing" || practice) &&
-          (practice || !this.isSpeaker(sessionId)) &&
+          (practice || !this.isPaintBlockedForSpeaker(sessionId)) &&
           (practice || player.team === "A" || player.team === "B")
         ) {
           const stroke: PaintStroke = {
@@ -682,7 +683,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         player.jumpTime < 0 &&
         distance > 0.001 &&
         (this.state.phase === "playing" || practice) &&
-        (practice || !this.isSpeaker(sessionId)) &&
+        (practice || !this.isPaintBlockedForSpeaker(sessionId)) &&
         (practice || player.team === "A" || player.team === "B")
       ) {
         const footprint: PaintStroke = {

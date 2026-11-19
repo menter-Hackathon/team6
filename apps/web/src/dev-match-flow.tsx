@@ -3,7 +3,8 @@ import {
   GAME_START_COUNTDOWN_SECONDS,
   PAINT_GRID_SIZE,
   PRESENTATION_SECONDS,
-  STARTABLE_PLAYER_COUNTS,
+  DEV_STARTABLE_PLAYER_COUNTS,
+  type RoomPlayerCount,
   TURN_INTRO_MS,
   countPaintedCells,
   pickRandomTopics,
@@ -20,7 +21,7 @@ export type DevMatchPhase =
   "lobby" | "team_selection" | "countdown" | "playing" | "result";
 
 export interface DevMatchTurn {
-  count: 4 | 6 | 8;
+  count: RoomPlayerCount;
   speakerTeam: "A" | "B";
   isYourTurn: boolean;
   speakerIndex: number;
@@ -59,7 +60,7 @@ export function DevMatchFlow({
   onOpenWardrobe,
   onClose,
 }: Props) {
-  const [count, setCount] = useState<4 | 6 | 8>(4);
+  const [count, setCount] = useState<RoomPlayerCount>(4);
   const [phase, setPhase] = useState<DevMatchPhase>("lobby");
   const [ready, setReady] = useState(false);
   const [turnIndex, setTurnIndex] = useState(0);
@@ -191,7 +192,7 @@ export function DevMatchFlow({
               aria-label="検証する人数"
               value={count}
               onChange={(event) => {
-                const next = Number(event.target.value) as 4 | 6 | 8;
+                const next = Number(event.target.value) as RoomPlayerCount;
                 setCount(next);
                 onCountChange(next);
                 setReady(false);
@@ -199,7 +200,7 @@ export function DevMatchFlow({
                 setShowLobby(true);
               }}
             >
-              {STARTABLE_PLAYER_COUNTS.map((value) => (
+              {DEV_STARTABLE_PLAYER_COUNTS.map((value) => (
                 <option key={value} value={value}>
                   {value}人
                 </option>
@@ -211,7 +212,7 @@ export function DevMatchFlow({
           <>
             <span>
               発表側: {speakerTeam} · {count / 2}対{count / 2}
-              {speakerIndex === 0 ? " · あなたは塗れません" : ""}
+              {count !== 2 && speakerIndex === 0 ? " · あなたは塗れません" : ""}
             </span>
             <button onClick={nextTurn}>次の発表へ進む</button>
           </>
