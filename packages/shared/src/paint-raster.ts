@@ -1,0 +1,301 @@
+import { wallInkHit } from "./classroom-walls.js";
+import { tableInkHit, tableInkMarks } from "./table-ink.js";
+import { reactionInkPattern } from "./reaction-ink.js";
+import {
+  isInkVariant,
+  organicOutlineMaxScale,
+  organicOutlineScale,
+} from "./ink-outline.js";
+import {
+  FIELD_HALF_WIDTH,
+  FIELD_HALF_DEPTH,
+  INK_SCALE,
+  SPECIAL_RADIUS,
+  specialOutline,
+  type SpecialShape,
+  INK_SPLAT_SCALE,
+  PLAYER_SIZE,
+  PAINT_GRID_SIZE,
+  type PaintStroke,
+} from "./index.js";
+
+export interface PaintDisk {
+  x: number;
+  z: number;
+  radius: number;
+  organic?: boolean;
+  /** Precomputed organic outline; `rotation` is then the world angle of its forward axis. */
+  variant?: number;
+  outlineShape?: Exclude<SpecialShape, "ink">;
+  rotation?: number;
+}
+
+function inkLaunchAngle(pitch: number): number {
+  return Math.max(-Math.PI / 36, pitch);
+}
+
+// Solve the ballistic arc for the actual muzzle and impact, including raised surfaces.
+export function inkTravelTime(pitch: number, horizontal: number, rise: number): number {
+  const drop = horizontal * Math.tan(inkLaunchAngle(pitch)) - rise;
+  return Math.max(0.03, Math.sqrt(Math.max(0, 2 * drop) / 16));
+}
+
+/** Horizontal travel before an ink shot returns to floor height. */
+export function inkFlight(pitch: number): { distance: number; duration: number } {
+  const angle = inkLaunchAngle(pitch);
+  const speed = 12;
+  const gravity = 16;
+  const verticalSpeed = speed * Math.sin(angle);
+  const duration = (verticalSpeed + Math.sqrt(verticalSpeed ** 2 + 2 * gravity * 1.1)) / gravity;
+  return { distance: speed * Math.cos(angle) * duration, duration };
+}
+
+/** Shared world-space geometry: render effects and server ownership use the same splat. */
+export function paintDisks(stroke: PaintStroke): PaintDisk[] {
+  const disks: PaintDisk[] = [];
+  const dx = Math.sin(stroke.yaw),
+    dz = Math.cos(stroke.yaw);
+  const add = (forward: number, side: number, radius: number) =>
+    disks.push({
+      x: stroke.x + dx * forward + dz * side,
+      z: stroke.z + dz * forward - dx * side,
+      radius,
+    });
+  if (stroke.kind === "reaction-fan" || stroke.kind === "reaction-pair") {
+    for (const drop of reactionInkPattern(stroke.kind)) {
+      const angle = stroke.yaw + drop.angle;
+      disks.push({
+        x: stroke.x - Math.sin(angle) * drop.reach,
+        z: stroke.z + Math.cos(angle) * drop.reach,
+        radius: drop.spreadRadius,
+        organic: true,
+      });
+    }
+  } else if (stroke.kind === "slam" && stroke.specialShape === "ink") {
+    disks.push({
+      x: stroke.x,
+      z: stroke.z,
+      radius: SPECIAL_RADIUS,
+      organic: true,
+    });
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + stroke.yaw,
+        reach = SPECIAL_RADIUS * (0.65 + 0.06 * Math.sin(i * 2.3));
+      disks.push({
+        x: stroke.x + Math.cos(a) * reach,
+        z: stroke.z + Math.sin(a) * reach,
+        radius: SPECIAL_RADIUS * (0.25 + 0.025 * Math.cos(i * 1.8)),
+        organic: true,
+      });
+      disks.push({
+        x: stroke.x + Math.cos(a) * SPECIAL_RADIUS * 1.15,
+        z: stroke.z + Math.sin(a) * SPECIAL_RADIUS * 1.15,
+        radius: 0.09 + (i % 3) * 0.035,
+      });
+    }
+  } else if (stroke.kind === "slam") {
+    const shape = stroke.specialShape === "heart" ? "heart" : "star";
+    disks.push({
+      x: stroke.x,
+      z: stroke.z,
+      radius: SPECIAL_RADIUS,
+      outlineShape: shape,
+      rotation: stroke.yaw,
+    });
+    const outline = specialOutline(shape),
+      c = Math.cos(stroke.yaw),
+      sn = Math.sin(stroke.yaw);
+    // Detached flecks sit beyond the thin fingers that interrupt the silhouette's sides.
+    const jets =
+      shape === "star"
+        ? [7, 22, 29, 46, 65, 73, 91, 106]
+        : [16, 24, 33, 42, 51, 60, 73, 82, 91, 102, 112];
+    for (let j = 0; j < jets.length; j++) {
+      const i = jets[j]!,
+        p = outline[i]!,
+        radial = Math.hypot(p.x, p.z) || 1;
+      const gap =
+        (shape === "heart" ? 0.075 : 0.055) +
+        (j % 3) * (shape === "heart" ? 0.035 : 0.025);
+      const px = p.x + (p.x / radial) * gap,
+        pz = p.z + (p.z / radial) * gap;
+      const x = (px * c - pz * sn) * SPECIAL_RADIUS * INK_SCALE,
+        z = (px * sn + pz * c) * SPECIAL_RADIUS * INK_SCALE;
+      disks.push({
+        x: stroke.x + x,
+        z: stroke.z + z,
+        radius:
+          (shape === "heart" ? 0.045 : 0.035) +
+          (j % 4) * (shape === "heart" ? 0.02 : 0.012),
+      });
+      if (j % (shape === "heart" ? 2 : 3) === 0)
+        disks.push({
+          x: stroke.x + x * 1.07,
+          z: stroke.z + z * 1.07,
+          radius: 0.022,
+        });
+    }
+  } else if (stroke.kind === "footprint") {
+    const fromX = stroke.fromX ?? stroke.x,
+      fromZ = stroke.fromZ ?? stroke.z;
+    const length = Math.hypot(stroke.x - fromX, stroke.z - fromZ);
+    const steps = Math.max(1, Math.min(128, Math.ceil(length / 0.09)));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = fromX + (stroke.x - fromX) * t,
+        z = fromZ + (stroke.z - fromZ) * t;
+      // World-space variation joins across consecutive segments without dotted seams.
+      const flow =
+        1 +
+        0.04 * Math.sin(x * 4.4 + z * 3.7) +
+        0.02 * Math.sin(z * 9.1 - x * 6.3);
+      disks.push({ x, z, radius: PLAYER_SIZE * 0.5 * flow });
+      // Fused, irregular lobes make the trail pool and feather at its edges.
+      // World-space modulation keeps successive segments reproducible.
+      const pooling = Math.max(0, Math.sin(x * 6.8 + z * 5.3)) ** 4;
+      if (length > 0.001 && pooling > 0.2) {
+        const side = Math.sin(x * 2.3 - z * 4.7) >= 0 ? 1 : -1;
+        const offset = PLAYER_SIZE * (0.3 + pooling * 0.1) * side;
+        disks.push({
+          x: x - ((stroke.z - fromZ) / length) * offset,
+          z: z + ((stroke.x - fromX) / length) * offset,
+          radius: PLAYER_SIZE * (0.22 + pooling * 0.1),
+          organic: true,
+        });
+      }
+    }
+  } else if (stroke.kind === "ring") add(0, 0, 1.5);
+  else if (stroke.kind === "line") {
+    for (let t = 0.4; t <= 3.8; t += 0.15) add(t, 0, 0.55);
+    for (let t = 3.2; t <= 5.2; t += 0.15) add(t, 0, (5.2 - t) * 0.65);
+  } else if (stroke.kind === "fan") {
+    for (let t = 1; t <= 3.5; t += 0.15) {
+      const spread = (t / 3.5) * 0.8;
+      for (const a of [-spread, 0, spread])
+        disks.push({
+          x: stroke.x + Math.sin(stroke.yaw + a) * t,
+          z: stroke.z + Math.cos(stroke.yaw + a) * t,
+          radius: 0.28,
+        });
+    }
+  } else {
+    // Clamp the impact first so shots near walls still coat the floor inside the arena.
+    const inkDx = -dx;
+    const center = {
+      x: Math.max(
+        -FIELD_HALF_WIDTH + 0.8,
+        Math.min(FIELD_HALF_WIDTH - 0.8, stroke.x + inkDx * inkFlight(stroke.pitch ?? 0).distance),
+      ),
+      z: Math.max(
+        -FIELD_HALF_DEPTH + 0.8,
+        Math.min(FIELD_HALF_DEPTH - 0.8, stroke.z + dz * inkFlight(stroke.pitch ?? 0).distance),
+      ),
+    };
+    disks.push({
+      ...center,
+      radius: 0.9,
+      organic: true,
+      // Older clients send no variant and keep the legacy outline.
+      ...(isInkVariant(stroke.inkVariant)
+        ? { variant: stroke.inkVariant, rotation: Math.atan2(dz, inkDx) }
+        : {}),
+    });
+    for (let i = 0; i < 4; i++)
+      disks.push({
+        x: center.x + inkDx * (0.25 + i * 0.13) + dz * (i % 2 ? 0.16 : -0.16),
+        z: center.z + dz * (0.25 + i * 0.13) - inkDx * (i % 2 ? 0.16 : -0.16),
+        radius: 0.4 - i * 0.055,
+      });
+    for (let i = 0; i < 3; i++) {
+      const a = stroke.yaw + i * 2.3;
+      disks.push({
+        x: center.x + Math.sin(a) * 1.05,
+        z: center.z + Math.cos(a) * 1.05,
+        radius: 0.06 + i * 0.015,
+      });
+    }
+  }
+  const impact = stroke.kind === "ink" ? disks[0] : undefined;
+  // Voice scale (ink only, bounded so a malformed stroke cannot paint an arbitrarily
+  // large area) and the speaker team's area buff both widen the splat around its anchor.
+  const voiceScale =
+    impact && Number.isFinite(stroke.scale)
+      ? Math.max(0.5, Math.min(1.5, stroke.scale!))
+      : 1;
+  const radiusMultiplier = Math.sqrt(stroke.areaMultiplier ?? 1);
+  const anchor =
+    stroke.kind === "footprint"
+      ? undefined
+      : (impact ?? { x: stroke.x, z: stroke.z });
+  const spread = (impact ? INK_SPLAT_SCALE * voiceScale : 1) * radiusMultiplier;
+  return disks.map((disk) => ({
+    ...disk,
+    x: anchor ? anchor.x + (disk.x - anchor.x) * spread : disk.x,
+    z: anchor ? anchor.z + (disk.z - anchor.z) * spread : disk.z,
+    radius:
+      disk.radius * (stroke.kind === "footprint" ? 1 : INK_SCALE) * spread,
+  }));
+}
+
+export function rasterizePaintStroke(
+  stroke: PaintStroke,
+  put: (x: number, y: number) => void,
+): void {
+  if (wallInkHit(stroke) || tableInkHit(stroke) || ((stroke.height??0)>=1.57 && tableInkMarks(stroke).length)) return;
+  const n = PAINT_GRID_SIZE,
+    scaleX = n / (FIELD_HALF_WIDTH * 2),
+    scaleZ = n / (FIELD_HALF_DEPTH * 2);
+  for (const disk of paintDisks(stroke)) {
+    const x = (disk.x + FIELD_HALF_WIDTH) * scaleX,
+      y = (disk.z + FIELD_HALF_DEPTH) * scaleZ,
+      rx = disk.radius * scaleX,
+      rz = disk.radius * scaleZ;
+    if (disk.outlineShape) {
+      const angle = disk.rotation ?? 0,
+        c = Math.cos(angle),
+        sn = Math.sin(angle);
+      const points = specialOutline(disk.outlineShape).map((p) => ({
+        x: x + (p.x * c - p.z * sn) * rx,
+        y: y + (p.x * sn + p.z * c) * rz,
+      }));
+      const top = Math.max(0, Math.floor(Math.min(...points.map((p) => p.y)))),
+        bottom = Math.min(
+          n - 1,
+          Math.ceil(Math.max(...points.map((p) => p.y))),
+        );
+      for (let row = top; row <= bottom; row++) {
+        const hits: number[] = [];
+        for (let i = 0; i < points.length; i++) {
+          const a = points[i]!,
+            b = points[(i + 1) % points.length]!;
+          if (a.y > row !== b.y > row)
+            hits.push(a.x + ((row - a.y) / (b.y - a.y)) * (b.x - a.x));
+        }
+        hits.sort((a, b) => a - b);
+        for (let i = 0; i + 1 < hits.length; i += 2) {
+          const left = Math.max(0, Math.ceil(hits[i]!)),
+            right = Math.min(n - 1, Math.floor(hits[i + 1]!));
+          for (let col = left; col <= right; col++) put(col, row);
+        }
+      }
+      continue;
+    }
+    const bound = disk.organic ? organicOutlineMaxScale(disk) : 1;
+    const left = Math.max(0, Math.floor(x - rx * bound)),
+      right = Math.min(n - 1, Math.ceil(x + rx * bound));
+    for (
+      let yy = Math.max(0, Math.floor(y - rz * bound));
+      yy <= Math.min(n - 1, Math.ceil(y + rz * bound));
+      yy++
+    ) {
+      for (let xx = left; xx <= right; xx++) {
+        const dx = (xx - x) / scaleX;
+        const dz = (yy - y) / scaleZ;
+        const radius = disk.organic
+          ? disk.radius * organicOutlineScale(disk, Math.atan2(dz, dx))
+          : disk.radius;
+        if (dx ** 2 + dz ** 2 <= radius * radius) put(xx, yy);
+      }
+    }
+  }
+}

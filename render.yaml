@@ -2,22 +2,26 @@ services:
   - type: web
     name: gaya-splatoon-server
     runtime: node
-    plan: 0.5c-512mb
-    buildCommand: npm ci && npm run build -w @gaya/server
+    plan: free
+    buildCommand: npm ci --onnxruntime-node-install-cuda=skip && npm run build -w @gaya/shared && npm run build -w @gaya/server
     startCommand: npm run start -w @gaya/server
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
         value: 24
+      - key: ONNXRUNTIME_NODE_INSTALL_CUDA
+        value: skip
 
   - type: web
     name: gaya-splatoon-web
     runtime: static
-    buildCommand: npm ci && npm run build -w @gaya/web
+    buildCommand: npm ci --onnxruntime-node-install-cuda=skip && npm run build -w @gaya/shared && npm run build -w @gaya/web
     staticPublishPath: apps/web/dist
     envVars:
       - key: NODE_VERSION
         value: 24
+      - key: ONNXRUNTIME_NODE_INSTALL_CUDA
+        value: skip
       - key: VITE_SERVER_HOST
         fromService:
           name: gaya-splatoon-server

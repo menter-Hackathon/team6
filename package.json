@@ -10,8 +10,8 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "concurrently -n server,web -c magenta,cyan \"npm run dev -w @gaya/server\" \"npm run dev -w @gaya/web\"",
-    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run build -w @gaya/shared && concurrently -n server,web -c magenta,cyan \"npm run dev -w @gaya/server\" \"npm run dev -w @gaya/web\"",
+    "build": "npm run build -w @gaya/shared && npm run build -w @gaya/server && npm run build -w @gaya/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "eslint .",

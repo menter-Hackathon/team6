@@ -36,6 +36,10 @@ pnpm-debug.log*
 *.swp
 *.swo
 
+# Claude Code local settings (dev server launch config, personal permissions)
+.claude/launch.json
+.claude/settings.local.json
+
 # OS metadata
 .DS_Store
 Thumbs.db
