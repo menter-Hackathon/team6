@@ -279,10 +279,6 @@ export function App() {
     <main className={`game-shell${captureMode ? " game-shell--capture" : ""}${panelsHidden ? " game-shell--panels-hidden" : ""}`}>
       <header className="hud">
         <div className="hud-side">
-          <div>
-            <p className="eyebrow">GAYA SPLATOON / PARTY GAME</p>
-            <h1>ガヤでスプラトゥーン</h1>
-          </div>
           <div className="hud-actions">
             <TranscriptionPanel
               onMicrophoneChange={setMicrophoneState}

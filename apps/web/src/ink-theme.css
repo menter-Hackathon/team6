@@ -838,3 +838,70 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* ---------- Top bar (HUD): white with an ink stripe, matching the ink screens ---------- */
+.game-shell > .hud {
+  padding: 10px 24px 16px;
+  border-bottom: 3px solid #111;
+  background:
+    linear-gradient(to right, #d0197a 0 33.4%, #0098dc 33.4% 66.7%, #9bc443 66.7%)
+      left bottom / 100% 6px no-repeat,
+    #fff;
+  color: #111;
+}
+.game-shell > .hud .hud-dev-button {
+  padding: 7px 14px;
+  border: 2px solid #111;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font-size: 13px;
+  font-weight: 900;
+  transform: none;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.game-shell > .hud .hud-actions > :nth-child(odd) .hud-dev-button,
+.game-shell > .hud .hud-actions > .hud-dev-button:nth-child(odd) {
+  transform: rotate(-1.5deg);
+}
+.game-shell > .hud .hud-actions > .hud-dev-button:nth-child(even) {
+  transform: rotate(1.5deg);
+}
+.game-shell > .hud .hud-dev-button:hover:not(:disabled) {
+  background: #f1f7e4;
+  transform: translateY(-2px);
+}
+.game-shell > .hud .hud-dev-button:focus-visible {
+  outline: 3px solid #111;
+  outline-offset: 2px;
+}
+.game-shell > .hud .speech-microphone[aria-pressed="true"],
+.game-shell > .hud .speech-toggle[aria-expanded="true"] {
+  border-color: #111;
+  background: #0098dc;
+  color: #fff;
+  text-shadow:
+    1.5px 0 0 #111, -1.5px 0 0 #111, 0 1.5px 0 #111, 0 -1.5px 0 #111;
+}
+.game-shell > .hud .hud-microphone { color: #111; }
+.game-shell > .hud .hud-microphone-error { color: #d0197a; }
+.game-shell > .hud .status {
+  border: 2px solid #111;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font-weight: 900;
+  box-shadow: 3px 3px 0 #111;
+  transform: rotate(1deg);
+}
+.game-shell > .hud .status span { box-shadow: 0 0 0 2px #111; }
+.game-shell > .hud .status--connected span { background: #9bc443; }
+.game-shell > .hud .status--error span,
+.game-shell > .hud .status--disconnected span { background: #d0197a; }
+@media (max-width: 620px) {
+  .game-shell > .hud { padding: 8px 10px 14px; }
+  .game-shell > .hud .hud-dev-button { padding: 5px 10px; font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-shell > .hud .hud-dev-button { transition: none; }
+}
