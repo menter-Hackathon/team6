@@ -931,3 +931,73 @@
 @media (prefers-reduced-motion: reduce) {
   .game-shell > .hud .hud-dev-button { transition: none; }
 }
+
+/* ---------- Blocked "準備OK！": show what is still missing ---------- */
+.ink-blob.is-blocked {
+  filter: saturate(0.45) brightness(1.08);
+  cursor: not-allowed;
+}
+.ink-blob.is-blocked:hover,
+.ink-blob.is-blocked:focus-visible {
+  transform: rotate(3deg);
+  animation: ink-blob-refuse 0.35s ease;
+}
+.ink-blob-hint {
+  position: absolute;
+  bottom: calc(100% - 6px);
+  right: 8%;
+  z-index: 2;
+  width: max-content;
+  max-width: 240px;
+  margin: 0;
+  padding: 8px 14px;
+  border: 3px solid #111;
+  border-radius: 16px 16px 4px 16px;
+  background: #fff;
+  color: #e8262f;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.35;
+  box-shadow: 3px 4px 0 #111;
+  opacity: 0;
+  transform: translateY(6px) rotate(-3deg);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+}
+.ink-panel-blob:has(.is-blocked:hover) .ink-blob-hint,
+.ink-panel-blob:has(.is-blocked:focus-visible) .ink-blob-hint,
+.ink-panel.is-nudged .ink-blob-hint {
+  opacity: 1;
+  transform: translateY(0) rotate(-3deg);
+}
+/* The missing fields/steps turn red while the blocked button is hovered or pressed. */
+.ink-panel .is-missing {
+  transition: box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.ink-panel:has(.ink-blob.is-blocked:hover) .is-missing,
+.ink-panel:has(.ink-blob.is-blocked:focus-visible) .is-missing,
+.ink-panel.is-nudged .is-missing {
+  background-color: #ffe4e6;
+  box-shadow: 0 0 0 4px #e8262f;
+  outline-color: #e8262f;
+}
+.ink-panel.is-nudged .is-missing {
+  animation: ink-missing-shake 0.45s ease;
+}
+@keyframes ink-blob-refuse {
+  25% { transform: rotate(-2deg); }
+  50% { transform: rotate(6deg); }
+  75% { transform: rotate(0deg); }
+}
+@keyframes ink-missing-shake {
+  20% { translate: -6px 0; }
+  40% { translate: 6px 0; }
+  60% { translate: -4px 0; }
+  80% { translate: 3px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ink-blob.is-blocked:hover,
+  .ink-blob.is-blocked:focus-visible,
+  .ink-panel.is-nudged .is-missing { animation: none; }
+  .ink-blob-hint { transition: none; }
+}

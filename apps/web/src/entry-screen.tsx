@@ -35,9 +35,10 @@ export function EntryScreen(props: EntryScreenProps) {
       ← もどる
     </button>
   );
+  const code = props.inviteCode.trim();
   const nameInput = (autoFocus: boolean) => (
     <input
-      className="ink-panel-input"
+      className={`ink-panel-input${name ? "" : " is-missing"}`}
       autoFocus={autoFocus}
       aria-label="ユーザーネーム"
       maxLength={20}
@@ -49,12 +50,14 @@ export function EntryScreen(props: EntryScreenProps) {
 
   if (step === "create") {
     const canCreate = Boolean(name) && !props.connecting;
+    const createHint = props.connecting || name ? undefined : "ユーザーネームを入力してね";
     return (
       <InkPanelScreen
         label="ルームを作成"
         title="ルームを作成"
         color="blue"
         corner={back}
+        blockedHint={createHint}
         onSubmit={() => {
           if (canCreate) props.onCreate();
         }}
@@ -62,7 +65,7 @@ export function EntryScreen(props: EntryScreenProps) {
           <InkBlobButton
             type="submit"
             color="magenta"
-            disabled={!canCreate}
+            disabled={props.connecting}
             aria-label="ルームを作成"
           >
             {props.connecting ? "作成中…" : "準備OK！"}
@@ -93,25 +96,29 @@ export function EntryScreen(props: EntryScreenProps) {
   }
 
   if (step === "join") {
-    const canJoin = Boolean(name) && Boolean(props.inviteCode.trim()) && !props.connecting;
+    const canJoin = Boolean(name) && Boolean(code) && !props.connecting;
+    const missing = [!name && "ユーザーネーム", !code && "招待コード"].filter(Boolean);
+    const joinHint =
+      props.connecting || missing.length === 0 ? undefined : `${missing.join("と")}を入力してね`;
     return (
       <InkPanelScreen
         label="ルームに参加"
         title="ルームに参加"
         color="green"
         corner={back}
+        blockedHint={joinHint}
         onSubmit={() => {
           if (canJoin) props.onJoin();
         }}
         blob={
-          <InkBlobButton type="submit" color="blue" disabled={!canJoin} aria-label="入室する">
+          <InkBlobButton type="submit" color="blue" disabled={props.connecting} aria-label="入室する">
             {props.connecting ? "入室中…" : "準備OK！"}
           </InkBlobButton>
         }
       >
         {nameInput(Boolean(props.inviteCode))}
         <input
-          className="ink-panel-input"
+          className={`ink-panel-input${code ? "" : " is-missing"}`}
           autoFocus={!props.inviteCode}
           aria-label="招待コード"
           placeholder="招待コード"

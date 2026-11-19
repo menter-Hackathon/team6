@@ -1,4 +1,12 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useState,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from "react";
 import logoUrl from "./assets/images/logo.png";
 import "./ink-theme.css";
 
@@ -44,10 +52,18 @@ interface InkPanelScreenProps {
   corner?: ReactNode;
   /** The round "準備OK！" style button that overlaps the card's bottom right. */
   blob?: ReactNode;
+  /**
+   * What is still missing before the blob button can be pressed. While set,
+   * hovering the button (or trying to press it) shows this hint and outlines
+   * every child marked with the `is-missing` class in red.
+   */
+  blockedHint?: string | undefined;
   /** Wraps the card in a form when given. */
   onSubmit?: () => void;
   children: ReactNode;
 }
+
+const NUDGE_MS = 900;
 
 /**
  * Full-screen ink page with the logo in the top-left corner and one tilted
@@ -59,18 +75,47 @@ export function InkPanelScreen({
   color,
   corner,
   blob,
+  blockedHint,
   onSubmit,
   children,
 }: InkPanelScreenProps) {
+  const [nudged, setNudged] = useState(0);
+  const hintId = useId();
+  useEffect(() => {
+    if (!nudged) return;
+    const timer = window.setTimeout(() => setNudged(0), NUDGE_MS);
+    return () => window.clearTimeout(timer);
+  }, [nudged]);
   const card = (
     <>
       <h2 className="ink-panel-title">{title}</h2>
       {corner && <div className="ink-panel-corner">{corner}</div>}
       <div className="ink-panel-body">{children}</div>
-      {blob && <div className="ink-panel-blob">{blob}</div>}
+      {blob && (
+        <div
+          className="ink-panel-blob"
+          onClickCapture={(event) => {
+            // A blocked blob stays focusable/hoverable but must not act:
+            // cancel the click (and so the form submit) and point at what is missing.
+            if (!blockedHint) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setNudged((count) => count + 1);
+          }}
+        >
+          {blockedHint && (
+            <p id={hintId} className="ink-blob-hint" role={nudged ? "alert" : undefined}>
+              {blockedHint}
+            </p>
+          )}
+          <BlockedContext.Provider value={blockedHint ? hintId : undefined}>
+            {blob}
+          </BlockedContext.Provider>
+        </div>
+      )}
     </>
   );
-  const className = `ink-panel ink-panel--${color}`;
+  const className = `ink-panel ink-panel--${color}${nudged ? " is-nudged" : ""}`;
   return (
     <section className="ink-entry ink-entry--panel" aria-label={label}>
       <InkSplats />
@@ -98,13 +143,24 @@ interface InkBlobButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   color: BlobColor;
 }
 
-/** Round, blobby ink button ("準備OK！"). */
+/** Set by InkPanelScreen while its blob button is blocked: the hint's element id. */
+const BlockedContext = createContext<string | undefined>(undefined);
+
+/**
+ * Round, blobby ink button ("準備OK！"). Inside a blocked InkPanelScreen it is
+ * marked aria-disabled instead of disabled, so hover and clicks can still
+ * explain what is missing.
+ */
 export function InkBlobButton({ color, className, children, ...rest }: InkBlobButtonProps) {
+  const blockedHintId = useContext(BlockedContext);
+  const blocked = blockedHintId !== undefined;
   return (
     <button
       type="button"
       {...rest}
-      className={`ink-blob ink-blob--${color}${className ? ` ${className}` : ""}`}
+      aria-disabled={blocked || undefined}
+      aria-describedby={blockedHintId}
+      className={`ink-blob ink-blob--${color}${blocked ? " is-blocked" : ""}${className ? ` ${className}` : ""}`}
     >
       <span className="ink-blob-label">{children}</span>
     </button>

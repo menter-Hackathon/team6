@@ -60,12 +60,15 @@ export function WaitingRoom({
   };
   const readyCount = players.filter((player) => player.ready).length;
   const readyBlocked = !isReady && (!episodeDone || !microphoneListening);
+  const missing = [!episodeDone && "エピソードを決める", !microphoneListening && "マイクをオンにする"].filter(Boolean);
+  const readyHint = readyBlocked ? `まだ：${missing.join("・")}` : undefined;
 
   return (
     <InkPanelScreen
       label="入室待ち"
       title="入室待ち"
       color="green"
+      blockedHint={readyHint}
       corner={
         <button type="button" className="ink-panel-link" onClick={onClose}>
           フィールドで練習 ×
@@ -75,14 +78,6 @@ export function WaitingRoom({
         <InkBlobButton
           color="blue"
           aria-pressed={isReady}
-          disabled={readyBlocked}
-          title={
-            readyBlocked
-              ? !episodeDone
-                ? "エピソードを決めると準備OKにできます"
-                : "マイクをオンにしてください"
-              : undefined
-          }
           onClick={onReady}
         >
           {isReady ? "準備OK ✓" : "準備OK！"}
@@ -118,7 +113,7 @@ export function WaitingRoom({
       <div className="ink-waiting-steps">
         <button
           type="button"
-          className={`ink-panel-box ink-waiting-step${episodeDone ? " is-done" : ""}`}
+          className={`ink-panel-box ink-waiting-step${episodeDone ? " is-done" : " is-missing"}`}
           aria-haspopup="dialog"
           onClick={onOpenEpisode}
         >
@@ -159,7 +154,7 @@ export function WaitingRoom({
       {!microphoneListening && (
         <button
           type="button"
-          className="ink-panel-link ink-waiting-mic"
+          className="ink-panel-link ink-waiting-mic is-missing"
           disabled={microphoneChanging}
           onClick={onStartMicrophone}
         >
