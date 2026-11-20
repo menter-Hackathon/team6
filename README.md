@@ -2,7 +2,7 @@
 
 <img src="./apps/web/src/assets/images/logo.png" alt="がやぺ！のロゴ" width="240">
 
-**仲間のエピソードに「なるほど！」と相槌を打つと、教室にインクが広がる。** 「がやぺ！」は、声で陣地を塗り合うブラウザ向けのオンライン3Dパーティーゲームです。ハッカソンのテーマ「らしさ」から、Life is Tech の大学生メンターが合いの手やリアクションで仲間の話を盛り上げる「ガヤ」の文化を、初対面でも楽しめる遊びにしました。
+**仲間のエピソードに「なるほど！」と相槌を打つと、教室にインクが広がる。** 「がやぺ！」は、声で陣地を塗り合うブラウザ向けのオンライン3Dパーティーゲームです。ハッカソンのテーマ「らしさ」から、Life is Tech! の大学生メンターが合いの手やリアクションで仲間の話を盛り上げる「ガヤ」の文化を、初対面でも楽しめる遊びにしました。
 
 ## 遊び方
 
@@ -55,6 +55,31 @@ Web とゲームサーバーが一緒に起動します。[ゲームを開く](h
 - **接続先を変える** — [環境変数の例](./apps/web/.env.example)を `apps/web/.env` にコピーし、`VITE_SERVER_URL` を設定します。ガヤ判定用のAPIキーは不要です。判定モデルの初回取得にはインターネット接続が必要です。
 - **動作を検査する** — `npm run typecheck`、`npm test`、`npm run build`、`npm run lint` を使用します。
 - **公開する** — Render で [render.yaml](./render.yaml) から Blueprint を作成し、Web を Static Site、ゲームサーバーを Web Service として配置します。デモ前にサーバーの `/health` で起動を確認してください。ルームはメモリ上にあり、サーバー再起動時に消えます。
+
+## 素材のクレジット
+
+### ロゴ
+
+- 「がやぺ！」のロゴ（[apps/web/src/assets/images](./apps/web/src/assets/images)）は、開発メンバーの TK が制作しました。
+
+### AI モデル
+
+| 用途 | モデル | 提供元 | ライセンス |
+| --- | --- | --- | --- |
+| ガヤ判定（文章の意味の近さ） | [Ruri v3 30m](https://huggingface.co/cl-nagoya/ruri-v3-30m) | CL Research Group in Nagoya（cl-nagoya） | Apache License 2.0 |
+| 上記の ONNX 変換版（実際に読み込むファイル） | [ruri-v3-30m-ONNX](https://huggingface.co/sirasagi62/ruri-v3-30m-ONNX) | sirasagi62 | Apache License 2.0 |
+| ブラウザ内の文字起こし（検証用） | [whisper-tiny](https://huggingface.co/onnx-community/whisper-tiny)・[whisper-base](https://huggingface.co/onnx-community/whisper-base)（ONNX 版） | ONNX Community（元モデル：[OpenAI Whisper](https://huggingface.co/openai/whisper-tiny)） | 元モデルは Apache License 2.0。whisper-base の ONNX 版は Apache License 2.0、whisper-tiny の ONNX 版にはライセンスの記載がありません |
+
+- Ruri: Hayato Tsukagoshi, Ryohei Sasano. "Ruri: Japanese General Text Embeddings." arXiv:2409.07737, 2024.
+- Whisper: Alec Radford et al. "Robust Speech Recognition via Large-Scale Weak Supervision." arXiv:2212.04356, 2022.
+
+### ライブラリと辞書
+
+- **[Transformers.js](https://github.com/huggingface/transformers.js)**（@huggingface/transformers 3.8.1）— Hugging Face, Apache License 2.0。ブラウザとサーバーで上記のモデルを動かすのに使っています。
+- **[kuromoji.js](https://github.com/takuyaa/kuromoji.js)**（0.1.2）— Takuya Asano, Apache License 2.0。ガヤ判定ライブラリ（reaction-evaluator）が、発言と元の話を単語に分けるのに使います。
+- **mecab-ipadic-2.7.0-20070801**（kuromoji.js に同梱の辞書）— Copyright 2000, 2001, 2002, 2003 Nara Institute of Science and Technology. All Rights Reserved. 著作権表示と免責条項の全文は `node_modules/kuromoji/NOTICE.md` に収録されています。
+
+ガヤ判定ライブラリ reaction-evaluator（[vendor](./vendor)）はチームで作成したものです。
 
 ## 開発メンバー
 
