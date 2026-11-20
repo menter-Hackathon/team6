@@ -240,7 +240,6 @@ export function DevMatchFlow({
               onOpenWardrobe={onOpenWardrobe}
               onStartMicrophone={onStartMicrophone}
               onReady={() => (ready ? setShowLobby(false) : toggleReady())}
-              onClose={() => setShowLobby(false)}
             />
           ) : (
             <RoomSummary

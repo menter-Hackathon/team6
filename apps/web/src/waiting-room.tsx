@@ -16,8 +16,6 @@ interface WaitingRoomProps {
   onStartMicrophone: () => void;
   /** Marks this player ready; the app then moves them to the practice field. */
   onReady: () => void;
-  /** Hides this screen to walk around the practice field. */
-  onClose: () => void;
 }
 
 /** Full-screen waiting room ("入室待ち") shown right after creating or joining a room. */
@@ -34,7 +32,6 @@ export function WaitingRoom({
   onOpenWardrobe,
   onStartMicrophone,
   onReady,
-  onClose,
 }: WaitingRoomProps) {
   const [copyMessage, setCopyMessage] = useState("");
   const copy = async (text: string, done: string) => {
@@ -62,11 +59,6 @@ export function WaitingRoom({
       title="入室待ち"
       color="green"
       blockedHint={readyHint}
-      corner={
-        <button type="button" className="ink-panel-link" onClick={onClose}>
-          フィールドで練習 ×
-        </button>
-      }
       blob={
         <InkBlobButton
           color="blue"

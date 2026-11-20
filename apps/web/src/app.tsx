@@ -789,7 +789,6 @@ export function App() {
                 if (localPlayer?.ready) setShowTopicPopup(false);
                 else if (toggleReady()) setShowTopicPopup(false);
               }}
-              onClose={() => setShowTopicPopup(false)}
             />
           )}
         {!devMode &&
