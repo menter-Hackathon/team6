@@ -40,6 +40,60 @@
 
 マイクは HTTPS または localhost で許可して使います。Web Speech API はブラウザ提供元のサービスで音声を処理する場合があります。ゲームサーバーへ送るのは文字起こしなどの判定用データで、音声ファイルは送信しません。[音声の取り扱い](./docs/web-speech-privacy.md)
 
+## 技術の詳細
+
+挑戦した技術と、それぞれの主なコードの場所です。コードを読むときの目印にしてください。
+
+### React・TypeScript で画面を構築
+
+入室から結果発表まで、試合の進行に合わせて画面を切り替え、発表者と聞き手に次の行動を案内します。
+
+- [apps/web/src/app.tsx](./apps/web/src/app.tsx)
+
+### Three.js で教室とインクを3D描画
+
+React Three Fiber を使い、相槌に合わせてキューブが跳ねる動きや、視点によって変わるインクの光沢を表現しました。
+
+- [apps/web/src/game-scene.tsx](./apps/web/src/game-scene.tsx)
+- [apps/web/src/ink-material.ts](./apps/web/src/ink-material.ts)
+
+### 文字起こしと日本語AIでガヤを技に変換
+
+Web Speech API で発言を文字起こしし、短い相槌はインクの発射に、Ruri v3 30m が話題に沿うと判定した長い返答は周囲を塗る「インクスラム」に変えます。
+
+画面左上の「文字起こし」ボタンを押すと、文字起こしと判定の結果を表示するパネルが開きます。審査員のみなさんも、自分の声がどう文字になり、どの技に判定されるかを遊びながら確かめられます。
+
+- [apps/web/src/speech/use-browser-transcription.ts](./apps/web/src/speech/use-browser-transcription.ts)
+- [apps/server/src/reaction-evaluator.ts](./apps/server/src/reaction-evaluator.ts)
+
+### Node.js・Colyseus でオンライン対戦を同期
+
+サーバーが移動と発表順を同期し、2048 × 2048 セルの床で塗り返しを記録します。最後に各チームが所有するセル数で勝敗を決めます。
+
+- [apps/server/src/game-room.ts](./apps/server/src/game-room.ts)
+- [apps/server/src/paint.ts](./apps/server/src/paint.ts)
+
+### 発表中の人数差を補正
+
+発表者が話に集中できるよう、発表者のチームの塗り面積を人数比で補正します。例えば2対2では、残る味方1人の塗り面積が2倍になります。
+
+- [packages/shared/src/paint-balance.ts](./packages/shared/src/paint-balance.ts)
+
+### Figma で世界観と画面を一からデザイン
+
+「仲間のガヤで教室が色づく」というコンセプトをもとに、配色やレイアウト、ボタンの形までチームで一から考え、遊びやすく分かりやすい UI を目指しました。入口画面では、インクの飛沫と斜めのボタンで遊び心を表現しています。ロゴも「がやぺ！」の世界観に合わせて制作しました。
+
+- [apps/web/src/entry-screen.tsx](./apps/web/src/entry-screen.tsx)（入口画面）
+- [apps/web/src/turn-flow.tsx](./apps/web/src/turn-flow.tsx)（発表ターンの表示）
+- [apps/web/src/ink-screen.tsx](./apps/web/src/ink-screen.tsx)（インク風の画面の共通部品）
+- [apps/web/src/ink-theme.css](./apps/web/src/ink-theme.css)、[apps/web/src/styles.css](./apps/web/src/styles.css)（配色・レイアウト）
+- [apps/web/src/assets/images](./apps/web/src/assets/images)（ロゴ）
+
+参考資料：
+
+- [Figma（UIデザイン）](https://www.figma.com/design/3InxV9xJ1txcXoyEcp4mRV/2611全国メンターハッカソン-design?node-id=1-2&t=WWidPySBKS64aOB5-1)
+- [FigJam（アイデア出しを含む）](https://www.figma.com/board/wKO3UPH8iIkeGjUSGytbNM/2611全国メンターハッカソン?node-id=0-1&t=dyLEXmN5Nh4Fn4RC-1)
+
 ## ローカルでの起動
 
 Node.js 24 と npm を用意し、リポジトリ直下で実行します。nvm を使う場合は、先に `nvm use` でバージョンを合わせてください。
