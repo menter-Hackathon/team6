@@ -1150,6 +1150,10 @@ function DevPlayer({
   );
 }
 
+function parsePaintRgb(hex: string) {
+  return [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16));
+}
+
 function Field({
   room,
   devMode,
@@ -1197,8 +1201,12 @@ function Field({
   );
   const cells = useMemo(() => new Uint8Array(PAINT_GRID_SIZE ** 2), []);
   devPaintCells.current = devMode ? cells : null;
-  const colors = useRef({ colorA, colorB });
-  colors.current = { colorA, colorB };
+  const palette = useMemo(
+    () => ({ colorA, colorB, rgbA: parsePaintRgb(colorA), rgbB: parsePaintRgb(colorB) }),
+    [colorA, colorB],
+  );
+  const colors = useRef(palette);
+  colors.current = palette;
   // Match colors are picked in team selection, after the room is joined, so
   // the cosmetic drops must follow them instead of keeping the lobby defaults.
   useEffect(() => {
@@ -1210,9 +1218,7 @@ function Field({
     if (!ctx) return;
     effects.clear();
     effects.setColors(colors.current.colorA, colors.current.colorB);
-    const practiceRgb = NEON_COLORS.map(({ hex }) =>
-      [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16)),
-    );
+    const practiceRgb = NEON_COLORS.map(({ hex }) => parsePaintRgb(hex));
     const setPixel = (
       data: Uint8ClampedArray,
       offset: number,
@@ -1222,18 +1228,12 @@ function Field({
         devMode ||
         room?.state.phase === "lobby" ||
         room?.state.phase === "team_selection";
-      const currentA = [1, 3, 5].map((index) =>
-        parseInt(colors.current.colorA.slice(index, index + 2), 16),
-      );
-      const currentB = [1, 3, 5].map((index) =>
-        parseInt(colors.current.colorB.slice(index, index + 2), 16),
-      );
       const rgb =
         practice && (!devMode || captureMode) && practiceRgb[team - 1]
           ? practiceRgb[team - 1]!
           : team === 1
-            ? currentA
-            : currentB;
+            ? colors.current.rgbA
+            : colors.current.rgbB;
       data[offset] = rgb[0]!;
       data[offset + 1] = rgb[1]!;
       data[offset + 2] = rgb[2]!;
