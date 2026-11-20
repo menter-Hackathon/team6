@@ -1419,3 +1419,146 @@
 @media (prefers-reduced-motion: reduce) {
   .ink-team-dots span { animation: none; opacity: 1; }
 }
+
+/* ---------- Presentation turn HUD (over the 3D field) ---------- */
+.ink-corner-badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 12;
+  width: clamp(170px, 23vw, 290px);
+  pointer-events: none;
+}
+.ink-corner-badge svg { display: block; width: 100%; height: auto; fill: #0098dc; }
+.ink-corner-badge img {
+  position: absolute;
+  top: clamp(8px, 1.2vw, 14px);
+  left: clamp(8px, 1.2vw, 16px);
+  width: clamp(130px, 16vw, 220px);
+  height: auto;
+}
+.ink-turn-topic {
+  position: absolute;
+  top: clamp(10px, 1.6vw, 18px);
+  left: calc(clamp(130px, 16vw, 220px) + clamp(18px, 2.4vw, 34px));
+  z-index: 12;
+  display: grid;
+  gap: 1px;
+  max-width: min(480px, calc(100% - clamp(130px, 16vw, 220px) - 52px));
+  padding: 6px 18px 8px 14px;
+  border-left: 8px solid #4be0a0;
+  border-radius: 4px 12px 12px 4px;
+  background: #5b5fe6;
+  color: #fff;
+  box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.18);
+  transform: rotate(-2deg);
+}
+.ink-turn-topic-label { font-size: 12px; font-weight: 800; opacity: 0.92; }
+.ink-turn-topic p {
+  max-height: min(5.6em, 18dvh);
+  margin: 0;
+  overflow: auto;
+  font-size: clamp(16px, 2vw, 22px);
+  font-weight: 900;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.ink-turn-topic p:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* Gaya side: small "○○さんの発表 16秒" card under the logo. */
+.ink-turn-timer {
+  position: absolute;
+  top: clamp(68px, 8.6vw, 116px);
+  left: clamp(14px, 1.8vw, 22px);
+  z-index: 12;
+  display: grid;
+  gap: 0;
+  min-width: 120px;
+  padding: 6px 16px 8px;
+  border-radius: 10px;
+  background: #3a3a44;
+  color: #fff;
+  box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.25);
+  transform: rotate(-2deg);
+  animation: ink-turn-timer-in 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.ink-turn-timer > span {
+  display: block;
+  max-width: min(220px, calc(100vw - 60px));
+  overflow: hidden;
+  color: #e4e4ea;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ink-turn-timer strong {
+  color: #3bb8f5;
+  font-family: "Arial Black", "Arial Rounded MT Bold", system-ui, sans-serif;
+  font-size: clamp(40px, 4.4vw, 54px);
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ink-turn-timer small { margin-left: 4px; color: #fff; font-size: 14px; }
+.ink-turn-timer.is-hurry strong { color: #ff4f9a; }
+
+/* Speaker side: the remaining time, huge, in the middle of the screen. */
+.ink-turn-big-timer {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.ink-turn-big-timer strong {
+  color: #3bb8f5;
+  font-family: "Arial Black", "Arial Rounded MT Bold", system-ui, sans-serif;
+  font-size: clamp(220px, 62vh, 560px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  -webkit-text-stroke: 10px #fff;
+  paint-order: stroke fill;
+  filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.12));
+  transform: rotate(-6deg);
+  animation: ink-turn-big-in 0.55s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.ink-turn-big-timer.is-hurry strong {
+  color: #d0197a;
+  animation: ink-turn-big-pulse 0.5s ease-out both;
+}
+.ink-turn-preview-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 13;
+  width: 36px;
+  height: 36px;
+  border: 2px solid #111;
+  border-radius: 50%;
+  background: #fff;
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+@keyframes ink-turn-timer-in {
+  from { opacity: 0; transform: translateY(-10px) rotate(-8deg) scale(0.8); }
+}
+@keyframes ink-turn-big-in {
+  from { opacity: 0; transform: rotate(-14deg) scale(0.4); }
+}
+@keyframes ink-turn-big-pulse {
+  from { transform: rotate(-6deg) scale(1.18); }
+}
+@media (max-width: 680px) {
+  .ink-turn-topic { max-width: calc(100% - 150px); padding: 5px 12px 6px 10px; }
+  .ink-turn-topic-label { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ink-turn-timer,
+  .ink-turn-big-timer strong { animation: none; }
+}

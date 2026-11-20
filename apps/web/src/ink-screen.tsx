@@ -41,6 +41,18 @@ export function InkSplats() {
   );
 }
 
+/** Small logo on a blue ink splat for the top-left corner of in-game screens. */
+export function InkCornerLogo() {
+  return (
+    <div className="ink-corner-badge" aria-hidden="true">
+      <svg viewBox="0 0 400 400">
+        <path d="M0 0H330C352 28 304 62 252 70C192 82 200 140 230 180C262 226 210 280 152 270C100 262 92 320 52 340C26 352 0 346 0 330Z" />
+      </svg>
+      <img src={LOGO_SRC} alt="" />
+    </div>
+  );
+}
+
 type PanelColor = "blue" | "green";
 type BlobColor = "magenta" | "blue";
 
