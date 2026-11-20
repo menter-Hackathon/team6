@@ -811,6 +811,7 @@ export function App() {
                 onReady={toggleReady}
                 episodeOpen={episodeOpen}
                 onEpisodeOpenChange={setEpisodeOpen}
+                episodeHasText={episodeDraft.text.trim().length > 0}
                 showControls={!showTopicPopup}
               />
             </>

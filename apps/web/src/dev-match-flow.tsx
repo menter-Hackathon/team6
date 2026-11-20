@@ -279,6 +279,7 @@ export function DevMatchFlow({
             onReady={toggleReady}
             episodeOpen={episodeOpen}
             onEpisodeOpenChange={setEpisodeOpen}
+            episodeHasText={episode.text.trim().length > 0}
             showControls={!showLobby}
           />
         </>

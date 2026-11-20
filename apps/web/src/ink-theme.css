@@ -1001,3 +1001,137 @@
   .ink-panel.is-nudged .is-missing { animation: none; }
   .ink-blob-hint { transition: none; }
 }
+
+/* ---------- Wide ink card (episode / skin screens) ---------- */
+.ink-entry--overlay { z-index: 45; }
+.ink-entry--wide .ink-panel-stage { width: min(920px, 100%); }
+.ink-entry--wide .ink-panel-stage::before { left: 22%; }
+.ink-panel.ink-panel--wide {
+  min-height: min(56vh, 480px);
+  padding: 92px clamp(20px, 4.5%, 48px) 60px;
+  transform: rotate(-1.5deg);
+}
+.ink-panel--wide .ink-panel-title {
+  top: 26px;
+  left: -18px;
+  font-size: clamp(28px, 4.4vw, 42px);
+  transform: rotate(-3deg);
+}
+.ink-panel-title--underline::after {
+  content: "";
+  position: absolute;
+  left: -4px;
+  right: -14px;
+  bottom: -6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #0098dc;
+  box-shadow: 0 0 0 2px #111;
+}
+@media (min-width: 900px) {
+  .ink-panel.ink-panel--wide {
+    padding: clamp(76px, 12vh, 96px) clamp(20px, 4.5%, 48px) clamp(36px, 7vh, 60px);
+  }
+}
+
+/* Episode screen */
+.ink-episode {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: 18px;
+  align-items: start;
+}
+.ink-episode-topics-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ink-episode-topics-head .ink-icon-button { font-size: 20px; font-weight: 900; }
+.ink-episode-topics ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ink-episode-topics li button {
+  width: 100%;
+  padding: 7px 10px;
+  border: 2px solid #111;
+  border-radius: 10px;
+  background: #fff;
+  color: #111;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.ink-episode-topics li button:hover { background: #f1f7e4; transform: translateX(3px); }
+.ink-episode-input { border-radius: 12px; }
+.ink-episode-input .episode-input {
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+.ink-episode-input .episode-input label {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+  text-shadow: var(--ink-outline);
+}
+.ink-episode-input .episode-input textarea {
+  min-height: clamp(110px, 22vh, 190px);
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: #111;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.ink-episode-input .episode-input textarea::placeholder { color: #a9a9a9; }
+.ink-episode-input .episode-input textarea:focus-visible {
+  outline: 3px solid #111;
+  outline-offset: 2px;
+}
+.ink-episode-input .episode-input p,
+.ink-episode-input .episode-input-footer {
+  color: #111;
+  font-size: 12px;
+  font-weight: 800;
+}
+.ink-episode-input .episode-input-footer button {
+  padding: 4px 14px;
+  border: 2px solid #111;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font-weight: 900;
+}
+/* Missing story: outline the textarea rather than the whole column. */
+.ink-panel:has(.ink-blob.is-blocked:hover) .ink-episode-input.is-missing,
+.ink-panel:has(.ink-blob.is-blocked:focus-visible) .ink-episode-input.is-missing,
+.ink-panel.is-nudged .ink-episode-input.is-missing {
+  background: none;
+  box-shadow: none;
+}
+.ink-panel:has(.ink-blob.is-blocked:hover) .ink-episode-input.is-missing textarea,
+.ink-panel:has(.ink-blob.is-blocked:focus-visible) .ink-episode-input.is-missing textarea,
+.ink-panel.is-nudged .ink-episode-input.is-missing textarea {
+  background: #ffe4e6;
+  box-shadow: 0 0 0 4px #e8262f;
+  outline-color: #e8262f;
+}
+@media (max-width: 760px) {
+  .ink-episode { grid-template-columns: 1fr; }
+}
+/* Wide cards hold more content: a smaller blob that sits further outside. */
+.ink-entry--wide .ink-panel-blob {
+  right: clamp(-120px, -8vw, -16px);
+  bottom: -64px;
+}
+.ink-entry--wide .ink-blob { width: clamp(130px, 15vw, 180px); font-size: clamp(20px, 2.4vw, 26px); }
