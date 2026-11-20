@@ -159,7 +159,15 @@ export function Wardrobe({
         }
         blob={
           <InkBlobButton color="blue" onClick={equip} disabled={pending}>
-            {pending ? "反映中…" : "準備OK！"}
+            {pending ? (
+              "反映中…"
+            ) : (
+              <span className="ink-blob-two-line">
+                スキン
+                <br />
+                準備OK！
+              </span>
+            )}
           </InkBlobButton>
         }
       >
