@@ -119,6 +119,7 @@ export class InkEffects {
   }
   private drops: Drop[] = [];
   private spreads: Spread[] = [];
+  private growingFootprints: Spread[] = [];
   private readonly direction = new THREE.Vector3();
   private readonly right = new THREE.Vector3();
   private readonly up = new THREE.Vector3();
@@ -185,16 +186,30 @@ export class InkEffects {
     this.geometry = new THREE.LatheGeometry(profile, 32);
   }
 
+  private materialIndex(stroke: PaintStroke): number {
+    return stroke.practiceColor
+      ? practiceColorOwner(stroke.practiceColor) + 1
+      : stroke.team === "A"
+        ? 0
+        : 1;
+  }
+
+  /** Keep received floor footprints visible until their ordered texture update. */
+  showFootprint(stroke: PaintStroke): THREE.Group {
+    const preview = new THREE.Group();
+    // Equal-depth footprints from opposing teams draw in receipt order.
+    preview.renderOrder = preview.id;
+    this.group.add(preview);
+    this.spread(stroke, this.materialIndex(stroke), stroke.height ?? 0, preview);
+    return preview;
+  }
+
   emit(
     stroke: PaintStroke,
     surface?: THREE.Vector3,
     surfaceHeight = 0,
   ): number {
-    const team = stroke.practiceColor
-      ? practiceColorOwner(stroke.practiceColor) + 1
-      : stroke.team === "A"
-        ? 0
-        : 1;
+    const team = this.materialIndex(stroke);
     if (stroke.kind === "reaction-fan" || stroke.kind === "reaction-pair") {
       const pattern = reactionInkPattern(stroke.kind),
         disks = paintDisks(stroke);
@@ -388,7 +403,7 @@ export class InkEffects {
     return drop;
   }
 
-  private spread(stroke: PaintStroke, team: number, surfaceHeight = 0): void {
+  private spread(stroke: PaintStroke, team: number, surfaceHeight = 0, preview?: THREE.Group): void {
     const disks = paintDisks(stroke);
     const step =
       stroke.kind === "ink" || stroke.kind === "slam"
@@ -403,6 +418,8 @@ export class InkEffects {
           ? Math.min(i * 0.004, 0.025)
           : 0,
         surfaceHeight,
+        1,
+        preview,
       );
     }
   }
@@ -414,8 +431,9 @@ export class InkEffects {
     delay: number,
     surfaceHeight = 0,
     energy = 1,
+    preview?: THREE.Group,
   ): void {
-    if (this.spreads.length >= 120) return;
+    if (!preview && this.spreads.length >= 120) return;
     const mesh = new THREE.Mesh(
       disk.outlineShape
         ? this.shapes[disk.outlineShape]
@@ -432,8 +450,8 @@ export class InkEffects {
       mesh.rotation.z = -(disk.rotation ?? 0);
     mesh.position.set(disk.x, surfaceHeight + 0.027, disk.z);
     mesh.scale.setScalar(0.001);
-    this.group.add(mesh);
-    this.spreads.push({
+    (preview ?? this.group).add(mesh);
+    (preview ? this.growingFootprints : this.spreads).push({
       mesh,
       age: 0,
       radius: disk.radius,
@@ -590,8 +608,13 @@ export class InkEffects {
         this.waves.splice(i, 1);
       }
     }
-    for (let i = this.spreads.length - 1; i >= 0; i--) {
-      const p = this.spreads[i]!;
+    this.updateSpreads(this.spreads, dt, true);
+    this.updateSpreads(this.growingFootprints, dt, false);
+  }
+
+  private updateSpreads(spreads: Spread[], dt: number, removeWhenSettled: boolean): void {
+    for (let i = spreads.length - 1; i >= 0; i--) {
+      const p = spreads[i]!;
       p.age += dt;
       const t = THREE.MathUtils.clamp(
         (p.age - p.delay) / (INK_SETTLE_SECONDS - p.delay),
@@ -609,8 +632,8 @@ export class InkEffects {
         1,
       );
       if (p.age >= INK_SETTLE_SECONDS) {
-        this.group.remove(p.mesh);
-        this.spreads.splice(i, 1);
+        if (removeWhenSettled) p.mesh.removeFromParent();
+        spreads.splice(i, 1);
       }
     }
   }
@@ -622,6 +645,7 @@ export class InkEffects {
     this.group.clear();
     this.drops = [];
     this.spreads = [];
+    this.growingFootprints = [];
   }
   dispose(): void {
     this.clear();

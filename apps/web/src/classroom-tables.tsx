@@ -1,3 +1,4 @@
+import { fillSurfaceInk } from "./surface-ink";
 import { localTableInk } from "./table-ink-state";
 import { useEffect, useMemo, useRef } from "react";
 import type { Room } from "@colyseus/sdk";
@@ -12,7 +13,6 @@ import {
   type PaintStroke,
   type TableInkMark,
 } from "@gaya/shared";
-import { inkOutlineRadius } from "@gaya/shared";
 import type { GameState } from "./game-types";
 
 const SIDE_W = 1024,
@@ -94,17 +94,7 @@ export function ClassroomTables({
         ctx.translate(x + shift, y);
         ctx.scale(sx, sy);
         ctx.fillStyle = color;
-        ctx.beginPath();
-        for (let i = 0; i <= 96; i++) {
-          const a = (i / 96) * Math.PI * 2,
-            r = mark.radius * inkOutlineRadius(a),
-            px = Math.cos(a) * r,
-            py = Math.sin(a) * r;
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-        ctx.fill();
+        fillSurfaceInk(ctx, mark.radius);
         ctx.restore();
       }
       item.texture.needsUpdate = true;

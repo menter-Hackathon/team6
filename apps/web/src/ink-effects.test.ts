@@ -48,6 +48,27 @@ describe("ink flight effects", () => {
     effects.dispose();
     expect(disposeTrail).toHaveBeenCalledTimes(1);
   });
+  it("keeps received footprints visible in order under load until each is baked", () => {
+    const effects = new InkEffects();
+    const stroke: PaintStroke = {
+      revision: 1, kind: "footprint", team: "A", x: 0, z: 0, yaw: 0,
+    };
+    for (let i = 0; i < 130; i++) effects.emit(stroke);
+    const a = effects.showFootprint(stroke);
+    const b = effects.showFootprint({ ...stroke, team: "B" });
+    expect(a.children.length).toBeGreaterThan(0);
+    expect(b.children.length).toBeGreaterThan(0);
+    expect(a.renderOrder).toBeLessThan(b.renderOrder);
+    for (let i = 0; i < 20; i++) effects.update(0.05);
+    expect(effects.group.children).toEqual([a, b]);
+    expect(a.children[0]!.scale.x).toBeCloseTo(paintDisks(stroke)[0]!.radius);
+    a.removeFromParent();
+    expect(effects.group.children).toEqual([b]);
+    effects.clear();
+    expect(b.parent).toBeNull();
+    effects.dispose();
+  });
+
   it("caps cosmetic meshes under sustained multiplayer fire and clears them", () => {
     const effects = new InkEffects();
     for (let i = 0; i < 400; i++)
