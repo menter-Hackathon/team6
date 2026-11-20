@@ -1135,3 +1135,46 @@
   bottom: -64px;
 }
 .ink-entry--wide .ink-blob { width: clamp(130px, 15vw, 180px); font-size: clamp(20px, 2.4vw, 26px); }
+
+/* ---------- Corner button (もどる etc.): a pink ink blob with a droplet ---------- */
+.ink-panel-corner .ink-panel-link {
+  position: relative;
+  padding: 8px 20px 9px;
+  border: 2.5px solid #111;
+  border-radius: 58% 42% 55% 45% / 62% 48% 52% 38%;
+  background: #d0197a;
+  color: #fff;
+  font-size: 15px;
+  text-shadow: var(--ink-outline);
+  transform: rotate(3deg);
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+.ink-panel-corner .ink-panel-link::after {
+  /* droplet splashed off the blob */
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  left: 10px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid #111;
+  border-radius: 50%;
+  background: #d0197a;
+}
+.ink-panel-corner .ink-panel-link:hover:not(:disabled),
+.ink-panel-corner .ink-panel-link:focus-visible {
+  transform: rotate(-3deg) scale(1.06);
+}
+.ink-panel-corner .ink-panel-link:active:not(:disabled) {
+  transform: rotate(-3deg) scale(0.96);
+}
+.ink-panel-corner .ink-panel-link:focus-visible {
+  outline: 3px solid #111;
+  outline-offset: 3px;
+}
+.ink-panel-corner .ink-panel-link:disabled {
+  filter: saturate(0.45) brightness(1.08);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ink-panel-corner .ink-panel-link { transition: none; }
+}

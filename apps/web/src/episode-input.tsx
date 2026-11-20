@@ -10,6 +10,22 @@ export interface EpisodeDraft {
 
 export const EMPTY_EPISODE_DRAFT: EpisodeDraft = { text: "", savedText: null };
 
+/**
+ * Sends the draft when it differs from what was last saved and returns the
+ * updated draft (the same object when nothing needed saving).
+ */
+export function commitEpisodeDraft(
+  draft: EpisodeDraft,
+  onSave: (text: string) => void,
+): EpisodeDraft {
+  const trimmed = draft.text.trim();
+  const dirty =
+    draft.savedText === null ? trimmed.length > 0 : trimmed !== draft.savedText;
+  if (!dirty) return draft;
+  onSave(trimmed);
+  return { text: draft.text, savedText: trimmed };
+}
+
 interface EpisodeInputProps {
   draft: EpisodeDraft;
   onDraftChange: (draft: EpisodeDraft) => void;
@@ -19,6 +35,8 @@ interface EpisodeInputProps {
   enteredCount: number;
   playerCount: number;
   onSave: (text: string) => void;
+  /** False when another control (e.g. "準備OK！") saves instead. Blur still saves. */
+  showSaveButton?: boolean;
 }
 
 export function EpisodeInput({
@@ -28,15 +46,15 @@ export function EpisodeInput({
   enteredCount,
   playerCount,
   onSave,
+  showSaveButton = true,
 }: EpisodeInputProps) {
   const id = useId();
   const trimmed = draft.text.trim();
   const dirty =
     draft.savedText === null ? trimmed.length > 0 : trimmed !== draft.savedText;
   const save = () => {
-    if (!dirty) return;
-    onSave(trimmed);
-    onDraftChange({ text: draft.text, savedText: trimmed });
+    const next = commitEpisodeDraft(draft, onSave);
+    if (next !== draft) onDraftChange(next);
   };
   return (
     <div className="episode-input">
@@ -61,9 +79,11 @@ export function EpisodeInput({
           {dirty ? "未保存" : saved ? "保存済み ✓" : "未入力"}
           {" · "}入力済み {enteredCount}/{playerCount}人
         </span>
-        <button onClick={save} disabled={!dirty}>
-          保存
-        </button>
+        {showSaveButton && (
+          <button onClick={save} disabled={!dirty}>
+            保存
+          </button>
+        )}
       </div>
     </div>
   );

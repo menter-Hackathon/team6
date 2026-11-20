@@ -44,6 +44,8 @@ interface LobbyActionsProps {
   onEpisodeOpenChange: (open: boolean) => void;
   /** Whether the story field has text (saved or not); "準備OK！" needs it. */
   episodeHasText?: boolean;
+  /** Saves the story; called when "準備OK！" closes the episode screen. */
+  onSaveEpisode?: () => void;
   /** False while the full-screen waiting room covers the field: only the dialog is shown. */
   showControls?: boolean;
 }
@@ -67,6 +69,7 @@ export function LobbyActions({
   episodeOpen: open,
   onEpisodeOpenChange: setOpen,
   episodeHasText = episodeDone,
+  onSaveEpisode,
   showControls = true,
 }: LobbyActionsProps) {
   const [topics, setTopics] = useState<string[]>(() => pickRandomTopics(3));
@@ -143,8 +146,13 @@ export function LobbyActions({
           }
           blockedHint={episodeHasText ? undefined : "話すエピソードを書いてね"}
           blob={
-            // The textarea saves on blur, which happens before this click lands.
-            <InkBlobButton color="blue" onClick={() => setOpen(false)}>
+            <InkBlobButton
+              color="blue"
+              onClick={() => {
+                onSaveEpisode?.();
+                setOpen(false);
+              }}
+            >
               準備OK！
             </InkBlobButton>
           }

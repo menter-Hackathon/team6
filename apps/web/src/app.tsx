@@ -25,6 +25,7 @@ import { LobbyActions, LobbyColorButtons } from "./lobby-hud";
 import {
   EMPTY_EPISODE_DRAFT,
   EpisodeInput,
+  commitEpisodeDraft,
   type EpisodeDraft,
 } from "./episode-input";
 import { TeamSelection } from "./team-selection";
@@ -264,6 +265,7 @@ export function App() {
       : 1;
 
   // D-090: one story field, shown in whichever lobby view is open.
+  const sendEpisode = (text: string) => roomRef.current?.send("episode", text);
   const episodeInput = (
     <EpisodeInput
       draft={episodeDraft}
@@ -271,9 +273,14 @@ export function App() {
       saved={localPlayer?.hasEpisode ?? false}
       enteredCount={players.filter((player) => player.hasEpisode).length}
       playerCount={players.length}
-      onSave={(text) => roomRef.current?.send("episode", text)}
+      onSave={sendEpisode}
+      showSaveButton={false}
     />
   );
+  const saveEpisode = () => {
+    const next = commitEpisodeDraft(episodeDraft, sendEpisode);
+    if (next !== episodeDraft) setEpisodeDraft(next);
+  };
 
   return (
     <main className={`game-shell${captureMode ? " game-shell--capture" : ""}${panelsHidden ? " game-shell--panels-hidden" : ""}`}>
@@ -812,6 +819,7 @@ export function App() {
                 episodeOpen={episodeOpen}
                 onEpisodeOpenChange={setEpisodeOpen}
                 episodeHasText={episodeDraft.text.trim().length > 0}
+                onSaveEpisode={saveEpisode}
                 showControls={!showTopicPopup}
               />
             </>
