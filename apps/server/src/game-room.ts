@@ -504,10 +504,8 @@ export class GameRoom extends Room<{ state: GameState }> {
       shuffled.length > 1 &&
       players.map((player) => player.team).join("") === previous
     );
-    const order =
-      this.state.turnOrder === "random"
-        ? shuffled
-        : this.alternatingOrder(shuffled);
+    // D-097: speakers always alternate between the teams.
+    const order = this.alternatingOrder(shuffled);
     this.state.speakerOrder.splice(
       0,
       this.state.speakerOrder.length,
