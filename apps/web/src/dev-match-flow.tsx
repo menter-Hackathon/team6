@@ -236,14 +236,10 @@ export function DevMatchFlow({
               microphoneListening={microphoneListening}
               microphoneChanging={microphoneChanging}
               isReady={ready}
-              isHost
-              canStart={ready}
-              startHint="準備OKにすると開始できます"
               onOpenEpisode={() => setEpisodeOpen(true)}
               onOpenWardrobe={onOpenWardrobe}
               onStartMicrophone={onStartMicrophone}
-              onReady={toggleReady}
-              onStart={prepareTeams}
+              onReady={() => (ready ? setShowLobby(false) : toggleReady())}
               onClose={() => setShowLobby(false)}
             />
           ) : (
@@ -251,9 +247,7 @@ export function DevMatchFlow({
               roomCode="TEST"
               localRoom
               names={players.map((player) => player.displayName)}
-              canStart={ready}
               onOpenWardrobe={onOpenWardrobe}
-              onStart={prepareTeams}
             />
           )}
           <LobbyActions
@@ -287,6 +281,9 @@ export function DevMatchFlow({
               if (next !== episode) setEpisode(next);
             }}
             showControls={!showLobby}
+            canStart={ready}
+            startHint="準備OKにすると開始できます"
+            onStartTeams={prepareTeams}
           />
         </>
       )}

@@ -48,6 +48,12 @@ interface LobbyActionsProps {
   onSaveEpisode?: () => void;
   /** False while the full-screen waiting room covers the field: only the dialog is shown. */
   showControls?: boolean;
+  /** Host only: moves everyone to team setup once all players are ready. */
+  onStartTeams?: (() => void) | undefined;
+  /** Whether team setup can start (all players present and ready). */
+  canStart?: boolean;
+  /** Shown on hover while team setup cannot start, e.g. who is not ready yet. */
+  startHint?: string | undefined;
 }
 
 /**
@@ -71,6 +77,9 @@ export function LobbyActions({
   episodeHasText = episodeDone,
   onSaveEpisode,
   showControls = true,
+  onStartTeams,
+  canStart = false,
+  startHint,
 }: LobbyActionsProps) {
   const [topics, setTopics] = useState<string[]>(() => pickRandomTopics(3));
   useEffect(() => {
@@ -130,6 +139,37 @@ export function LobbyActions({
             {readyCount}/{playerCount}人
           </small>
         </button>
+        {onStartTeams ? (
+          <div className="lobby-hud-start-wrap">
+            <button
+              type="button"
+              className={`lobby-hud-start${canStart ? "" : " is-blocked"}`}
+              aria-disabled={!canStart}
+              onClick={() => {
+                if (canStart) onStartTeams();
+              }}
+            >
+              チーム決めへ！
+            </button>
+            {!canStart && startHint && (
+              <span className="lobby-hud-start-hint" role="tooltip">
+                {startHint}
+              </span>
+            )}
+          </div>
+        ) : (
+          isReady &&
+          readyCount >= playerCount && (
+            <p className="lobby-hud-waiting" role="status">
+              ルーム作成者がチーム決めを始めるのを待っています
+              <span className="ink-team-dots" aria-hidden="true">
+                <span>.</span>
+                <span>.</span>
+                <span>.</span>
+              </span>
+            </p>
+          )
+        )}
       </div>}
       {open && (
         <InkPanelScreen

@@ -228,10 +228,12 @@ export function App() {
 
   const players = gameState ? Array.from(gameState.players.values()) : [];
   const localPlayer = gameState?.players.get(roomRef.current?.sessionId ?? "");
+  /** Returns true when the ready state was sent. */
   const toggleReady = () => {
     if (!localPlayer || (!localPlayer.ready && (!microphoneListening || !localPlayer.hasEpisode)))
-      return;
+      return false;
     roomRef.current?.send("ready", !localPlayer.ready);
+    return true;
   };
   const canDissolve =
     connectionState === "connected" &&
@@ -250,6 +252,14 @@ export function App() {
     canStartWithPlayers(players.length, gameState?.devMatch ?? false, targetPlayerCount) &&
     (gameState?.replayPlayerCount === 0 || players.length === gameState?.replayPlayerCount) &&
     players.every((player) => player.ready);
+  const seatCount = Math.max(targetPlayerCount, gameState?.replayPlayerCount ?? 0, players.length);
+  const notReadyNames = players.filter((player) => !player.ready).map((player) => player.displayName);
+  const teamStartHint =
+    players.length < seatCount
+      ? `あと${seatCount - players.length}人の入室を待っています`
+      : notReadyNames.length > 0
+        ? `まだ：${notReadyNames.join("、")}`
+        : undefined;
   const canReplay =
     gameState?.hostId === roomRef.current?.sessionId &&
     canStartWithPlayers(players.length, gameState?.devMatch ?? false, targetPlayerCount) &&
@@ -771,24 +781,14 @@ export function App() {
               microphoneListening={microphoneListening}
               microphoneChanging={microphoneChanging}
               isReady={localPlayer?.ready ?? false}
-              isHost={gameState.hostId === roomRef.current?.sessionId}
-              canStart={canStart}
-              startHint={
-                gameState.replayPlayerCount > 0
-                  ? `${gameState.replayPlayerCount}人全員が揃って準備完了すると開始できます`
-                  : targetPlayerCount > 0
-                    ? `${targetPlayerCount}人全員が揃って準備完了すると開始できます`
-                    : "4・6・8人で全員が準備すると開始できます"
-              }
               onOpenEpisode={() => setEpisodeOpen(true)}
               onOpenWardrobe={openWardrobe}
               onStartMicrophone={startMicrophone}
-              onReady={toggleReady}
-              onStart={
-                gameState.hostId === roomRef.current?.sessionId
-                  ? () => roomRef.current?.send("prepare-teams")
-                  : undefined
-              }
+              onReady={() => {
+                // Ready moves you to the practice field; cancelling happens there.
+                if (localPlayer?.ready) setShowTopicPopup(false);
+                else if (toggleReady()) setShowTopicPopup(false);
+              }}
               onClose={() => setShowTopicPopup(false)}
             />
           )}
@@ -802,10 +802,6 @@ export function App() {
               requiredPlayerCount={gameState.replayPlayerCount}
               targetPlayerCount={targetPlayerCount}
               onOpenWardrobe={openWardrobe}
-              canStart={canStart}
-              {...(gameState.hostId === roomRef.current?.sessionId
-                ? { onStart: () => roomRef.current?.send("prepare-teams") }
-                : {})}
             />
           )}
         {showDevWardrobe && (
@@ -850,6 +846,13 @@ export function App() {
                 episodeHasText={episodeDraft.text.trim().length > 0}
                 onSaveEpisode={saveEpisode}
                 showControls={!showTopicPopup}
+                canStart={canStart}
+                startHint={teamStartHint}
+                onStartTeams={
+                  gameState.hostId === roomRef.current?.sessionId
+                    ? () => roomRef.current?.send("prepare-teams")
+                    : undefined
+                }
               />
             </>
           )}

@@ -2193,3 +2193,65 @@ button.wardrobe-entry-button {
 }
 button.wardrobe-entry-button:hover { background: #a9d055; }
 .room-summary.ink-summary .ink-summary-players li { border: 0; color: #111; }
+
+/* ---------- Host "チーム決めへ！" on the practice field ---------- */
+.lobby-hud-start-wrap { position: relative; }
+.lobby-hud-actions .lobby-hud-start {
+  justify-content: center;
+  width: 100%;
+  min-height: 64px;
+  border: 3px solid #111;
+  border-radius: 34px 26px 38px 24px / 26px 36px 24px 34px;
+  background: #d0197a;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 900;
+  text-shadow: var(--ink-outline);
+  box-shadow: 4px 5px 0 #111;
+  transform: rotate(-2deg);
+}
+.lobby-hud-actions .lobby-hud-start:hover:not(.is-blocked) {
+  transform: rotate(-2deg) translate(-1px, -2px);
+  box-shadow: 5px 7px 0 #111;
+}
+.lobby-hud-actions .lobby-hud-start.is-blocked {
+  filter: saturate(0.4) brightness(1.15);
+  cursor: not-allowed;
+}
+.lobby-hud-start-hint {
+  position: absolute;
+  right: 6px;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: 260px;
+  padding: 8px 14px;
+  border: 3px solid #111;
+  border-radius: 16px 16px 4px 16px;
+  background: #fff;
+  color: #e8262f;
+  font-size: 14px;
+  font-weight: 900;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+}
+.lobby-hud-start-wrap:has(.is-blocked:hover) .lobby-hud-start-hint,
+.lobby-hud-start-wrap:has(.is-blocked:focus-visible) .lobby-hud-start-hint {
+  opacity: 1;
+  transform: translateY(0) rotate(-3deg);
+}
+.lobby-hud-actions .lobby-hud-waiting {
+  margin: 0;
+  padding: 10px 16px;
+  border: 2.5px solid #111;
+  border-radius: 14px;
+  background: #fff;
+  color: #111;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow: 3px 4px 0 #111;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lobby-hud-start-hint { transition: none; }
+}
