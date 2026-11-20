@@ -345,9 +345,12 @@ export function App() {
         </div>
         <div className="hud-side hud-side--right">
           <div className="hud-actions">
-            <button className="hud-dev-button" onClick={toggleDevMode}>
-              {devMode ? "検証モードを終了" : "操作を検証"}
-            </button>
+            {/* Dev mode opens with "?dev" in the URL; the button only exits it. */}
+            {devMode && (
+              <button className="hud-dev-button" onClick={toggleDevMode}>
+                検証モードを終了
+              </button>
+            )}
             {canDissolve && (
               <button type="button" className="hud-dev-button" onClick={dissolveRoom}>
                 ルームを解散

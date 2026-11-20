@@ -2318,3 +2318,7 @@ button.wardrobe-entry-button:hover { background: #a9d055; }
 @media (prefers-reduced-motion: reduce) {
   .ink-turn-speaker-frame, .ink-turn-speaker-banner { animation: none; }
 }
+
+/* Two-line blob label, e.g. 「エピソード／準備OK！」 */
+.ink-blob-two-line { line-height: 1.15; text-align: center; }
+.ink-blob-two-line { font-size: 0.82em; }
