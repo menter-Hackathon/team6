@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { Client, type Room } from "@colyseus/sdk";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   GAME_ROOM_NAME,
   NEON_COLORS,
@@ -35,6 +35,16 @@ import { Wardrobe } from "./wardrobe";
 import { DevMatchFlow, type DevMatchPhase, type DevMatchTurn } from "./dev-match-flow";
 
 type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
+
+/** Japanese labels for room phases shown in the in-match info panel. */
+const PHASE_LABELS: Record<string, string> = {
+  lobby: "待機中",
+  team_selection: "チーム編成中",
+  countdown: "まもなく開始",
+  playing: "試合中",
+  result: "結果発表",
+  closed: "終了",
+};
 
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL ??
@@ -379,24 +389,43 @@ export function App() {
         gameState?.phase !== "lobby" &&
         gameState?.phase !== "countdown" &&
         gameState?.phase !== "team_selection" ? (
-        <section className="lobby-panel">
-          <strong>招待コード: {roomCode}</strong>
-          {gameState?.phase !== "result" && (
-            <p>
-              陣地 A: {gameState?.scoreA ?? 0} · B: {gameState?.scoreB ?? 0}
-            </p>
-          )}
-          <p>
-            進行: {gameState?.phase}{" "}
-            {gameState?.phase === "playing" &&
-              `· 発表 ${gameState.turnIndex}/${gameState.speakerOrder.length}`}
+        <section className="ink-play-panel" aria-label="試合の情報">
+          <div className="ink-play-panel-head">
+            <span>招待コード</span>
+            <strong>{roomCode}</strong>
+          </div>
+          <p className="ink-play-panel-phase">
+            {gameState?.phase === "playing"
+              ? `発表 ${gameState.turnIndex} / ${gameState.speakerOrder.length}`
+              : PHASE_LABELS[gameState?.phase ?? ""] ?? "接続中"}
           </p>
+          {gameState?.phase !== "result" && (
+            <div className="ink-play-panel-scores">
+              <span style={{ "--team-ink": gameState?.colorA ?? "#d0197a" } as CSSProperties}>
+                A {gameState?.scoreA ?? 0}
+              </span>
+              <span style={{ "--team-ink": gameState?.colorB ?? "#0098dc" } as CSSProperties}>
+                B {gameState?.scoreB ?? 0}
+              </span>
+            </div>
+          )}
           <ul>
             {players.map((player) => (
-              <li key={player.id}>
-                {player.displayName} {player.team && `· ${player.team}`}{" "}
-                {player.ready ? "✓ 準備完了" : ""}{" "}
-                {player.id === gameState?.hostId ? "· 作成者" : ""}
+              <li
+                key={player.id}
+                style={
+                  {
+                    "--team-ink":
+                      player.team === "A"
+                        ? gameState?.colorA
+                        : player.team === "B"
+                          ? gameState?.colorB
+                          : "#fff",
+                  } as CSSProperties
+                }
+              >
+                <span className="ink-play-panel-name">{player.displayName}</span>
+                {player.id === gameState?.hostId && <small>作成者</small>}
               </li>
             ))}
           </ul>

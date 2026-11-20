@@ -229,7 +229,7 @@ export function SpeakerSpotlight({
       />
       <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
         <ringGeometry args={[0.9, 1.15, 48]} />
-        <meshBasicMaterial color="#f7e83a" transparent opacity={0.4} depthWrite={false} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.55} depthWrite={false} />
       </mesh>
       <Html position={[0, 2.6, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
         <div className="speaker-bubble">

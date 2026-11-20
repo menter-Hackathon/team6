@@ -69,45 +69,45 @@ export function TurnFlow({
         </section>
       )}
       {stage !== "timer" && (
-        <div className="progression-backdrop progression-turn-backdrop">
+        <div className="ink-popup-backdrop">
           <section
-            className={`progression-popup progression-turn-popup progression-turn-popup--${stage}`}
+            className={`ink-popup ink-popup--${isYourTurn ? "blue" : "green"} is-${stage}`}
             role="dialog"
             aria-modal="false"
             aria-labelledby="turn-title"
           >
-            {preview && (
-              <span className="progression-preview">検証プレビュー</span>
-            )}
+            {preview && <span className="ink-popup-preview">検証プレビュー</span>}
             {preview && (
               <button
-                className="progression-close"
+                type="button"
+                className="ink-popup-close"
                 onClick={onClose}
                 aria-label="ポップアップを閉じる"
               >
                 ×
               </button>
             )}
-            <p className="progression-kicker">
-              PRESENTATION / {turnNumber} OF {turnCount}
+            <p className="ink-popup-kicker">
+              発表 {turnNumber} / {turnCount}
             </p>
             <h2 id="turn-title">
-              {isYourTurn ? "次はあなたのターン" : <>
-                <span className="popup-title-lead">次は</span>
-                <span className="popup-name-phrase"><span className="popup-player-name">{speakerName}</span><span className="popup-name-suffix">さんのターン</span></span>
-              </>}
+              {isYourTurn ? (
+                "次はあなたのターン！"
+              ) : (
+                <>
+                  次は
+                  <span className="popup-name-phrase">
+                    <span className="popup-player-name">{speakerName}</span>
+                    <span className="popup-name-suffix">さんのターン</span>
+                  </span>
+                </>
+              )}
             </h2>
-            <div
-              className={`turn-intro-time${stage === "presentation" ? " turn-presentation-enter" : ""}`}
-              aria-hidden={stage === "next"}
-            >
+            <div className="ink-popup-number" aria-hidden={stage === "next"}>
               {remaining}
-              <span>秒</span>
+              <small>秒</small>
             </div>
-            <p
-              className={`turn-intro-hint${stage === "presentation" ? " turn-presentation-enter" : ""}`}
-              aria-hidden={stage === "next"}
-            >
+            <p className="ink-popup-hint" aria-hidden={stage === "next"}>
               {isYourTurn
                 ? `${talkDuration}秒で話してみよう！`
                 : "ガヤを入れて盛り上げよう！"}
