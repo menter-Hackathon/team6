@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { Client, type Room } from "@colyseus/sdk";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   GAME_ROOM_NAME,
   NEON_COLORS,
@@ -25,6 +25,7 @@ import { LobbyActions, LobbyColorButtons } from "./lobby-hud";
 import {
   EMPTY_EPISODE_DRAFT,
   EpisodeInput,
+  commitEpisodeDraft,
   type EpisodeDraft,
 } from "./episode-input";
 import { TeamSelection } from "./team-selection";
@@ -34,6 +35,16 @@ import { Wardrobe } from "./wardrobe";
 import { DevMatchFlow, type DevMatchPhase, type DevMatchTurn } from "./dev-match-flow";
 
 type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
+
+/** Japanese labels for room phases shown in the in-match info panel. */
+const PHASE_LABELS: Record<string, string> = {
+  lobby: "待機中",
+  team_selection: "チーム編成中",
+  countdown: "まもなく開始",
+  playing: "試合中",
+  result: "結果発表",
+  closed: "終了",
+};
 
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL ??
@@ -217,10 +228,12 @@ export function App() {
 
   const players = gameState ? Array.from(gameState.players.values()) : [];
   const localPlayer = gameState?.players.get(roomRef.current?.sessionId ?? "");
+  /** Returns true when the ready state was sent. */
   const toggleReady = () => {
     if (!localPlayer || (!localPlayer.ready && (!microphoneListening || !localPlayer.hasEpisode)))
-      return;
+      return false;
     roomRef.current?.send("ready", !localPlayer.ready);
+    return true;
   };
   const canDissolve =
     connectionState === "connected" &&
@@ -239,6 +252,14 @@ export function App() {
     canStartWithPlayers(players.length, gameState?.devMatch ?? false, targetPlayerCount) &&
     (gameState?.replayPlayerCount === 0 || players.length === gameState?.replayPlayerCount) &&
     players.every((player) => player.ready);
+  const seatCount = Math.max(targetPlayerCount, gameState?.replayPlayerCount ?? 0, players.length);
+  const notReadyNames = players.filter((player) => !player.ready).map((player) => player.displayName);
+  const teamStartHint =
+    players.length < seatCount
+      ? `あと${seatCount - players.length}人の入室を待っています`
+      : notReadyNames.length > 0
+        ? `まだ：${notReadyNames.join("、")}`
+        : undefined;
   const canReplay =
     gameState?.hostId === roomRef.current?.sessionId &&
     canStartWithPlayers(players.length, gameState?.devMatch ?? false, targetPlayerCount) &&
@@ -264,6 +285,7 @@ export function App() {
       : 1;
 
   // D-090: one story field, shown in whichever lobby view is open.
+  const sendEpisode = (text: string) => roomRef.current?.send("episode", text);
   const episodeInput = (
     <EpisodeInput
       draft={episodeDraft}
@@ -271,9 +293,14 @@ export function App() {
       saved={localPlayer?.hasEpisode ?? false}
       enteredCount={players.filter((player) => player.hasEpisode).length}
       playerCount={players.length}
-      onSave={(text) => roomRef.current?.send("episode", text)}
+      onSave={sendEpisode}
+      showSaveButton={false}
     />
   );
+  const saveEpisode = () => {
+    const next = commitEpisodeDraft(episodeDraft, sendEpisode);
+    if (next !== episodeDraft) setEpisodeDraft(next);
+  };
 
   return (
     <main className={`game-shell${captureMode ? " game-shell--capture" : ""}${panelsHidden ? " game-shell--panels-hidden" : ""}`}>
@@ -372,24 +399,43 @@ export function App() {
         gameState?.phase !== "lobby" &&
         gameState?.phase !== "countdown" &&
         gameState?.phase !== "team_selection" ? (
-        <section className="lobby-panel">
-          <strong>招待コード: {roomCode}</strong>
-          {gameState?.phase !== "result" && (
-            <p>
-              陣地 A: {gameState?.scoreA ?? 0} · B: {gameState?.scoreB ?? 0}
-            </p>
-          )}
-          <p>
-            進行: {gameState?.phase}{" "}
-            {gameState?.phase === "playing" &&
-              `· 発表 ${gameState.turnIndex}/${gameState.speakerOrder.length}`}
+        <section className="ink-play-panel" aria-label="試合の情報">
+          <div className="ink-play-panel-head">
+            <span>招待コード</span>
+            <strong>{roomCode}</strong>
+          </div>
+          <p className="ink-play-panel-phase">
+            {gameState?.phase === "playing"
+              ? `発表 ${gameState.turnIndex} / ${gameState.speakerOrder.length}`
+              : PHASE_LABELS[gameState?.phase ?? ""] ?? "接続中"}
           </p>
+          {gameState?.phase !== "result" && (
+            <div className="ink-play-panel-scores">
+              <span style={{ "--team-ink": gameState?.colorA ?? "#d0197a" } as CSSProperties}>
+                A {gameState?.scoreA ?? 0}
+              </span>
+              <span style={{ "--team-ink": gameState?.colorB ?? "#0098dc" } as CSSProperties}>
+                B {gameState?.scoreB ?? 0}
+              </span>
+            </div>
+          )}
           <ul>
             {players.map((player) => (
-              <li key={player.id}>
-                {player.displayName} {player.team && `· ${player.team}`}{" "}
-                {player.ready ? "✓ 準備完了" : ""}{" "}
-                {player.id === gameState?.hostId ? "· 作成者" : ""}
+              <li
+                key={player.id}
+                style={
+                  {
+                    "--team-ink":
+                      player.team === "A"
+                        ? gameState?.colorA
+                        : player.team === "B"
+                          ? gameState?.colorB
+                          : "#fff",
+                  } as CSSProperties
+                }
+              >
+                <span className="ink-play-panel-name">{player.displayName}</span>
+                {player.id === gameState?.hostId && <small>作成者</small>}
               </li>
             ))}
           </ul>
@@ -735,25 +781,14 @@ export function App() {
               microphoneListening={microphoneListening}
               microphoneChanging={microphoneChanging}
               isReady={localPlayer?.ready ?? false}
-              isHost={gameState.hostId === roomRef.current?.sessionId}
-              canStart={canStart}
-              startHint={
-                gameState.replayPlayerCount > 0
-                  ? `${gameState.replayPlayerCount}人全員が揃って準備完了すると開始できます`
-                  : targetPlayerCount > 0
-                    ? `${targetPlayerCount}人全員が揃って準備完了すると開始できます`
-                    : "4・6・8人で全員が準備すると開始できます"
-              }
               onOpenEpisode={() => setEpisodeOpen(true)}
               onOpenWardrobe={openWardrobe}
               onStartMicrophone={startMicrophone}
-              onReady={toggleReady}
-              onStart={
-                gameState.hostId === roomRef.current?.sessionId
-                  ? () => roomRef.current?.send("prepare-teams")
-                  : undefined
-              }
-              onClose={() => setShowTopicPopup(false)}
+              onReady={() => {
+                // Ready moves you to the practice field; cancelling happens there.
+                if (localPlayer?.ready) setShowTopicPopup(false);
+                else if (toggleReady()) setShowTopicPopup(false);
+              }}
             />
           )}
         {!devMode &&
@@ -766,10 +801,6 @@ export function App() {
               requiredPlayerCount={gameState.replayPlayerCount}
               targetPlayerCount={targetPlayerCount}
               onOpenWardrobe={openWardrobe}
-              canStart={canStart}
-              {...(gameState.hostId === roomRef.current?.sessionId
-                ? { onStart: () => roomRef.current?.send("prepare-teams") }
-                : {})}
             />
           )}
         {showDevWardrobe && (
@@ -811,7 +842,16 @@ export function App() {
                 onReady={toggleReady}
                 episodeOpen={episodeOpen}
                 onEpisodeOpenChange={setEpisodeOpen}
+                episodeHasText={episodeDraft.text.trim().length > 0}
+                onSaveEpisode={saveEpisode}
                 showControls={!showTopicPopup}
+                canStart={canStart}
+                startHint={teamStartHint}
+                onStartTeams={
+                  gameState.hostId === roomRef.current?.sessionId
+                    ? () => roomRef.current?.send("prepare-teams")
+                    : undefined
+                }
               />
             </>
           )}

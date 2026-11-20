@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import type { Room } from "@colyseus/sdk";
 import type { GameState } from "./game-types";
+import { InkSplats, LOGO_SRC } from "./ink-screen";
 import { PaintOverview } from "./paint-overview";
 
 interface ResultFlowProps {
@@ -49,82 +50,115 @@ export function ResultFlow({
   const percentB = painted ? 100 - percentA : 0;
   const revealed = stage === "revealed";
 
+  const winner = scoreA === scoreB ? null : scoreA > scoreB ? "A" : "B";
+  const burstColors =
+    winner === null
+      ? [colorA, colorB]
+      : winner === "A"
+        ? [colorA, colorA, colorB]
+        : [colorB, colorB, colorA];
+
   return (
-    <div className="result-screen">
+    <div className="result-screen ink-result">
+      <InkSplats />
+      <img className="ink-corner-logo" src={LOGO_SRC} alt="ガヤペ！" />
       {stage === "finish" || stage === "curtain" ? (
         <>
-          <div className="result-finish-backdrop">
-            <div className="result-finish" role="status">
-              Finish!
-            </div>
+          <div className="ink-result-finish" role="status">
+            Finish!
           </div>
           {stage === "curtain" && (
-            <div className="result-curtain" aria-hidden="true" />
+            <div className="ink-result-curtain" aria-hidden="true" />
           )}
         </>
       ) : (
-        <main className="result-screen-content">
-          <p className="result-screen-kicker">MATCH RESULT</p>
-          <h1 key={stage} aria-live="polite">
-            {revealed
-              ? scoreA === scoreB
-                ? "引き分け！"
-                : `${scoreA > scoreB ? "A" : "B"}チームの勝ち！`
-              : "結果発表"}
-          </h1>
-          <div
-            className={`progression-result-meter${revealed ? " progression-result-meter--revealed" : ""}`}
-            style={{ backgroundColor: colorB }}
-            aria-hidden="true"
-          >
-            <div
-              key={run}
-              className="progression-result-meter-fill"
-              style={{
-                backgroundColor: colorA,
-                ...(revealed ? { width: `${painted ? percentA : 50}%` } : {}),
-              }}
+        <main className="ink-result-content">
+          {revealed && <InkBurst key={`back-${run}`} layer="back" colors={burstColors} />}
+          <div className="ink-result-bar">
+            <h1 key={stage} aria-live="polite">
+              {revealed
+                ? winner === null
+                  ? "引き分け！"
+                  : `${winner}チームの勝ち！`
+                : "結果発表…"}
+            </h1>
+          </div>
+          <div className="ink-result-card">
+            <div className="ink-result-scoreboard">
+              <div
+                className={`ink-result-team${winner === "A" ? " is-winner" : ""}`}
+                style={{ "--team-ink": colorA } as CSSProperties}
+              >
+                <span>チーム A</span>
+                <strong>{revealed ? `${percentA}%` : "??"}</strong>
+              </div>
+              <div
+                className={`ink-result-meter${revealed ? " progression-result-meter--revealed" : ""}`}
+                style={{ backgroundColor: colorB }}
+                aria-hidden="true"
+              >
+                <div
+                  key={run}
+                  className="progression-result-meter-fill"
+                  style={{
+                    backgroundColor: colorA,
+                    ...(revealed ? { width: `${painted ? percentA : 50}%` } : {}),
+                  }}
+                />
+              </div>
+              <div
+                className={`ink-result-team${winner === "B" ? " is-winner" : ""}`}
+                style={{ "--team-ink": colorB } as CSSProperties}
+              >
+                <span>チーム B</span>
+                <strong>{revealed ? `${percentB}%` : "??"}</strong>
+              </div>
+            </div>
+            <PaintOverview
+              room={room}
+              {...(cells ? { cells } : {})}
+              revealed={revealed}
+              colorA={colorA}
+              colorB={colorB}
             />
-          </div>
-          <div className="progression-result-labels">
-            <span>A チーム</span>
-            <span>B チーム</span>
-          </div>
-          <div className="result-screen-scores" aria-hidden={!revealed}>
-            {revealed && (
-              <>
-                <strong style={{ color: colorA }}>{percentA}%</strong>
-                <strong style={{ color: colorB }}>{percentB}%</strong>
-              </>
+            {onReplay || onDissolve ? (
+              <div className="ink-result-actions">
+                {onReplay && (
+                  <button type="button" className="is-primary" onClick={onReplay}>
+                    もう一度遊ぶ
+                  </button>
+                )}
+                {onClose && (
+                  <button type="button" onClick={onClose}>
+                    {room ? "ルームを退出" : "検証を終了"}
+                  </button>
+                )}
+                {onDissolve && (
+                  <button type="button" onClick={onDissolve}>
+                    ルームを解散
+                  </button>
+                )}
+              </div>
+            ) : preview ? (
+              <div className="ink-result-actions">
+                <button type="button" className="is-primary" onClick={() => setRun((value) => value + 1)}>
+                  もう一度見る
+                </button>
+                <button type="button" onClick={onClose}>
+                  閉じる
+                </button>
+              </div>
+            ) : (
+              onClose && (
+                <div className="ink-result-actions">
+                  <button type="button" onClick={onClose}>
+                    ルームを退出
+                  </button>
+                </div>
+              )
             )}
           </div>
-          <PaintOverview
-            room={room}
-            {...(cells ? { cells } : {})}
-            revealed={revealed}
-            colorA={colorA}
-            colorB={colorB}
-          />
-          {onReplay || onDissolve ? (
-            <div className="result-screen-actions">
-              {onReplay && <button onClick={onReplay}>もう一度遊ぶ</button>}
-              {onClose && <button onClick={onClose}>{room ? "ルームを退出" : "検証を終了"}</button>}
-              {onDissolve && <button onClick={onDissolve}>ルームを解散</button>}
-            </div>
-          ) : preview ? (
-            <div className="result-screen-actions">
-              <button onClick={() => setRun((value) => value + 1)}>
-                もう一度見る
-              </button>
-              <button onClick={onClose}>閉じる</button>
-            </div>
-          ) : (
-            onClose && (
-              <button className="result-leave" onClick={onClose}>
-                ルームを退出
-              </button>
-            )
-          )}
+          {revealed && <InkBurst key={`front-${run}`} layer="front" colors={burstColors} />}
         </main>
       )}
       {preview && (stage === "finish" || stage === "curtain") && (
@@ -136,6 +170,79 @@ export function ResultFlow({
           ×
         </button>
       )}
+    </div>
+  );
+}
+
+/** Repeatable pseudo-random number in [0, 1) so the burst layout stays pure. */
+function noise(index: number, salt: number): number {
+  const value = Math.sin(index * 12.9898 + salt * 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+const DROP_COUNT = 36;
+const SPLATS = [
+  { left: 8, top: 30, size: 150 },
+  { left: 90, top: 22, size: 120 },
+  { left: 14, top: 82, size: 130 },
+  { left: 86, top: 78, size: 170 },
+  { left: 50, top: 6, size: 90 },
+  { left: 30, top: 94, size: 100 },
+  { left: 70, top: 96, size: 110 },
+] as const;
+
+/**
+ * Ink thrown out when the winner is revealed: drops fly from the title
+ * (front layer) and big splats stamp onto the background (back layer).
+ */
+function InkBurst({ layer, colors }: { layer: "back" | "front"; colors: string[] }) {
+  const pick = (index: number) => colors[index % colors.length] ?? "#d0197a";
+  if (layer === "back") {
+    return (
+      <div className="ink-burst ink-burst--back" aria-hidden="true">
+        {SPLATS.map((splat, index) => (
+          <span
+            key={index}
+            className="ink-burst-splat"
+            style={
+              {
+                left: `${splat.left}%`,
+                top: `${splat.top}%`,
+                width: `clamp(60px, ${splat.size / 10}vw, ${splat.size}px)`,
+                background: pick(index),
+                animationDelay: `${0.18 + index * 0.07}s`,
+                "--rot": `${Math.round(noise(index, 3) * 360)}deg`,
+              } as CSSProperties
+            }
+          />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="ink-burst ink-burst--front" aria-hidden="true">
+      {Array.from({ length: DROP_COUNT }, (_, index) => {
+        const angle = (index / DROP_COUNT) * Math.PI * 2 + (noise(index, 1) - 0.5) * 0.6;
+        const distance = 22 + noise(index, 2) * 38;
+        const size = 14 + noise(index, 4) * 34;
+        return (
+          <span
+            key={index}
+            className="ink-burst-drop"
+            style={
+              {
+                width: `${size}px`,
+                height: `${size * 1.3}px`,
+                background: pick(index),
+                animationDelay: `${noise(index, 5) * 0.18}s`,
+                "--dx": `${(Math.cos(angle) * distance).toFixed(1)}vmin`,
+                "--dy": `${(Math.sin(angle) * distance).toFixed(1)}vmin`,
+                "--rot": `${Math.round((angle * 180) / Math.PI + 90)}deg`,
+              } as CSSProperties
+            }
+          />
+        );
+      })}
     </div>
   );
 }

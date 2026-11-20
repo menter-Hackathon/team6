@@ -104,6 +104,50 @@ export function ProgressionPopup({
   };
   const readyCount = players.filter((player) => player.ready).length;
 
+  if (scene === "countdown") {
+    return (
+      <div className="ink-popup-backdrop">
+        <section
+          className="ink-popup ink-popup--green is-presentation"
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby="progression-title"
+        >
+          {preview && <span className="ink-popup-preview">検証プレビュー</span>}
+          {onClose && (
+            <button
+              type="button"
+              className="ink-popup-close"
+              onClick={onClose}
+              aria-label="ポップアップを閉じる"
+            >
+              ×
+            </button>
+          )}
+          <p className="ink-popup-kicker">ゲームスタート</p>
+          <h2 id="progression-title">まもなく試合開始！</h2>
+          <div className="ink-popup-number ink-popup-number--countdown" aria-live="off">
+            <span key={`${countdownRun}-${secondsLeft}`}>
+              {secondsLeft === 0 ? "GO!" : secondsLeft}
+            </span>
+          </div>
+          <p className="ink-popup-hint">
+            発表者の話にガヤを入れて、チームの色でフィールドを塗ろう。
+          </p>
+          {preview && (
+            <button
+              type="button"
+              className="ink-popup-replay"
+              onClick={() => setCountdownRun((run) => run + 1)}
+            >
+              もう一度見る
+            </button>
+          )}
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className={`progression-backdrop progression-backdrop--${scene}`}>
       <section
@@ -206,29 +250,6 @@ export function ProgressionPopup({
                 </button>
               )}
             </div>
-            )}
-          </>
-        )}
-        {scene === "countdown" && (
-          <>
-            <p className="progression-kicker">GAME START</p>
-            <h2 id="progression-title">まもなく試合開始！</h2>
-            <div className="progression-countdown" aria-live="off">
-              <span
-                key={`${countdownRun}-${secondsLeft}`}
-                className="progression-countdown-number"
-              >
-                {secondsLeft === 0 ? "GO!" : secondsLeft}
-              </span>
-            </div>
-            <p>発表者の話にガヤを入れて、チームの色でフィールドを塗ろう。</p>
-            {preview && (
-              <button
-                className="progression-replay"
-                onClick={() => setCountdownRun((run) => run + 1)}
-              >
-                もう一度見る
-              </button>
             )}
           </>
         )}

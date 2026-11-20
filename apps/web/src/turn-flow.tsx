@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { PRESENTATION_SECONDS, TURN_INTRO_MS } from "@gaya/shared";
+import { InkCornerLogo } from "./ink-screen";
 
 interface TurnFlowProps {
   speakerName: string;
@@ -57,59 +58,56 @@ export function TurnFlow({
     };
   }, [endsAt, talkDuration]);
 
+  const hurry = remaining <= 5;
   return (
     <>
+      <InkCornerLogo />
       {topic && (
-        <section className="turn-topic" aria-label="このターンの話題">
-          <div className="turn-topic-heading">
-            <span className="turn-topic-label">このターンの話題</span>
-            <strong className="turn-topic-speaker">
-              {isYourTurn ? "あなたのターン" : `${speakerName}さんのターン`}
-            </strong>
-          </div>
+        <section className="ink-turn-topic" aria-label="このターンの話題">
+          <span className="ink-turn-topic-label">このターンの話題</span>
           <p tabIndex={0}>{topic}</p>
         </section>
       )}
       {stage !== "timer" && (
-        <div className="progression-backdrop progression-turn-backdrop">
+        <div className="ink-popup-backdrop">
           <section
-            className={`progression-popup progression-turn-popup progression-turn-popup--${stage}`}
+            className={`ink-popup ink-popup--${isYourTurn ? "blue" : "green"} is-${stage}`}
             role="dialog"
             aria-modal="false"
             aria-labelledby="turn-title"
           >
-            {preview && (
-              <span className="progression-preview">検証プレビュー</span>
-            )}
+            {preview && <span className="ink-popup-preview">検証プレビュー</span>}
             {preview && (
               <button
-                className="progression-close"
+                type="button"
+                className="ink-popup-close"
                 onClick={onClose}
                 aria-label="ポップアップを閉じる"
               >
                 ×
               </button>
             )}
-            <p className="progression-kicker">
-              PRESENTATION / {turnNumber} OF {turnCount}
+            <p className="ink-popup-kicker">
+              発表 {turnNumber} / {turnCount}
             </p>
             <h2 id="turn-title">
-              {isYourTurn ? "次はあなたのターン" : <>
-                <span className="popup-title-lead">次は</span>
-                <span className="popup-name-phrase"><span className="popup-player-name">{speakerName}</span><span className="popup-name-suffix">さんのターン</span></span>
-              </>}
+              {isYourTurn ? (
+                "次はあなたのターン！"
+              ) : (
+                <>
+                  次は
+                  <span className="popup-name-phrase">
+                    <span className="popup-player-name">{speakerName}</span>
+                    <span className="popup-name-suffix">さんのターン</span>
+                  </span>
+                </>
+              )}
             </h2>
-            <div
-              className={`turn-intro-time${stage === "presentation" ? " turn-presentation-enter" : ""}`}
-              aria-hidden={stage === "next"}
-            >
+            <div className="ink-popup-number" aria-hidden={stage === "next"}>
               {remaining}
-              <span>秒</span>
+              <small>秒</small>
             </div>
-            <p
-              className={`turn-intro-hint${stage === "presentation" ? " turn-presentation-enter" : ""}`}
-              aria-hidden={stage === "next"}
-            >
+            <p className="ink-popup-hint" aria-hidden={stage === "next"}>
               {isYourTurn
                 ? `${talkDuration}秒で話してみよう！`
                 : "ガヤを入れて盛り上げよう！"}
@@ -117,28 +115,51 @@ export function TurnFlow({
           </section>
         </div>
       )}
-      {stage === "timer" && (
+      {stage === "timer" && isYourTurn && (
+        <>
+          {/* Magenta frame around the whole screen: "you are on stage". */}
+          <div className="ink-turn-speaker-frame" aria-hidden="true" />
+          {/* The speaker only talks, so the remaining time can fill the screen. */}
+          <div
+            className={`ink-turn-big-timer${hurry ? " is-hurry" : ""}`}
+            role="timer"
+            aria-label={`あなたの発表の残り時間 ${remaining}秒`}
+          >
+            <strong key={hurry ? remaining : "calm"}>{remaining}</strong>
+          </div>
+          <div className="ink-turn-speaker-banner" role="status">
+            <strong>
+              <span aria-hidden="true">🎤</span> あなたが発表中！
+            </strong>
+            <small>エピソードを話そう（あなたの声は録音していません）</small>
+          </div>
+        </>
+      )}
+      {stage === "timer" && !isYourTurn && (
         <div
-          className="turn-timer"
+          className={`ink-turn-timer${hurry ? " is-hurry" : ""}`}
           role="timer"
           aria-label={`発表の残り時間 ${remaining}秒`}
         >
-          <span title={isYourTurn ? "あなたの発表" : `${speakerName}さんの発表`}>
-            {isYourTurn ? "あなたの発表" : <><span className="popup-player-name">{speakerName}</span><span className="popup-name-suffix">さんの発表</span></>}
+          <span title={`${speakerName}さんの発表`}>
+            <span className="popup-player-name">{speakerName}</span>
+            <span className="popup-name-suffix">さんの発表</span>
           </span>
           <strong>
             {remaining}
             <small>秒</small>
           </strong>
-          {preview && (
-            <button
-              onClick={onClose}
-              aria-label="発表ターンのプレビューを閉じる"
-            >
-              ×
-            </button>
-          )}
         </div>
+      )}
+      {stage === "timer" && preview && (
+        <button
+          type="button"
+          className="ink-turn-preview-close"
+          onClick={onClose}
+          aria-label="発表ターンのプレビューを閉じる"
+        >
+          ×
+        </button>
       )}
     </>
   );

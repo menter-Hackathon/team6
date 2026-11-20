@@ -70,6 +70,9 @@ export function SpeakerSpotlight({
   const colors = useRef({ colorA, colorB });
   colors.current = { colorA, colorB };
   const active = devMode ? preview || devPresenter !== undefined : speakerId !== null;
+  const isLocalSpeaker = devMode
+    ? devPresenter === "local" || (!devPresenter && preview)
+    : speakerId !== null && speakerId === room?.sessionId;
 
   // Who is presenting right now (network matches).
   useEffect(() => {
@@ -229,11 +232,11 @@ export function SpeakerSpotlight({
       />
       <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
         <ringGeometry args={[0.9, 1.15, 48]} />
-        <meshBasicMaterial color="#f7e83a" transparent opacity={0.4} depthWrite={false} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.55} depthWrite={false} />
       </mesh>
       <Html position={[0, 2.6, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
-        <div className="speaker-bubble">
-          <span>発表中🎤</span>
+        <div className={`speaker-bubble${isLocalSpeaker ? " is-you" : ""}`}>
+          <span>{isLocalSpeaker ? "あなたが発表中🎤" : "発表中🎤"}</span>
           {hypeCall && <strong key={hypeCall}>{hypeCall}</strong>}
         </div>
       </Html>

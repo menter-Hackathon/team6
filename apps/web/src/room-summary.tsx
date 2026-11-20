@@ -21,6 +21,7 @@ interface RoomSummaryProps {
   readyBlockedReason?: string | undefined;
 }
 
+/** Small room card shown on the practice field after closing the waiting room. */
 export function RoomSummary({
   roomCode,
   localRoom = false,
@@ -52,46 +53,56 @@ export function RoomSummary({
     }
   };
   return (
-    <div className="room-summary" aria-label="ルーム情報">
+    <div className="room-summary ink-summary" aria-label="ルーム情報">
       {onClose && (
         <button
-          className="room-summary-close"
+          type="button"
+          className="ink-summary-close"
           onClick={onClose}
           aria-label="検証プレビューを閉じる"
         >
           ×
         </button>
       )}
-      <div className="room-summary-code">
-        <span>{localRoom ? "MATCH LOBBY / 待機室" : "INVITE CODE / 招待コード"}</span>
+      <div className="ink-summary-code">
+        <span>{localRoom ? "待機室" : "招待コード"}</span>
         <strong>{localRoom ? "検証ルーム" : roomCode}</strong>
       </div>
       {!onClose && !localRoom && (
         <>
           <button
-            className="invite-link-button"
+            type="button"
+            className="ink-summary-link"
             onClick={() => void copyInviteLink()}
           >
             参加リンクをコピー
           </button>
-          {linkCopyMessage && <p role="status">{linkCopyMessage}</p>}
+          {linkCopyMessage && (
+            <p className="ink-summary-status" role="status">
+              {linkCopyMessage}
+            </p>
+          )}
         </>
       )}
-      <ul aria-label="入室中のメンター">
-        {names.map((name, index) => (
-          <li key={index}>{name}</li>
-        ))}
-      </ul>
+      <div className="ink-summary-players">
+        <span>参加者</span>
+        <ul aria-label="入室中のメンター">
+          {names.map((name, index) => (
+            <li key={index}>{name}</li>
+          ))}
+        </ul>
+      </div>
       {onOpenWardrobe && <WardrobeButton onClick={onOpenWardrobe} />}
       {episodeInput}
       {requiredPlayerCount > names.length && (
-        <p className="room-summary-waiting" role="status">
+        <p className="ink-summary-status" role="status">
           再戦にはあと{requiredPlayerCount - names.length}人の入室が必要です
         </p>
       )}
       {onReady && (
         <button
-          className="room-summary-ready"
+          type="button"
+          className="ink-summary-ready"
           disabled={!ready && Boolean(readyBlockedReason)}
           title={!ready ? readyBlockedReason : undefined}
           onClick={onReady}
@@ -99,14 +110,15 @@ export function RoomSummary({
           aria-pressed={ready}
         >
           <span>{ready ? "準備完了 ✓" : "準備OKにする"}</span>
-          <span className="room-summary-ready-count">
+          <small>
             {readyCount}/{Math.max(requiredPlayerCount, names.length)}人
-          </span>
+          </small>
         </button>
       )}
       {onStart && (
         <button
-          className="room-summary-start"
+          type="button"
+          className="ink-summary-start"
           disabled={!canStart}
           title={!canStart && targetPlayerCount > 0 ? `${targetPlayerCount}人全員の準備完了が必要です` : undefined}
           onClick={onStart}

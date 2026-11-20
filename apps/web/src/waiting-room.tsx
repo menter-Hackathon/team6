@@ -11,16 +11,11 @@ interface WaitingRoomProps {
   microphoneListening: boolean;
   microphoneChanging: boolean;
   isReady: boolean;
-  isHost: boolean;
-  canStart: boolean;
-  startHint: string;
   onOpenEpisode: () => void;
   onOpenWardrobe: () => void;
   onStartMicrophone: () => void;
+  /** Marks this player ready; the app then moves them to the practice field. */
   onReady: () => void;
-  onStart?: (() => void) | undefined;
-  /** Hides this screen to walk around the practice field. */
-  onClose: () => void;
 }
 
 /** Full-screen waiting room ("入室待ち") shown right after creating or joining a room. */
@@ -33,15 +28,10 @@ export function WaitingRoom({
   microphoneListening,
   microphoneChanging,
   isReady,
-  isHost,
-  canStart,
-  startHint,
   onOpenEpisode,
   onOpenWardrobe,
   onStartMicrophone,
   onReady,
-  onStart,
-  onClose,
 }: WaitingRoomProps) {
   const [copyMessage, setCopyMessage] = useState("");
   const copy = async (text: string, done: string) => {
@@ -69,11 +59,6 @@ export function WaitingRoom({
       title="入室待ち"
       color="green"
       blockedHint={readyHint}
-      corner={
-        <button type="button" className="ink-panel-link" onClick={onClose}>
-          フィールドで練習 ×
-        </button>
-      }
       blob={
         <InkBlobButton
           color="blue"
@@ -165,17 +150,6 @@ export function WaitingRoom({
         <p className="ink-waiting-note" role="status">
           再戦にはあと{requiredPlayerCount - players.length}人の入室が必要です
         </p>
-      )}
-      {isHost && onStart && (
-        <button
-          type="button"
-          className="ink-entry-button ink-entry-button--blue ink-entry-button--small ink-waiting-start"
-          disabled={!canStart}
-          title={!canStart ? startHint : undefined}
-          onClick={onStart}
-        >
-          チーム決めへ
-        </button>
       )}
     </InkPanelScreen>
   );

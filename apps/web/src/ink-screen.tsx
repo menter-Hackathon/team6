@@ -41,6 +41,18 @@ export function InkSplats() {
   );
 }
 
+/** Small logo on a blue ink splat for the top-left corner of in-game screens. */
+export function InkCornerLogo() {
+  return (
+    <div className="ink-corner-badge" aria-hidden="true">
+      <svg viewBox="0 0 400 400">
+        <path d="M0 0H330C352 28 304 62 252 70C192 82 200 140 230 180C262 226 210 280 152 270C100 262 92 320 52 340C26 352 0 346 0 330Z" />
+      </svg>
+      <img src={LOGO_SRC} alt="" />
+    </div>
+  );
+}
+
 type PanelColor = "blue" | "green";
 type BlobColor = "magenta" | "blue";
 
@@ -58,6 +70,12 @@ interface InkPanelScreenProps {
    * every child marked with the `is-missing` class in red.
    */
   blockedHint?: string | undefined;
+  /** Landscape card (episode / skin screens) with the title at the top left. */
+  wide?: boolean;
+  /** Blue ink underline under the title. */
+  titleUnderline?: boolean;
+  /** Sits above another ink screen (e.g. opened from the waiting room). */
+  overlay?: boolean;
   /** Wraps the card in a form when given. */
   onSubmit?: () => void;
   children: ReactNode;
@@ -76,6 +94,9 @@ export function InkPanelScreen({
   corner,
   blob,
   blockedHint,
+  wide = false,
+  titleUnderline = false,
+  overlay = false,
   onSubmit,
   children,
 }: InkPanelScreenProps) {
@@ -88,7 +109,9 @@ export function InkPanelScreen({
   }, [nudged]);
   const card = (
     <>
-      <h2 className="ink-panel-title">{title}</h2>
+      <h2 className={`ink-panel-title${titleUnderline ? " ink-panel-title--underline" : ""}`}>
+        {title}
+      </h2>
       {corner && <div className="ink-panel-corner">{corner}</div>}
       <div className="ink-panel-body">{children}</div>
       {blob && (
@@ -115,9 +138,12 @@ export function InkPanelScreen({
       )}
     </>
   );
-  const className = `ink-panel ink-panel--${color}${nudged ? " is-nudged" : ""}`;
+  const className = `ink-panel ink-panel--${color}${wide ? " ink-panel--wide" : ""}${nudged ? " is-nudged" : ""}`;
   return (
-    <section className="ink-entry ink-entry--panel" aria-label={label}>
+    <section
+      className={`ink-entry ink-entry--panel${wide ? " ink-entry--wide" : ""}${overlay ? " ink-entry--overlay" : ""}`}
+      aria-label={label}
+    >
       <InkSplats />
       <img className="ink-corner-logo" src={LOGO_SRC} alt="ガヤペ！" />
       <div className="ink-panel-stage">
