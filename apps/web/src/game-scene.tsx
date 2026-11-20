@@ -1256,20 +1256,26 @@ function Field({
     let disposed = false;
     let syncing = !devMode;
     const pending = new Map<number, PaintStroke>();
-    const displayQueue: { stroke: PaintStroke; at: number; footprintRuns: number[] | undefined }[] = [];
+    const displayQueue: {
+      stroke: PaintStroke;
+      at: number;
+      footprintRuns: number[] | undefined;
+      preview: THREE.Group | undefined;
+    }[] = [];
     flushPaint.current = () => {
       let minX = PAINT_GRID_SIZE,
         minY = PAINT_GRID_SIZE,
         maxX = -1,
         maxY = -1;
       while (displayQueue.length && displayQueue[0]!.at <= performance.now()) {
-        const { stroke, footprintRuns } = displayQueue.shift()!;
+        const { stroke, footprintRuns, preview } = displayQueue.shift()!;
         const team = stroke.practiceColor
           ? practiceColorOwner(stroke.practiceColor)
           : stroke.team === "A"
             ? 1
             : 2;
         if (footprintRuns) {
+          preview?.removeFromParent();
           for (let i = 0; i < footprintRuns.length; i += 2) {
             const start = footprintRuns[i]!;
             const end = footprintRuns[i + 1]!;
@@ -1349,15 +1355,6 @@ function Field({
             detail: { actorId: stroke.actorId },
           }),
         );
-      // Our own shot was already drawn at send time; don't fire it twice.
-      const flightSeconds = prediction
-        ? prediction.flight
-        : effects.emit(stroke);
-      if (prediction) {
-        if (stroke.kind === "ink") recordInkRoundTrip(now - prediction.at);
-        traceStage(prediction.traceKey, "echo", {}, now);
-        finishTrace(prediction.traceKey);
-      }
       const team = stroke.practiceColor
         ? practiceColorOwner(stroke.practiceColor)
         : stroke.team === "A"
@@ -1371,10 +1368,19 @@ function Field({
           cells[y * PAINT_GRID_SIZE + x] = team;
         });
       }
+      const preview = footprintRuns?.length ? effects.showFootprint(stroke) : undefined;
+      // Our own shot was already drawn at send time; don't fire it twice.
+      const flightSeconds = prediction?.flight ?? (preview ? 0 : effects.emit(stroke));
+      if (prediction) {
+        if (stroke.kind === "ink") recordInkRoundTrip(now - prediction.at);
+        traceStage(prediction.traceKey, "echo", {}, now);
+        finishTrace(prediction.traceKey);
+      }
       // Bake only after the airborne drop lands and its transient splat has expanded.
       displayQueue.push({
         stroke,
         footprintRuns,
+        preview,
         at:
           (prediction?.at ?? now) + (flightSeconds + INK_SETTLE_SECONDS) * 1000,
       });
