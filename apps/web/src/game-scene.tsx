@@ -53,6 +53,7 @@ import {
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { bleedSpecialPaint } from "./paint-bleed";
+import { applyFootprint } from "./footprint-runs";
 import { AIZUCHI_MOTION_SECONDS, AIZUCHI_LAND_TIME } from "./aizuchi-motion";
 import { useAizuchiAppearance } from "./use-aizuchi-appearance";
 import { INK_GLOSS, makeInkRelief, useInkEnvironment } from "./ink-material";
@@ -1255,19 +1256,33 @@ function Field({
     let disposed = false;
     let syncing = !devMode;
     const pending = new Map<number, PaintStroke>();
-    const displayQueue: { stroke: PaintStroke; at: number }[] = [];
+    const displayQueue: { stroke: PaintStroke; at: number; footprintRuns: number[] | undefined }[] = [];
     flushPaint.current = () => {
       let minX = PAINT_GRID_SIZE,
         minY = PAINT_GRID_SIZE,
         maxX = -1,
         maxY = -1;
       while (displayQueue.length && displayQueue[0]!.at <= performance.now()) {
-        const { stroke } = displayQueue.shift()!;
+        const { stroke, footprintRuns } = displayQueue.shift()!;
         const team = stroke.practiceColor
           ? practiceColorOwner(stroke.practiceColor)
           : stroke.team === "A"
             ? 1
             : 2;
+        if (footprintRuns) {
+          for (let i = 0; i < footprintRuns.length; i += 2) {
+            const start = footprintRuns[i]!;
+            const end = footprintRuns[i + 1]!;
+            const x = start % PAINT_GRID_SIZE;
+            const y = Math.floor(start / PAINT_GRID_SIZE);
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x + end - start - 1);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+            for (let cell = start; cell < end; cell++) setPixel(image.data, cell * 4, team);
+          }
+          continue;
+        }
         if (stroke.kind === "slam") {
           const bleed = bleedSpecialPaint(
             stroke,
@@ -1348,12 +1363,18 @@ function Field({
         : stroke.team === "A"
           ? 1
           : 2;
-      rasterizePaintStroke(stroke, (x, y) => {
-        cells[y * PAINT_GRID_SIZE + x] = team;
-      });
+      let footprintRuns: number[] | undefined;
+      if (stroke.kind === "footprint") {
+        footprintRuns = applyFootprint(cells, stroke, team);
+      } else {
+        rasterizePaintStroke(stroke, (x, y) => {
+          cells[y * PAINT_GRID_SIZE + x] = team;
+        });
+      }
       // Bake only after the airborne drop lands and its transient splat has expanded.
       displayQueue.push({
         stroke,
+        footprintRuns,
         at:
           (prediction?.at ?? now) + (flightSeconds + INK_SETTLE_SECONDS) * 1000,
       });
