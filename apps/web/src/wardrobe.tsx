@@ -3,6 +3,7 @@ import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { useEffect, useRef, useState } from "react";
 import { PerspectiveCamera } from "three";
+import { InkBlobButton, InkPanelScreen } from "./ink-screen";
 import { PlayerCube } from "./player-cube";
 import "./wardrobe.css";
 
@@ -52,9 +53,9 @@ const ITEMS = {
 
 const CATEGORIES = [
   { id: "all", name: "すべて" },
-  { id: "head", name: "頭" },
-  { id: "face", name: "顔" },
-  { id: "body", name: "ボディ" },
+  { id: "head", name: "ヘッド" },
+  { id: "face", name: "フェイス" },
+  { id: "body", name: "ボディー" },
 ] as const;
 
 const ACCESSORIES = Object.keys(ITEMS) as PlayerAccessory[];
@@ -135,156 +136,145 @@ export function Wardrobe({
     <dialog
       ref={dialog}
       className="wardrobe"
-      aria-labelledby="wardrobe-title"
+      aria-label="スキン決定"
       onCancel={(event) => {
         event.preventDefault();
         if (!pending) onClose();
       }}
     >
-      <div className="wardrobe-layout">
-        <header className="wardrobe-header">
-          <h2 id="wardrobe-title">着せ替えルーム</h2>
+      <InkPanelScreen
+        label="スキン決定"
+        title="スキン決定"
+        color="green"
+        wide
+        corner={
           <button
             type="button"
-            className="wardrobe-back"
+            className="ink-panel-link"
             onClick={onClose}
             disabled={pending}
           >
-            <span aria-hidden="true">←</span> ロビーに戻る
+            ← もどる
           </button>
-        </header>
-
-        <section className="wardrobe-stage" aria-label="3Dプレビュー">
-          <div className="wardrobe-preview-label">3Dプレビュー</div>
-          <Canvas
-            dpr={[1, 1.75]}
-            style={{ position: "absolute", inset: 0 }}
-            camera={{ position: [2.55, 2.14, 4.25], fov: 30 }}
-            fallback={
-              <p className="wardrobe-preview-note">
-                3D表示にはWebGLが必要です。
-              </p>
-            }
-          >
-            <FitPreviewCamera />
-            <ambientLight intensity={1.18} />
-            <directionalLight
-              position={[3, 5, 4]}
-              intensity={2.4}
-              color="#fff4db"
-            />
-            <directionalLight
-              position={[-4, 2, -3]}
-              intensity={1.6}
-              color="#73f3ee"
-            />
-            <group
-              rotation-y={turned ? Math.PI : 0}
-              position-y={draft === "claw-machine" ? 0.12 : 0}
+        }
+        blob={
+          <InkBlobButton color="blue" onClick={equip} disabled={pending}>
+            {pending ? "反映中…" : "準備OK！"}
+          </InkBlobButton>
+        }
+      >
+        <div className="wardrobe-layout">
+          <section className="wardrobe-stage" aria-label="3Dプレビュー">
+            <Canvas
+              dpr={[1, 1.75]}
+              style={{ position: "absolute", inset: 0 }}
+              camera={{ position: [2.55, 2.14, 4.25], fov: 30 }}
+              fallback={
+                <p className="wardrobe-preview-note">
+                  3D表示にはWebGLが必要です。
+                </p>
+              }
             >
-              <PlayerCube color={color} accessory={draft} />
-            </group>
-            <mesh position-y={-0.028}>
-              <cylinderGeometry args={[1.07, 1.11, 0.055, 64]} />
-              <meshStandardMaterial color="#222637" roughness={0.62} />
-            </mesh>
-            <mesh position-y={-0.058}>
-              <cylinderGeometry args={[1.13, 1.12, 0.048, 64]} />
-              <meshStandardMaterial
-                color="#a9f83a"
-                emissive="#71bd23"
-                emissiveIntensity={0.38}
+              <FitPreviewCamera />
+              <ambientLight intensity={1.18} />
+              <directionalLight
+                position={[3, 5, 4]}
+                intensity={2.4}
+                color="#fff4db"
               />
-            </mesh>
-            <OrbitControls
-              target={[0, 0.62, 0]}
-              enablePan={false}
-              enableZoom={false}
-              minPolarAngle={0.55}
-              maxPolarAngle={1.55}
-            />
-          </Canvas>
-          <div className="wardrobe-stage-footer">
-            <span>ドラッグで回転</span>
-            <button type="button" onClick={() => setTurned((value) => !value)}>
-              <span aria-hidden="true">↻</span> 180°回す
-            </button>
-          </div>
-        </section>
-
-        <section className="wardrobe-picker" aria-label="装飾の選択">
-          <div className="wardrobe-picker-header">
-            <h3>アイテムを選ぶ</h3>
-            <p>一度に1つ装着できます</p>
-          </div>
-          <div
-            className="wardrobe-filters"
-            role="group"
-            aria-label="部位で絞り込む"
-          >
-            {CATEGORIES.map(({ id, name }) => (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={category === id}
-                onClick={() => setCategory(id)}
+              <directionalLight
+                position={[-4, 2, -3]}
+                intensity={1.6}
+                color="#73f3ee"
+              />
+              <group
+                rotation-y={turned ? Math.PI : 0}
+                position-y={draft === "claw-machine" ? 0.12 : 0}
               >
-                {name}
+                <PlayerCube color={color} accessory={draft} />
+              </group>
+              <mesh position-y={-0.028}>
+                <cylinderGeometry args={[1.07, 1.11, 0.055, 64]} />
+                <meshStandardMaterial color="#222637" roughness={0.62} />
+              </mesh>
+              <mesh position-y={-0.058}>
+                <cylinderGeometry args={[1.13, 1.12, 0.048, 64]} />
+                <meshStandardMaterial
+                  color="#a9f83a"
+                  emissive="#71bd23"
+                  emissiveIntensity={0.38}
+                />
+              </mesh>
+              <OrbitControls
+                target={[0, 0.62, 0]}
+                enablePan={false}
+                enableZoom={false}
+                minPolarAngle={0.55}
+                maxPolarAngle={1.55}
+              />
+            </Canvas>
+            <div className="wardrobe-stage-footer">
+              <span>ドラッグで回転</span>
+              <button type="button" onClick={() => setTurned((value) => !value)}>
+                <span aria-hidden="true">↻</span> 180°
               </button>
-            ))}
-          </div>
-          <div className="wardrobe-items">
-            {ACCESSORIES.filter(
-              (id) =>
-                id === "none" ||
-                category === "all" ||
-                ITEMS[id].category === category,
-            ).map((id) => (
-              <button
-                key={id}
-                type="button"
-                className="wardrobe-item"
-                aria-pressed={draft === id}
-                onClick={() => {
-                  if (draft !== id) setTurned(REAR_ACCESSORIES.has(id));
-                  setDraft(id);
-                  setError(false);
-                }}
-                disabled={pending}
-              >
-                <span className="wardrobe-item-icon" aria-hidden="true">
-                  {ITEMS[id].icon}
-                </span>
-                <span>{ITEMS[id].name}</span>
-                {equipped === id && (
-                  <span className="wardrobe-equipped">装着中</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </section>
+            </div>
+          </section>
 
-        <footer className="wardrobe-footer">
-          {error ? (
-            <p role="alert">
-              反映を確認できませんでした。もう一度お試しください。
+          <section className="wardrobe-picker" aria-label="装飾の選択">
+            <div
+              className="wardrobe-filters"
+              role="group"
+              aria-label="部位で絞り込む"
+            >
+              {CATEGORIES.map(({ id, name }) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={category === id}
+                  onClick={() => setCategory(id)}
+                >
+                  <span>{name}</span>
+                </button>
+              ))}
+            </div>
+            <div className="wardrobe-items">
+              {ACCESSORIES.filter(
+                (id) =>
+                  id === "none" ||
+                  category === "all" ||
+                  ITEMS[id].category === category,
+              ).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="wardrobe-item"
+                  aria-pressed={draft === id}
+                  onClick={() => {
+                    if (draft !== id) setTurned(REAR_ACCESSORIES.has(id));
+                    setDraft(id);
+                    setError(false);
+                  }}
+                  disabled={pending}
+                >
+                  <span className="wardrobe-item-icon" aria-hidden="true">
+                    {ITEMS[id].icon}
+                  </span>
+                  <span className="wardrobe-item-name">{ITEMS[id].name}</span>
+                  {equipped === id && (
+                    <span className="wardrobe-equipped">装着中</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <p className="wardrobe-status" role={error ? "alert" : undefined}>
+              {error
+                ? "反映を確認できませんでした。もう一度お試しください。"
+                : `プレビュー中：${ITEMS[draft].name}`}
             </p>
-          ) : (
-            <p>
-              <span>プレビュー中</span> <strong>{ITEMS[draft].name}</strong>
-            </p>
-          )}
-          <button
-            type="button"
-            className="wardrobe-apply"
-            onClick={equip}
-            disabled={pending}
-          >
-            {pending ? "反映中…" : "この見た目で決定"}{" "}
-            <span aria-hidden="true">↗</span>
-          </button>
-        </footer>
-      </div>
+          </section>
+        </div>
+      </InkPanelScreen>
     </dialog>
   );
 }

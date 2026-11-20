@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { InkBlobButton, InkPanelScreen } from "./ink-screen";
 import { NEON_COLORS, pickRandomTopics } from "@gaya/shared";
 
 /** Top-right ink color swatches for the waiting room. */
@@ -41,8 +42,18 @@ interface LobbyActionsProps {
   /** The episode dialog is controlled so the waiting room can open it too. */
   episodeOpen: boolean;
   onEpisodeOpenChange: (open: boolean) => void;
+  /** Whether the story field has text (saved or not); "準備OK！" needs it. */
+  episodeHasText?: boolean;
+  /** Saves the story; called when "準備OK！" closes the episode screen. */
+  onSaveEpisode?: () => void;
   /** False while the full-screen waiting room covers the field: only the dialog is shown. */
   showControls?: boolean;
+  /** Host only: moves everyone to team setup once all players are ready. */
+  onStartTeams?: (() => void) | undefined;
+  /** Whether team setup can start (all players present and ready). */
+  canStart?: boolean;
+  /** Shown on hover while team setup cannot start, e.g. who is not ready yet. */
+  startHint?: string | undefined;
 }
 
 /**
@@ -63,9 +74,22 @@ export function LobbyActions({
   onReady,
   episodeOpen: open,
   onEpisodeOpenChange: setOpen,
+  episodeHasText = episodeDone,
+  onSaveEpisode,
   showControls = true,
+  onStartTeams,
+  canStart = false,
+  startHint,
 }: LobbyActionsProps) {
   const [topics, setTopics] = useState<string[]>(() => pickRandomTopics(3));
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, setOpen]);
   return (
     <>
       {showControls && <div className="lobby-hud-actions">
@@ -115,21 +139,71 @@ export function LobbyActions({
             {readyCount}/{playerCount}人
           </small>
         </button>
+        {onStartTeams ? (
+          <div className="lobby-hud-start-wrap">
+            <button
+              type="button"
+              className={`lobby-hud-start${canStart ? "" : " is-blocked"}`}
+              aria-disabled={!canStart}
+              onClick={() => {
+                if (canStart) onStartTeams();
+              }}
+            >
+              チーム決めへ！
+            </button>
+            {!canStart && startHint && (
+              <span className="lobby-hud-start-hint" role="tooltip">
+                {startHint}
+              </span>
+            )}
+          </div>
+        ) : (
+          isReady &&
+          readyCount >= playerCount && (
+            <p className="lobby-hud-waiting" role="status">
+              ルーム作成者がチーム決めを始めるのを待っています
+              <span className="ink-team-dots" aria-hidden="true">
+                <span>.</span>
+                <span>.</span>
+                <span>.</span>
+              </span>
+            </p>
+          )
+        )}
       </div>}
       {open && (
-        <div className="lobby-hud-dialog-backdrop" onClick={() => setOpen(false)}>
-          <section
-            className="lobby-hud-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="話すエピソード"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="lobby-hud-topics">
-              <div>
-                <span>トークのお題（ヒント）</span>
+        <InkPanelScreen
+          label="エピソード決定"
+          title="エピソード決定"
+          color="green"
+          wide
+          titleUnderline
+          overlay
+          corner={
+            <button type="button" className="ink-panel-link" onClick={() => setOpen(false)}>
+              ← もどる
+            </button>
+          }
+          blockedHint={episodeHasText ? undefined : "話すエピソードを書いてね"}
+          blob={
+            <InkBlobButton
+              color="blue"
+              onClick={() => {
+                onSaveEpisode?.();
+                setOpen(false);
+              }}
+            >
+              準備OK！
+            </InkBlobButton>
+          }
+        >
+          <div className="ink-episode">
+            <div className="ink-panel-box ink-episode-topics">
+              <div className="ink-episode-topics-head">
+                <span className="ink-panel-box-label">トークのお題（ヒント）</span>
                 <button
                   type="button"
+                  className="ink-icon-button"
                   aria-label="別の話題を表示"
                   onClick={() => setTopics(pickRandomTopics(3))}
                 >
@@ -146,16 +220,11 @@ export function LobbyActions({
                 ))}
               </ul>
             </div>
-            {episodeInput}
-            <button
-              type="button"
-              className="lobby-hud-dialog-close"
-              onClick={() => setOpen(false)}
-            >
-              閉じる
-            </button>
-          </section>
-        </div>
+            <div className={`ink-episode-input${episodeHasText ? "" : " is-missing"}`}>
+              {episodeInput}
+            </div>
+          </div>
+        </InkPanelScreen>
       )}
     </>
   );

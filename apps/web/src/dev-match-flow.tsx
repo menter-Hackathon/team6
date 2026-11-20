@@ -13,7 +13,7 @@ import { ProgressionPopup } from "./progression-popup";
 import { RoomSummary } from "./room-summary";
 import { TeamSelection } from "./team-selection";
 import { TurnFlow } from "./turn-flow";
-import { EpisodeInput, EMPTY_EPISODE_DRAFT } from "./episode-input";
+import { EpisodeInput, EMPTY_EPISODE_DRAFT, commitEpisodeDraft } from "./episode-input";
 import { LobbyActions } from "./lobby-hud";
 import { ResultFlow } from "./result-flow";
 import { WaitingRoom } from "./waiting-room";
@@ -69,6 +69,9 @@ export function DevMatchFlow({
   const [resultCells, setResultCells] = useState<Uint8Array | null>(null);
   const [showLobby, setShowLobby] = useState(true);
   const [episodeOpen, setEpisodeOpen] = useState(false);
+  const saveDevEpisode = (text: string) => {
+    if (!text) setReady(false);
+  };
   const [episode, setEpisode] = useState(EMPTY_EPISODE_DRAFT);
   const [topics] = useState(() => pickRandomTopics(7));
   const [teams, setTeams] = useState<("A" | "B")[]>([]);
@@ -233,24 +236,17 @@ export function DevMatchFlow({
               microphoneListening={microphoneListening}
               microphoneChanging={microphoneChanging}
               isReady={ready}
-              isHost
-              canStart={ready}
-              startHint="準備OKにすると開始できます"
               onOpenEpisode={() => setEpisodeOpen(true)}
               onOpenWardrobe={onOpenWardrobe}
               onStartMicrophone={onStartMicrophone}
-              onReady={toggleReady}
-              onStart={prepareTeams}
-              onClose={() => setShowLobby(false)}
+              onReady={() => (ready ? setShowLobby(false) : toggleReady())}
             />
           ) : (
             <RoomSummary
               roomCode="TEST"
               localRoom
               names={players.map((player) => player.displayName)}
-              canStart={ready}
               onOpenWardrobe={onOpenWardrobe}
-              onStart={prepareTeams}
             />
           )}
           <LobbyActions
@@ -261,9 +257,8 @@ export function DevMatchFlow({
                 saved={Boolean(episode.savedText)}
                 enteredCount={count - Number(!episode.savedText)}
                 playerCount={count}
-                onSave={(text) => {
-                  if (!text) setReady(false);
-                }}
+                onSave={saveDevEpisode}
+                showSaveButton={false}
               />
             }
             onSelectTopic={(text) =>
@@ -279,7 +274,15 @@ export function DevMatchFlow({
             onReady={toggleReady}
             episodeOpen={episodeOpen}
             onEpisodeOpenChange={setEpisodeOpen}
+            episodeHasText={episode.text.trim().length > 0}
+            onSaveEpisode={() => {
+              const next = commitEpisodeDraft(episode, saveDevEpisode);
+              if (next !== episode) setEpisode(next);
+            }}
             showControls={!showLobby}
+            canStart={ready}
+            startHint="準備OKにすると開始できます"
+            onStartTeams={prepareTeams}
           />
         </>
       )}
