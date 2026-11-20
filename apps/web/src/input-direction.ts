@@ -5,16 +5,16 @@ export interface WorldDirection {
 
 const FULL_TURN = Math.PI * 2;
 
+export function normalizeYaw(yaw: number): number {
+  return (((yaw + Math.PI) % FULL_TURN + FULL_TURN) % FULL_TURN) - Math.PI;
+}
+
 export function rotateYaw(
   yaw: number,
   movementX: number,
   sensitivity = 0.0025,
 ): number {
-  return (
-    ((((yaw + movementX * sensitivity + Math.PI) % FULL_TURN) + FULL_TURN) %
-      FULL_TURN) -
-    Math.PI
-  );
+  return normalizeYaw(yaw + movementX * sensitivity);
 }
 
 export function rotatePitch(

@@ -22,6 +22,7 @@ import {
   type ReactionLevel,
   moveOnTables,
   tableFloorHeight,
+  TABLE_HEIGHT,
   FIELD_HALF_WIDTH,
   FIELD_HALF_DEPTH,
   advanceSpecial,
@@ -53,6 +54,8 @@ import {
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { bleedSpecialPaint } from "./paint-bleed";
+import { MantleBlend, followSurfaceHeight } from "./climb-display";
+import { applyFootprint } from "./footprint-runs";
 import { AIZUCHI_MOTION_SECONDS, AIZUCHI_LAND_TIME } from "./aizuchi-motion";
 import { useAizuchiAppearance } from "./use-aizuchi-appearance";
 import { INK_GLOSS, makeInkRelief, useInkEnvironment } from "./ink-material";
@@ -81,6 +84,7 @@ interface PredictedPaint {
 import type { GameState } from "./game-types";
 
 import {
+  normalizeYaw,
   rotateYaw,
   rotatePitch,
   toModelRotation,
@@ -800,6 +804,8 @@ function DevPlayer({
   phase: string | undefined;
 }) {
   const group = useRef<THREE.Group>(null);
+  const position = useMemo(() => new THREE.Vector3(), []);
+  const mantle = useMemo(() => new MantleBlend(), []);
   const previousPhase = useRef<string | undefined>(undefined);
   const appearance = useDiveAppearance();
   const specialAppearance = useSpecialAppearance();
@@ -813,7 +819,9 @@ function DevPlayer({
   useEffect(() => {
     const reset = () => {
       if (!group.current) return;
-      group.current.position.set(4, 0, 6.5);
+      position.set(4, 0, 6.5);
+      group.current.position.copy(position);
+      mantle.reset();
       controls.current.position = { x: 4, z: 6.5 };
       controls.current.height = 0;
       controls.current.yaw = 0;
@@ -830,7 +838,7 @@ function DevPlayer({
     return () => {
       window.removeEventListener("dev-obstacle-start",reset);
     };
-  }, [controls]);
+  }, [controls, position, mantle]);
   const diveState = useRef<DiveState>({
     submerged: false,
     gapSeconds: 0,
@@ -840,12 +848,13 @@ function DevPlayer({
     const object = group.current;
     if (!object) return;
     if (phase === "countdown" && previousPhase.current !== "countdown" && startPosition) {
-      object.position.set(startPosition.x, 0, startPosition.z);
+      position.set(startPosition.x, 0, startPosition.z);
       controls.current.position = { x: startPosition.x, z: startPosition.z };
       controls.current.yaw = startPosition.yaw;
       object.rotation.y = toModelRotation(startPosition.yaw);
     }
     if (phase !== previousPhase.current) {
+      mantle.reset();
       controls.current.height = 0;
       wasJumping.current = false;
       fallSpeed.current = 0;
@@ -855,20 +864,22 @@ function DevPlayer({
     if (!canMove.current) {
       controls.current.jumpTime = -1;
       controls.current.specialTime = -1;
-      object.position.y = 0;
-      controls.current.position = { x: object.position.x, z: object.position.z };
+      position.y = 0;
+      controls.current.position = { x: position.x, z: position.z };
       const yaw = controls.current.yaw;
+      mantle.reset();
+      object.position.copy(position);
       orbitPlayer(camera, object.position, yaw, controls.current.pitch);
       return;
     }
-    const previousY = object.position.y;
+    const previousY = position.y;
     if (controls.current.jumpTime >= 0 && !wasJumping.current)
       jumpBase.current = previousY;
     controls.current.jumpTime = advanceJump(
       controls.current.jumpTime,
       Math.min(delta, 0.1),
     );
-    object.position.y =
+    position.y =
       controls.current.jumpTime >= 0
         ? jumpBase.current + jumpHeight(controls.current.jumpTime)
         : previousY;
@@ -884,8 +895,8 @@ function DevPlayer({
           detail: {
             revision: 0,
             ...{ height: controls.current.height },
-            x: object.position.x,
-            z: object.position.z,
+            x: position.x,
+            z: position.z,
             yaw: controls.current.yaw,
             team: devTeam.current,
             areaMultiplier: areaMultiplier.current,
@@ -906,8 +917,8 @@ function DevPlayer({
       direction.x = 0;
       direction.z = 0;
       controls.current.jumpTime = -1;
-      object.position.y = obstacles
-        ? obstacleFloor(object.position.x, object.position.z)
+      position.y = obstacles
+        ? obstacleFloor(position.x, position.z)
         : 0;
     }
     const length = Math.hypot(direction.x, direction.z);
@@ -922,57 +933,57 @@ function DevPlayer({
     const before = updateDiveState(
       diveState.current,
       dive,
-      localTableInk.ownsAt(object.position.x,object.position.z,object.position.y,devColor.current) ?? (obstacles
+      localTableInk.ownsAt(position.x,position.z,position.y,devColor.current) ?? (obstacles
         ? surfacePaintOwned(
-            object.position.x,
-            object.position.z,
-            object.position.y,
+            position.x,
+            position.z,
+            position.y,
             devColor.current,
             ownPaint.current,
           )
-        : ownPaint.current(object.position.x, object.position.z)),
+        : ownPaint.current(position.x, position.z)),
       0,
       devTeam.current === "A" ? 1 : 2,
     );
     const submerged = before.submerged;
-    const oldX = object.position.x,
-      oldZ = object.position.z;
+    const oldX = position.x,
+      oldZ = position.z;
     const speed = dive ? (submerged ? DIVE_SPEED : DISC_SPEED) : PLAYER_SPEED;
-    object.position.x = THREE.MathUtils.clamp(
-      object.position.x + direction.x * speed * Math.min(delta, 0.05),
+    position.x = THREE.MathUtils.clamp(
+      position.x + direction.x * speed * Math.min(delta, 0.05),
       -FIELD_HALF_WIDTH + 0.5,
       FIELD_HALF_WIDTH - 0.5,
     );
-    object.position.z = THREE.MathUtils.clamp(
-      object.position.z + direction.z * speed * Math.min(delta, 0.05),
+    position.z = THREE.MathUtils.clamp(
+      position.z + direction.z * speed * Math.min(delta, 0.05),
       -FIELD_HALF_DEPTH + 0.5,
       FIELD_HALF_DEPTH - 0.5,
     );
     const tableMove = moveOnTables(
       { x: oldX, z: oldZ, height: previousY },
-      { x: object.position.x, z: object.position.z },
+      { x: position.x, z: position.z },
       dive && !specialActive, Math.min(delta,0.05),
       (table,x,y,surface)=>localTableInk.owns(table,x,y,surface,devColor.current),
     );
-    if (controls.current.jumpTime < 0) object.position.y = tableMove.height;
-    object.position.x = tableMove.x;
-    object.position.z = tableMove.z;
+    if (controls.current.jumpTime < 0) position.y = tableMove.height;
+    position.x = tableMove.x;
+    position.z = tableMove.z;
     if (obstacles) {
       const resolved = obstacleMove(
         oldX,
         oldZ,
-        object.position.x,
-        object.position.z,
-        object.position.y,
+        position.x,
+        position.z,
+        position.y,
       );
-      object.position.x = resolved.x;
-      object.position.z = resolved.z;
+      position.x = resolved.x;
+      position.z = resolved.z;
     }
     const wall =
       obstacles && dive
         ? paintedWall(
-            object.position.x,
-            object.position.z,
+            position.x,
+            position.z,
             previousY,
             devColor.current,
           )
@@ -981,34 +992,34 @@ function DevPlayer({
       wall && direction.x * wall.nx + direction.z * wall.nz < -0.1;
     let mantled = false;
     if (climbing && wall) {
-      object.position.x = wall.x + wall.nx * 0.035;
-      object.position.z = wall.z + wall.nz * 0.035;
-      object.position.y = previousY + 2.6 * Math.min(delta, 0.05);
+      position.x = wall.x + wall.nx * 0.035;
+      position.z = wall.z + wall.nz * 0.035;
+      position.y = previousY + 2.6 * Math.min(delta, 0.05);
       controls.current.jumpTime = -1;
       fallSpeed.current = 0;
-      if (object.position.y >= BOX_HEIGHT - 1.1) {
-        object.position.y = BOX_HEIGHT;
-        object.position.x = wall.x - wall.nx * 0.65;
-        object.position.z = wall.z - wall.nz * 0.65;
+      if (position.y >= BOX_HEIGHT - 1.1) {
+        position.y = BOX_HEIGHT;
+        position.x = wall.x - wall.nx * 0.65;
+        position.z = wall.z - wall.nz * 0.65;
         mantled = true;
       }
     } else if (climbingWall.current) {
       const previous = climbingWall.current;
-      object.position.x = previous.x + previous.nx * 0.53;
-      object.position.z = previous.z + previous.nz * 0.53;
+      position.x = previous.x + previous.nx * 0.53;
+      position.z = previous.z + previous.nz * 0.53;
     }
     const candidateFloor = Math.max(
-      obstacles ? obstacleFloor(object.position.x,object.position.z) : 0,
-      tableFloorHeight(object.position.x,object.position.z,object.position.y),
+      obstacles ? obstacleFloor(position.x,position.z) : 0,
+      tableFloorHeight(position.x,position.z,position.y),
     );
     const floor =
-      previousY >= candidateFloor - 0.02 || object.position.y >= candidateFloor
+      previousY >= candidateFloor - 0.02 || position.y >= candidateFloor
         ? candidateFloor
         : 0;
     if (!specialActive && !climbing && !mantled && !tableMove.climbing) {
       if (controls.current.jumpTime >= 0) {
-        if (object.position.y <= floor && object.position.y < previousY) {
-          object.position.y = floor;
+        if (position.y <= floor && position.y < previousY) {
+          position.y = floor;
           controls.current.jumpTime = -1;
           fallSpeed.current = 0;
         }
@@ -1017,7 +1028,7 @@ function DevPlayer({
           previousY > floor
             ? fallSpeed.current + 18 * Math.min(delta, 0.05)
             : 0;
-        object.position.y = Math.max(
+        position.y = Math.max(
           floor,
           previousY - fallSpeed.current * Math.min(delta, 0.05),
         );
@@ -1025,25 +1036,25 @@ function DevPlayer({
     }
     climbingWall.current = climbing && !mantled ? wall : null;
     wasJumping.current = controls.current.jumpTime >= 0;
-    controls.current.height = object.position.y;
+    controls.current.height = position.y;
     diveState.current = updateDiveState(
       before,
       dive,
-      localTableInk.ownsAt(object.position.x,object.position.z,object.position.y,devColor.current) ?? (obstacles
+      localTableInk.ownsAt(position.x,position.z,position.y,devColor.current) ?? (obstacles
         ? surfacePaintOwned(
-            object.position.x,
-            object.position.z,
-            object.position.y,
+            position.x,
+            position.z,
+            position.y,
             devColor.current,
             ownPaint.current,
           )
-        : ownPaint.current(object.position.x, object.position.z)),
+        : ownPaint.current(position.x, position.z)),
       Math.min(delta, 0.1),
       devTeam.current === "A" ? 1 : 2,
     );
     const nowSubmerged = diveState.current.submerged;
-    const onObstacleTop = tableFloorHeight(object.position.x,object.position.z,object.position.y)>0 || (
-      obstacles && Math.abs(object.position.y-BOX_HEIGHT)<0.02 && obstacleFloor(object.position.x,object.position.z)===BOX_HEIGHT
+    const onObstacleTop = tableFloorHeight(position.x,position.z,position.y)>0 || (
+      obstacles && Math.abs(position.y-BOX_HEIGHT)<0.02 && obstacleFloor(position.x,position.z)===BOX_HEIGHT
     );
     if (
       (!dive || onObstacleTop) &&
@@ -1052,7 +1063,7 @@ function DevPlayer({
       !climbingWall.current &&
       !tableMove.climbing &&
       controls.current.jumpTime < 0 &&
-      Math.hypot(object.position.x - oldX, object.position.z - oldZ) > 0.001
+      Math.hypot(position.x - oldX, position.z - oldZ) > 0.001
     ) {
       window.dispatchEvent(
         new CustomEvent("dev-paint", {
@@ -1061,8 +1072,8 @@ function DevPlayer({
             ...{ height: controls.current.height },
             fromX: oldX,
             fromZ: oldZ,
-            x: object.position.x,
-            z: object.position.z,
+            x: position.x,
+            z: position.z,
             yaw: controls.current.yaw,
             team: devTeam.current,
             areaMultiplier: areaMultiplier.current,
@@ -1108,12 +1119,19 @@ function DevPlayer({
         );
       }
     }
-    controls.current.position = { x: object.position.x, z: object.position.z };
+    controls.current.position = { x: position.x, z: position.z };
     const yaw = controls.current.yaw;
+    const reachedTableTop =
+      dive && previousY < TABLE_HEIGHT && tableMove.height === TABLE_HEIGHT &&
+      controls.current.jumpTime < 0;
+    if (mantled || reachedTableTop) {
+      mantle.start(object.position, position);
+    }
+    mantle.apply(object.position, position, delta);
     orbitPlayer(camera, object.position, yaw, controls.current.pitch);
     const readout = document.getElementById("dev-readout");
     if (readout)
-      readout.textContent = `状態 ${climbingWall.current ? "壁面潜航 ↑" : nowSubmerged ? "潜航 ×1.5" : "通常"} / 高さ ${object.position.y.toFixed(1)} / X ${object.position.x.toFixed(1)} / Z ${object.position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
+      readout.textContent = `状態 ${climbingWall.current ? "壁面潜航 ↑" : nowSubmerged ? "潜航 ×1.5" : "通常"} / 高さ ${position.y.toFixed(1)} / X ${position.x.toFixed(1)} / Z ${position.z.toFixed(1)} / 向き ${Math.round((yaw * 180) / Math.PI)}°`;
   });
   return (
     <group ref={group}>
@@ -1147,6 +1165,10 @@ function DevPlayer({
       </mesh>
     </group>
   );
+}
+
+function parsePaintRgb(hex: string) {
+  return [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16));
 }
 
 function Field({
@@ -1196,8 +1218,12 @@ function Field({
   );
   const cells = useMemo(() => new Uint8Array(PAINT_GRID_SIZE ** 2), []);
   devPaintCells.current = devMode ? cells : null;
-  const colors = useRef({ colorA, colorB });
-  colors.current = { colorA, colorB };
+  const palette = useMemo(
+    () => ({ colorA, colorB, rgbA: parsePaintRgb(colorA), rgbB: parsePaintRgb(colorB) }),
+    [colorA, colorB],
+  );
+  const colors = useRef(palette);
+  colors.current = palette;
   // Match colors are picked in team selection, after the room is joined, so
   // the cosmetic drops must follow them instead of keeping the lobby defaults.
   useEffect(() => {
@@ -1209,9 +1235,7 @@ function Field({
     if (!ctx) return;
     effects.clear();
     effects.setColors(colors.current.colorA, colors.current.colorB);
-    const practiceRgb = NEON_COLORS.map(({ hex }) =>
-      [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16)),
-    );
+    const practiceRgb = NEON_COLORS.map(({ hex }) => parsePaintRgb(hex));
     const setPixel = (
       data: Uint8ClampedArray,
       offset: number,
@@ -1221,18 +1245,12 @@ function Field({
         devMode ||
         room?.state.phase === "lobby" ||
         room?.state.phase === "team_selection";
-      const currentA = [1, 3, 5].map((index) =>
-        parseInt(colors.current.colorA.slice(index, index + 2), 16),
-      );
-      const currentB = [1, 3, 5].map((index) =>
-        parseInt(colors.current.colorB.slice(index, index + 2), 16),
-      );
       const rgb =
         practice && (!devMode || captureMode) && practiceRgb[team - 1]
           ? practiceRgb[team - 1]!
           : team === 1
-            ? currentA
-            : currentB;
+            ? colors.current.rgbA
+            : colors.current.rgbB;
       data[offset] = rgb[0]!;
       data[offset + 1] = rgb[1]!;
       data[offset + 2] = rgb[2]!;
@@ -1254,19 +1272,39 @@ function Field({
     let disposed = false;
     let syncing = !devMode;
     const pending = new Map<number, PaintStroke>();
-    const displayQueue: { stroke: PaintStroke; at: number }[] = [];
+    const displayQueue: {
+      stroke: PaintStroke;
+      at: number;
+      footprintRuns: number[] | undefined;
+      preview: THREE.Group | undefined;
+    }[] = [];
     flushPaint.current = () => {
       let minX = PAINT_GRID_SIZE,
         minY = PAINT_GRID_SIZE,
         maxX = -1,
         maxY = -1;
       while (displayQueue.length && displayQueue[0]!.at <= performance.now()) {
-        const { stroke } = displayQueue.shift()!;
+        const { stroke, footprintRuns, preview } = displayQueue.shift()!;
         const team = stroke.practiceColor
           ? practiceColorOwner(stroke.practiceColor)
           : stroke.team === "A"
             ? 1
             : 2;
+        if (footprintRuns) {
+          preview?.removeFromParent();
+          for (let i = 0; i < footprintRuns.length; i += 2) {
+            const start = footprintRuns[i]!;
+            const end = footprintRuns[i + 1]!;
+            const x = start % PAINT_GRID_SIZE;
+            const y = Math.floor(start / PAINT_GRID_SIZE);
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x + end - start - 1);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+            for (let cell = start; cell < end; cell++) setPixel(image.data, cell * 4, team);
+          }
+          continue;
+        }
         if (stroke.kind === "slam") {
           const bleed = bleedSpecialPaint(
             stroke,
@@ -1333,26 +1371,32 @@ function Field({
             detail: { actorId: stroke.actorId },
           }),
         );
-      // Our own shot was already drawn at send time; don't fire it twice.
-      const flightSeconds = prediction
-        ? prediction.flight
-        : effects.emit(stroke);
-      if (prediction) {
-        if (stroke.kind === "ink") recordInkRoundTrip(now - prediction.at);
-        traceStage(prediction.traceKey, "echo", {}, now);
-        finishTrace(prediction.traceKey);
-      }
       const team = stroke.practiceColor
         ? practiceColorOwner(stroke.practiceColor)
         : stroke.team === "A"
           ? 1
           : 2;
-      rasterizePaintStroke(stroke, (x, y) => {
-        cells[y * PAINT_GRID_SIZE + x] = team;
-      });
+      let footprintRuns: number[] | undefined;
+      if (stroke.kind === "footprint") {
+        footprintRuns = applyFootprint(cells, stroke, team);
+      } else {
+        rasterizePaintStroke(stroke, (x, y) => {
+          cells[y * PAINT_GRID_SIZE + x] = team;
+        });
+      }
+      const preview = footprintRuns?.length ? effects.showFootprint(stroke) : undefined;
+      // Our own shot was already drawn at send time; don't fire it twice.
+      const flightSeconds = prediction?.flight ?? (preview ? 0 : effects.emit(stroke));
+      if (prediction) {
+        if (stroke.kind === "ink") recordInkRoundTrip(now - prediction.at);
+        traceStage(prediction.traceKey, "echo", {}, now);
+        finishTrace(prediction.traceKey);
+      }
       // Bake only after the airborne drop lands and its transient splat has expanded.
       displayQueue.push({
         stroke,
+        footprintRuns,
+        preview,
         at:
           (prediction?.at ?? now) + (flightSeconds + INK_SETTLE_SECONDS) * 1000,
       });
@@ -1545,6 +1589,9 @@ function Player({
   const appearance = useDiveAppearance();
   const specialAppearance = useSpecialAppearance();
   const aizuchiAppearance = useAizuchiAppearance(playerId);
+  const mantle = useMemo(() => new MantleBlend(), []);
+  const surfaceHeight = useRef(0);
+  const wasClimbing = useRef(false);
   const initialized = useRef(false);
   const previousPhase = useRef<string | undefined>(undefined);
   const { camera } = useThree();
@@ -1555,11 +1602,12 @@ function Player({
     const object = group.current;
     if (!player || !object) return;
     const phase = roomRef.current?.state.phase;
+    let resetDisplay = !initialized.current || phase !== previousPhase.current;
     if (phase === "countdown" && previousPhase.current !== "countdown") {
       predicted.current.set(player.x, 0, player.z);
       object.position.set(player.x, 0, player.z);
       object.rotation.y = toModelRotation(player.yaw);
-      if (local) controls.current.yaw = player.yaw;
+      if (local) controls.current.yaw = normalizeYaw(player.yaw);
     }
     previousPhase.current = phase;
     const specialActive = player.specialTime >= 0;
@@ -1588,6 +1636,7 @@ function Player({
     }
 
     if (local) {
+      let mantled = wasClimbing.current && player.height === TABLE_HEIGHT;
       const input = controls.current.latestInput;
       const length = Math.hypot(input.x, input.z);
       const scale = length > 1 ? 1 / length : 1;
@@ -1601,6 +1650,7 @@ function Player({
           x: THREE.MathUtils.clamp(predicted.current.x + input.x * scale * speed * Math.min(delta,0.1),-FIELD_HALF_WIDTH+0.5,FIELD_HALF_WIDTH-0.5),
           z: THREE.MathUtils.clamp(predicted.current.z + input.z * scale * speed * Math.min(delta,0.1),-FIELD_HALF_DEPTH+0.5,FIELD_HALF_DEPTH-0.5),
         }, input.dive, delta, (table,x,y,surface)=>localTableInk.owns(table,x,y,surface,color));
+        mantled ||= input.dive && player.height < TABLE_HEIGHT && next.height === TABLE_HEIGHT;
         predicted.current.x = next.x;
         predicted.current.z = next.z;
       } else {
@@ -1609,29 +1659,35 @@ function Player({
       const error = predicted.current.distanceTo(
         cameraTarget.set(player.x, 0, player.z),
       );
-      if (error > 2.5) predicted.current.copy(cameraTarget);
-      else predicted.current.lerp(cameraTarget, 1 - Math.exp(-delta * 4));
-      object.position.copy(predicted.current);
-      object.position.y = player.height + jumpHeight(jumpTime);
+      if (error > 2.5) {
+        predicted.current.copy(cameraTarget);
+        resetDisplay = true;
+      } else predicted.current.lerp(cameraTarget, 1 - Math.exp(-delta * 4));
+      if (resetDisplay) mantle.reset();
+      else if (mantled) mantle.start(object.position, predicted.current);
+      mantle.apply(object.position, predicted.current, delta);
       object.rotation.y = toModelRotation(controls.current.yaw);
 
       controls.current.height = player.height;
       controls.current.position = {
-        x: object.position.x,
-        z: object.position.z,
+        x: predicted.current.x,
+        z: predicted.current.z,
       };
-      const yaw = controls.current.yaw;
-      orbitPlayer(camera, object.position, yaw, controls.current.pitch);
     } else {
       cameraTarget.set(player.x, 0, player.z);
       object.position.lerp(cameraTarget, 1 - Math.exp(-delta * 10));
-      object.position.y = player.height + jumpHeight(jumpTime);
       object.rotation.y = THREE.MathUtils.lerp(
         object.rotation.y,
         toModelRotation(player.yaw),
         0.18,
       );
     }
+    wasClimbing.current = player.climbing;
+    surfaceHeight.current = resetDisplay
+      ? player.height
+      : followSurfaceHeight(surfaceHeight.current, player.height, delta);
+    object.position.y = surfaceHeight.current + jumpHeight(jumpTime);
+    if (local) orbitPlayer(camera, object.position, controls.current.yaw, controls.current.pitch);
   });
 
   return (

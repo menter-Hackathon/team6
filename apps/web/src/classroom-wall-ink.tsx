@@ -1,3 +1,4 @@
+import { fillSurfaceInk } from "./surface-ink";
 import { useEffect, useMemo, useRef } from "react";
 import type { Room } from "@colyseus/sdk";
 import * as THREE from "three";
@@ -7,7 +8,6 @@ import {
   CLASSROOM_HEIGHT as H,
   wallInkMarks,
   type PaintStroke,
-  inkOutlineRadius,
 } from "@gaya/shared";
 import type { GameState } from "./game-types";
 export function ClassroomWallInk({
@@ -64,15 +64,7 @@ export function ClassroomWallInk({
           );
           ctx.scale(2048 / item.width, 256 / H);
           ctx.fillStyle = color;
-          ctx.beginPath();
-          for (let i = 0; i <= 96; i++) {
-            const a = (i / 96) * Math.PI * 2,
-              r = mark.radius * inkOutlineRadius(a);
-            if (!i) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-            else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-          }
-          ctx.closePath();
-          ctx.fill();
+          fillSurfaceInk(ctx, mark.radius);
           ctx.restore();
           item.texture.needsUpdate = true;
         }
