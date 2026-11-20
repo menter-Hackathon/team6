@@ -399,7 +399,7 @@ export class GameRoom extends Room<{ state: GameState }> {
         player.specialTime = -1;
         player.dive = false;
         player.submerged = false;
-        this.movementInputs.set(sessionId, { ...IDLE_INPUT });
+        this.movementInputs.set(sessionId, { ...IDLE_INPUT, yaw: position.yaw });
       });
       this.dives.clear();
       this.state.scoreA = 0;

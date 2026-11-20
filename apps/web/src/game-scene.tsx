@@ -81,6 +81,7 @@ interface PredictedPaint {
 import type { GameState } from "./game-types";
 
 import {
+  normalizeYaw,
   rotateYaw,
   rotatePitch,
   toModelRotation,
@@ -1559,7 +1560,7 @@ function Player({
       predicted.current.set(player.x, 0, player.z);
       object.position.set(player.x, 0, player.z);
       object.rotation.y = toModelRotation(player.yaw);
-      if (local) controls.current.yaw = player.yaw;
+      if (local) controls.current.yaw = normalizeYaw(player.yaw);
     }
     previousPhase.current = phase;
     const specialActive = player.specialTime >= 0;
