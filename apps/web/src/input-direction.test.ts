@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { moveInputSchema } from "@gaya/shared";
+import { moveInputSchema, teamStartPosition } from "@gaya/shared";
 import {
+  normalizeYaw,
   rotateYaw,
   rotatePitch,
   toModelRotation,
@@ -8,6 +9,14 @@ import {
 } from "./input-direction";
 
 describe("toWorldDirection", () => {
+  it.each(["A", "B"] as const)("accepts team %s's first forward input after float32 sync", (team) => {
+    const spawn = teamStartPosition(team, 0, 1);
+    const yaw = normalizeYaw(Math.fround(spawn.yaw));
+    const direction = toWorldDirection(1, 0, yaw);
+    expect(direction.z * spawn.z).toBeLessThan(0);
+    expect(moveInputSchema.safeParse({ sequence: 1, ...direction, yaw, dive: false }).success).toBe(true);
+  });
+
   it("moves A left and D right from the default camera", () => {
     expect(toWorldDirection(0, -1, 0)).toEqual({ x: 1, z: 0 });
     expect(toWorldDirection(0, 1, 0)).toEqual({ x: -1, z: 0 });
