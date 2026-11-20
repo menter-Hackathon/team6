@@ -193,7 +193,11 @@ export function LobbyActions({
                 setOpen(false);
               }}
             >
-              準備OK！
+              <span className="ink-blob-two-line">
+                エピソード
+                <br />
+                準備OK！
+              </span>
             </InkBlobButton>
           }
         >
