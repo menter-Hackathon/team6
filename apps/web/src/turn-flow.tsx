@@ -116,14 +116,24 @@ export function TurnFlow({
         </div>
       )}
       {stage === "timer" && isYourTurn && (
-        // The speaker only talks, so the remaining time can fill the screen.
-        <div
-          className={`ink-turn-big-timer${hurry ? " is-hurry" : ""}`}
-          role="timer"
-          aria-label={`あなたの発表の残り時間 ${remaining}秒`}
-        >
-          <strong key={hurry ? remaining : "calm"}>{remaining}</strong>
-        </div>
+        <>
+          {/* Magenta frame around the whole screen: "you are on stage". */}
+          <div className="ink-turn-speaker-frame" aria-hidden="true" />
+          {/* The speaker only talks, so the remaining time can fill the screen. */}
+          <div
+            className={`ink-turn-big-timer${hurry ? " is-hurry" : ""}`}
+            role="timer"
+            aria-label={`あなたの発表の残り時間 ${remaining}秒`}
+          >
+            <strong key={hurry ? remaining : "calm"}>{remaining}</strong>
+          </div>
+          <div className="ink-turn-speaker-banner" role="status">
+            <strong>
+              <span aria-hidden="true">🎤</span> あなたが発表中！
+            </strong>
+            <small>エピソードを話そう（あなたの声は録音していません）</small>
+          </div>
+        </>
       )}
       {stage === "timer" && !isYourTurn && (
         <div

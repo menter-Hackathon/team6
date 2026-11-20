@@ -2255,3 +2255,66 @@ button.wardrobe-entry-button:hover { background: #a9d055; }
 @media (prefers-reduced-motion: reduce) {
   .lobby-hud-start-hint { transition: none; }
 }
+
+/* ---------- Speaker's own turn: make "you are presenting" unmistakable ---------- */
+.ink-turn-speaker-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  border: clamp(8px, 1.2vw, 14px) solid #d0197a;
+  box-shadow: inset 0 0 0 3px #111, inset 0 0 60px rgba(208, 25, 122, 0.35);
+  pointer-events: none;
+  animation: ink-speaker-frame 1.6s ease-in-out infinite;
+}
+@keyframes ink-speaker-frame {
+  50% { box-shadow: inset 0 0 0 3px #111, inset 0 0 110px rgba(208, 25, 122, 0.55); }
+}
+.ink-turn-speaker-banner {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(24px, 6vh, 64px);
+  z-index: 12;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: clamp(10px, 1.6vh, 16px) clamp(22px, 3vw, 40px);
+  border: 4px solid #111;
+  border-radius: 40px 30px 44px 28px / 30px 42px 28px 40px;
+  background: #d0197a;
+  color: #fff;
+  text-align: center;
+  box-shadow: 6px 7px 0 #111;
+  transform: translateX(-50%) rotate(-2.5deg);
+  animation: ink-speaker-banner-in 0.55s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  pointer-events: none;
+}
+.ink-turn-speaker-banner strong {
+  font-size: clamp(30px, 4.6vw, 56px);
+  font-weight: 900;
+  line-height: 1.1;
+  text-shadow: var(--ink-outline-thick);
+}
+.ink-turn-speaker-banner small {
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font-size: clamp(12px, 1.4vw, 16px);
+  font-weight: 900;
+}
+@keyframes ink-speaker-banner-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(40px) rotate(-8deg) scale(0.8); }
+}
+/* 3D bubble above the presenter: bigger, and louder when it is you. */
+.speaker-bubble span { font-size: 20px; padding: 6px 16px; }
+.speaker-bubble.is-you span {
+  background: #d0197a;
+  color: #fff;
+  font-size: 26px;
+  text-shadow: var(--ink-outline);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ink-turn-speaker-frame, .ink-turn-speaker-banner { animation: none; }
+}
